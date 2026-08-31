@@ -9,6 +9,7 @@ import { getModelForUseCase } from '@/lib/ai/model-config'
 import { parseTiptapContent, convertTiptapToMarkdown } from '@/lib/utils/tiptap-to-markdown'
 import { markdownToTiptapServer } from '@/lib/utils/markdown-to-tiptap-server'
 import { extractSections } from '@/lib/enrich/sections'
+import { ANTI_LLM_STYLE_RULES } from '@/lib/enrich/style-rules'
 import { linkPostContent } from '@/lib/glossary/backfill'
 import { getMatcherTerms, getChartProductNames, buildReservedNames } from '@/lib/glossary/terms'
 import type { TiptapDoc, TiptapNode } from '@/lib/email/tiptap-to-html'
@@ -33,14 +34,24 @@ export const maxDuration = 800
  * Streamt pro Abschnitt ein Ereignis, damit bereits fertige Abschnitte im
  * Editor sichtbar bleiben, auch wenn ein spaeterer scheitert.
  *
- * Jeder Abschnitt (nicht nur Bundle-Abschnitte) kann einen eingebetteten
- * "Synthszr Take:"-Absatz tragen — der normale Ghostwriter-Prompt zielt zwar
- * auf 5 Saetze, driftet aber besonders in Bundle-Abschnitten oft darueber
- * hinaus (s. lib/claude/take-cap.ts). Betreiber-Korrektur 2026-08-31:
- * buildSectionMessage bringt JEDEN eingebetteten Take-Absatz UND den einen
- * abschliessenden Post-Take (isTake-Abschnitt) auf GENAU 4 Saetze — nur
- * innerhalb des Enrich-Prompts, der globale TAKE_MAX_SENTENCES-Cap (5) fuer
- * die normale Ghostwriter-Generierung bleibt unangetastet.
+ * buildSectionMessage haengt an den DB-Prompt drei feste Aufgaben an, die
+ * NICHT der Admin-UI ueberlassen sind (Betreiber-Korrektur 2026-08-31, nach
+ * Praxis-Feedback auf einem echten Artikel):
+ *  - Aufgabe 4: jeder eingebettete "Synthszr Take:"-Absatz (nicht nur in
+ *    Bundle-Abschnitten — jeder Abschnitt kann einen tragen, s.
+ *    lib/claude/take-cap.ts) UND der eine abschliessende Post-Take
+ *    (isTake-Abschnitt) auf GENAU 4 Saetze bringen. Ausdruecklich als eigene
+ *    Aufgabe formuliert, NICHT als Bedingung von Aufgabe 3 (deren "NUR
+ *    falls..."-Scoping fuehrte dazu, dass Takes in normalen Abschnitten
+ *    unangetastet blieben).
+ *  - Aufgabe 5: Laengenbegrenzung, Fliesstext maximal 20% laenger als die
+ *    Vorlage (Recherche-Ergaenzungen ersetzen/verdichten statt zu addieren).
+ *  - ANTI_LLM_STYLE_RULES (lib/enrich/style-rules.ts): Kernregeln aus dem
+ *    Mattes-Schreibe-Skill (keine Gedankenstriche, keine "Nicht X, sondern
+ *    Y"-Konstruktionen, keine toten KI-Uebergaenge).
+ * Alle drei sind Code-Konstanten, nicht Teil des editierbaren DB-Prompts —
+ * der globale TAKE_MAX_SENTENCES-Cap (5) fuer die normale Ghostwriter-
+ * Generierung bleibt unangetastet, das hier gilt nur innerhalb von Enrich.
  *
  * Output-Protokoll (SSE-artig, newline-delimited JSON):
  *   {started, totalSections, model, promptName}
@@ -216,10 +227,21 @@ function buildSectionMessage(
   sectionMarkdown: string,
   isTake: boolean,
 ): string {
+  const takeTask = isTake
+    ? 'AUFGABE 4 (verbindlich): Dieser Abschnitt IST der Synthszr Take — wende Aufgabe 3 an UND bringe den Take auf GENAU 4 vollständige Sätze, nicht drei, nicht fünf.'
+    : 'AUFGABE 4 (verbindlich, gilt UNABHÄNGIG davon, ob Aufgabe 3 hier greift): Falls dieser Abschnitt — an beliebiger Stelle, auch wenn die Überschrift NICHT "Synthszr Take" lautet — einen mit "Synthszr Take:" beginnenden Absatz enthält, bringe GENAU diesen Absatz auf GENAU 4 vollständige Sätze. Beim Kürzen die schwächste Teilaussage streichen, nicht wahllos Wörter sparen. Ist der Absatz schon kürzer als 4 Sätze, sinnvoll ergänzen, ohne neue Fakten zu erfinden. Diese Aufgabe NICHT überspringen, nur weil Aufgabe 3 laut ihrer eigenen Bedingung hier nicht gilt — Aufgabe 4 gilt trotzdem.'
+
   return `${promptText}
 
 ---
-${isTake ? '\nHINWEIS: Dieser Abschnitt IST der Synthszr Take — wende Aufgabe 3 an. Der überarbeitete Take muss GENAU 4 vollständige Sätze haben, nicht drei, nicht fünf.\n' : '\nHINWEIS: Falls dieser Abschnitt einen mit "Synthszr Take:" gekennzeichneten Absatz enthält, bringe GENAU diesen Absatz auf GENAU 4 vollständige Sätze (kürzen oder — falls er bereits kürzer ist — sinnvoll ergänzen, ohne neue Fakten zu erfinden). Der Rest des Abschnitts folgt normal den Aufgaben 1+2.\n'}
+${takeTask}
+
+AUFGABE 5 (verbindlich, Längenbegrenzung): Der überarbeitete Fließtext des Abschnitts (ohne Überschrift, Tags, Quellenzeile) darf höchstens 20% länger sein als die Vorlage, gemessen in Wörtern. Recherche-Ergänzungen aus Aufgabe 1 ERSETZEN oder VERDICHTEN bestehenden Text, statt ihn zu addieren — wähle die wichtigste Ergänzung, nicht alle.
+
+${ANTI_LLM_STYLE_RULES}
+
+---
+
 Hier ist der zu überarbeitende Abschnitt (Markdown, beginnt mit einer Überschrift):
 
 \`\`\`markdown
