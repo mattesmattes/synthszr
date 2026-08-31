@@ -7,7 +7,7 @@ import { getSession } from '@/lib/auth/session'
 import { resolveModel } from '@/lib/claude/ghostwriter'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { parseTiptapContent, convertTiptapToMarkdown } from '@/lib/utils/tiptap-to-markdown'
-import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
+import { markdownToTiptapServer } from '@/lib/utils/markdown-to-tiptap-server'
 import { extractSections, selectSectionsForEnrich } from '@/lib/enrich/sections'
 import { linkPostContent } from '@/lib/glossary/backfill'
 import { getMatcherTerms, getChartProductNames, buildReservedNames } from '@/lib/glossary/terms'
@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
           const userMessage = buildSectionMessage(promptRow.prompt_text, sectionMarkdown, section.isTake)
           const revisedMarkdown = await runSection(userMessage, resolved)
 
-          const revisedDoc = markdownToTiptap(revisedMarkdown)
+          const revisedDoc = await markdownToTiptapServer(revisedMarkdown)
           const revisedContent = (revisedDoc as { content?: TiptapNode[] }).content
           if (!Array.isArray(revisedContent) || revisedContent.length === 0) {
             throw new Error('Modell lieferte keinen verwertbaren Abschnitt zurück')
