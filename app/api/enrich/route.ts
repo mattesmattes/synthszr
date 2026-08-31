@@ -9,6 +9,8 @@ import { getModelForUseCase } from '@/lib/ai/model-config'
 import { parseTiptapContent, convertTiptapToMarkdown } from '@/lib/utils/tiptap-to-markdown'
 import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
 import { extractSections, selectSectionsForEnrich } from '@/lib/enrich/sections'
+import { linkPostContent } from '@/lib/glossary/backfill'
+import { getMatcherTerms, getChartProductNames, buildReservedNames } from '@/lib/glossary/terms'
 import type { TiptapDoc, TiptapNode } from '@/lib/email/tiptap-to-html'
 
 export const runtime = 'nodejs'
@@ -95,6 +97,14 @@ export async function POST(request: NextRequest) {
   const modelStr = requestedModel || (await getModelForUseCase('enrich').catch(() => 'claude-sonnet-5'))
   const resolved = resolveModel(modelStr) || resolveModel('claude-sonnet-5')!
 
+  // Glossar-Begriffsliste EINMAL vorab laden (nicht pro Abschnitt) — Grundlage
+  // fuer die Re-Verlinkung nach jedem Abschnitt, s. Kommentar bei linkPostContent
+  // weiter unten. Schlaegt das Laden fehl, bleiben Glossar-Links des Abschnitts
+  // unverlinkt statt den ganzen Lauf zu blockieren (gleiche Fallback-Haltung wie
+  // lib/glossary/dedupe-run.ts).
+  const glossaryTerms = await getMatcherTerms('de').catch(() => null)
+  const glossaryReserved = glossaryTerms ? buildReservedNames(await getChartProductNames()) : []
+
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
     async start(controller) {
@@ -136,20 +146,45 @@ export async function POST(request: NextRequest) {
           // mit raus, s. lib/utils/tiptap-to-markdown.ts) — deshalb hier explizit
           // auf die neue erste Heading-Node zurueckschreiben, sonst brechen
           // Thumbnail-Matching und Label-Anzeige fuer JEDEN enriched Abschnitt.
+          // Fehlt die Heading-Node (Modell haelt sich nicht an die Formatvorgabe),
+          // lieber laut scheitern als Metadaten still zu verlieren — der Abschnitt
+          // bleibt dann im Editor unveraendert (catch-Block).
           const firstNode = revisedContent[0]
-          if (firstNode?.type === 'heading') {
-            firstNode.attrs = {
-              ...(firstNode.attrs || {}),
-              ...(section.queueItemId ? { queueItemId: section.queueItemId } : {}),
-              ...(section.bundleType ? { bundleType: section.bundleType } : {}),
-            }
+          if (firstNode?.type !== 'heading') {
+            throw new Error('Modell-Antwort beginnt nicht mit einer Überschrift — Abschnitt verworfen')
+          }
+          firstNode.attrs = {
+            ...(firstNode.attrs || {}),
+            ...(section.queueItemId ? { queueItemId: section.queueItemId } : {}),
+            ...(section.bundleType ? { bundleType: section.bundleType } : {}),
+          }
+
+          // Glossar-Links (Mark-Typ 'glossaryLink') ueberleben den Markdown-
+          // Rundgang ebenfalls NICHT — renderTextNode() in tiptap-to-markdown.ts
+          // kennt nur den Standard-Mark 'link', der eigene glossaryLink-Typ wird
+          // beim Serialisieren stillschweigend fallengelassen (Text bleibt,
+          // Verlinkung verschwindet). Deshalb hier deterministisch neu setzen,
+          // statt zu hoffen, dass sie den Rundgang ueberstehen — injectGlossaryMarks
+          // ist idempotent (entfernt zuerst alle glossaryLink-Marks, setzt sie dann
+          // anhand des AKTUELLEN, ggf. umformulierten Texts neu). Bereits bestehende
+          // 'link'-Marks (Quellen-/Stock-Links) werden dabei uebersprungen, s.
+          // lib/glossary/inject-marks.ts.
+          let revisedContentAfterLinking = revisedContent
+          if (glossaryTerms) {
+            const relinked = linkPostContent(
+              { type: 'doc', content: revisedContent },
+              glossaryTerms,
+              glossaryReserved,
+            )
+            const relinkedContent = (relinked.content as { content?: TiptapNode[] } | null)?.content
+            if (Array.isArray(relinkedContent)) revisedContentAfterLinking = relinkedContent
           }
 
           send({
             sectionDone: true,
             queueItemId: section.queueItemId,
             isTake: section.isTake,
-            nodes: revisedContent,
+            nodes: revisedContentAfterLinking,
           })
           processed++
         } catch (err) {
@@ -196,7 +231,8 @@ ${sectionMarkdown}
 ANTWORT-FORMAT (verbindlich):
 - Gib AUSSCHLIESSLICH den überarbeiteten Abschnitt zurück, beginnend mit derselben Überschrift.
 - KEIN Vorwort, KEINE Erklärung deiner Änderungen.
-- KEIN umschließender \`\`\`markdown … \`\`\` Codeblock — nur der rohe Markdown-Text.`
+- KEIN umschließender \`\`\`markdown … \`\`\` Codeblock — nur der rohe Markdown-Text.
+- Zeilen mit "→ [Quellenname](URL)" oder "{Company}"/"{lex:Begriff}"-Tags in geschweiften Klammern WÖRTLICH und an derselben Stelle belassen — niemals löschen, umformulieren, verschieben oder die URL verändern. Das sind strukturelle Marker, keine Prosa.`
 }
 
 // Ein Abschnitt = ein einziger, NICHT gestreamter Modell-Aufruf (Abschnitte
