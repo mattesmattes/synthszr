@@ -1,17 +1,14 @@
 /**
- * Zerlegt ein Artikel-TipTap-Dokument in Abschnitte (H2-Grenzen) und
- * entscheidet, welche davon "Enrich" bekommen sollen.
+ * Zerlegt ein Artikel-TipTap-Dokument in Abschnitte (H2-Grenzen).
  *
- * Auswahlregel (Betreiber-Vorgabe 2026-08-31): der Synthszr-Take-Abschnitt
- * IMMER, plus unter den News-Abschnitten (die, die einen queueItemId tragen)
- * die Top 3 nach news_queue.total_score, PLUS alle, die eines der drei
- * Bundle-Labels (topic/recap/deep_dive) tragen — auch wenn sie nicht unter
- * den Top 3 sind. Der Button ist deshalb IMMER aktiv: solange der Artikel
- * mindestens einen News-Abschnitt hat, gibt es etwas zu enrichen.
+ * Auswahlregel (Betreiber-Vorgabe 2026-08-31, geaendert am selben Tag): ALLE
+ * Abschnitte werden enriched — Take- und News-Abschnitte gleichermassen.
+ * Urspruenglich war die Auswahl auf Take + Top 3 nach news_queue.total_score
+ * + Bundle-gelabelte Abschnitte begrenzt (selectSectionsForEnrich); diese
+ * Einschraenkung ist entfallen, extractSections() liefert bereits die
+ * vollstaendige Kandidatenliste.
  *
- * Reine Funktionen, keine DB-Zugriffe — die Score-Werte werden von aussen
- * hereingereicht (app/api/enrich/route.ts holt sie server-seitig), damit
- * dieses Modul ohne Supabase-Client testbar bleibt.
+ * Reine Funktionen, keine DB-Zugriffe.
  */
 import type { TiptapNode, TiptapDoc } from '@/lib/email/tiptap-to-html'
 import type { BundleType } from '@/lib/i18n/bundle-labels'
@@ -62,26 +59,6 @@ export function extractSections(doc: TiptapDoc): EnrichSection[] {
   }
   if (current) sections.push(current)
   return sections
-}
-
-/**
- * Waehlt die zu enrichenden Abschnitte aus: Take immer, sonst Top 3 nach
- * Score UNION alle mit Bundle-Label. `scoresByQueueItemId` fehlende Eintraege
- * gelten als Score 0 (landen nicht in den Top 3, koennen aber trotzdem ueber
- * ein Label qualifizieren).
- */
-export function selectSectionsForEnrich(
-  sections: EnrichSection[],
-  scoresByQueueItemId: Map<string, number>,
-): EnrichSection[] {
-  const newsSections = sections.filter((s) => !s.isTake && s.queueItemId)
-  const byScore = [...newsSections].sort(
-    (a, b) => (scoresByQueueItemId.get(b.queueItemId!) ?? 0) - (scoresByQueueItemId.get(a.queueItemId!) ?? 0),
-  )
-  const top3 = new Set(byScore.slice(0, 3).map((s) => s.startIndex))
-  const labeled = new Set(newsSections.filter((s) => s.bundleType).map((s) => s.startIndex))
-
-  return sections.filter((s) => s.isTake || top3.has(s.startIndex) || labeled.has(s.startIndex))
 }
 
 /**

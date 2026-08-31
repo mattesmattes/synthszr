@@ -912,8 +912,8 @@ export default function GeneratedArticlesPage() {
               </TabsList>
 
               <TabsContent value="content" className="flex-1 flex flex-col min-h-0 mt-4 space-y-3">
-                {/* Enrich fuer den Post im Dialog — waehlt serverseitig eine
-                    Teilmenge der Abschnitte (Take + Top 3 + gelabelte), immer aktiv. */}
+                {/* Enrich fuer den Post im Dialog — verarbeitet ALLE Abschnitte
+                    serverseitig, immer aktiv. */}
                 <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-md border bg-muted/30 shrink-0">
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium flex items-center gap-1.5">

@@ -563,11 +563,13 @@ export default function AdminPage() {
     setEnrichError(null)
   }
 
-  // Enrich (ersetzt 2026-08-31 Editor-in-Chief). AI-Posts only — manuelle
-  // Posts haben keine queueItemId/bundleType-Struktur, aus der sich Abschnitte
-  // auswaehlen liessen. Jeder fertige Abschnitt wird SOFORT per
-  // applySectionResult + funktionalem setState eingesetzt, ein spaeter
-  // scheiternder Abschnitt kostet keine bereits fertigen.
+  // Enrich (ersetzt 2026-08-31 Editor-in-Chief). AI-Posts only — bei manuellen
+  // Posts fehlt der queueItemId auf allen Abschnitten, applySectionResult
+  // (Korrelation ueber queueItemId/isTake) kann dann mehrere gleichrangige
+  // Abschnitte nicht auseinanderhalten und trifft immer nur den ersten. Jeder
+  // fertige Abschnitt wird SOFORT per applySectionResult + funktionalem
+  // setState eingesetzt, ein spaeter scheiternder Abschnitt kostet keine
+  // bereits fertigen.
   async function runEnrichInDialog() {
     if (enriching || !editingPost || editingPost.source !== 'ai') return
     setEnriching(true)

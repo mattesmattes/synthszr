@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractSections, selectSectionsForEnrich, applySectionResult } from '@/lib/enrich/sections'
+import { extractSections, applySectionResult } from '@/lib/enrich/sections'
 import type { TiptapDoc, TiptapNode } from '@/lib/email/tiptap-to-html'
 
 function h2(text: string, attrs: Record<string, string> = {}): TiptapNode {
@@ -33,58 +33,6 @@ describe('extractSections', () => {
 
   it('liefert leeres Array ohne H2', () => {
     expect(extractSections({ type: 'doc', content: [p('nur Text')] })).toHaveLength(0)
-  })
-})
-
-describe('selectSectionsForEnrich', () => {
-  const mk = (n: number, id: string, bundleType: 'topic' | 'recap' | 'deep_dive' | null = null, isTake = false) => ({
-    startIndex: n, endIndex: n + 1, queueItemId: isTake ? null : id, bundleType, isTake, headingText: id,
-  })
-
-  it('waehlt Take immer, unabhaengig vom Score', () => {
-    const sections = [mk(0, '', null, true)]
-    expect(selectSectionsForEnrich(sections, new Map())).toHaveLength(1)
-  })
-
-  it('waehlt die Top 3 nach Score aus 5 unlabeled Abschnitten', () => {
-    const sections = [mk(0, 'a'), mk(1, 'b'), mk(2, 'c'), mk(3, 'd'), mk(4, 'e')]
-    const scores = new Map([['a', 10], ['b', 50], ['c', 5], ['d', 90], ['e', 30]])
-    const chosen = selectSectionsForEnrich(sections, scores).map((s) => s.queueItemId)
-    expect(chosen.sort()).toEqual(['b', 'd', 'e']) // 90, 50, 30 — Top 3
-  })
-
-  it('nimmt gelabelte Abschnitte zusaetzlich, auch wenn sie NICHT in den Top 3 sind', () => {
-    const sections = [mk(0, 'a'), mk(1, 'b'), mk(2, 'c'), mk(3, 'd'), mk(4, 'e', 'deep_dive')]
-    const scores = new Map([['a', 10], ['b', 50], ['c', 5], ['d', 90], ['e', 1]]) // e hat den niedrigsten Score
-    const chosen = selectSectionsForEnrich(sections, scores).map((s) => s.queueItemId)
-    // Top 3 nach Score: d(90), b(50), a(10) — c(5) faellt raus. Plus e ueber Label.
-    expect(chosen.sort()).toEqual(['a', 'b', 'd', 'e'])
-  })
-
-  it('Take + Top 3 + Label ergeben zusammen wie im Anwendungsfall beschrieben "meist rund 5"', () => {
-    const sections = [
-      mk(0, '', null, true),
-      mk(1, 'a'), mk(2, 'b', 'topic'), mk(3, 'c'), mk(4, 'd'), mk(5, 'e'),
-    ]
-    const scores = new Map([['a', 10], ['b', 1], ['c', 90], ['d', 50], ['e', 30]])
-    const chosen = selectSectionsForEnrich(sections, scores)
-    // Take + Top3(c,d,e) + Label(b) = 5
-    expect(chosen).toHaveLength(5)
-    expect(chosen.some((s) => s.isTake)).toBe(true)
-  })
-
-  it('fehlender Score gilt als 0 — qualifiziert nicht ueber Top 3, kann aber ueber Label', () => {
-    const sections = [mk(0, 'a'), mk(1, 'b'), mk(2, 'c'), mk(3, 'd', 'recap')]
-    const scores = new Map([['a', 10], ['b', 20], ['c', 30]]) // d fehlt komplett
-    const chosen = selectSectionsForEnrich(sections, scores).map((s) => s.queueItemId)
-    expect(chosen.sort()).toEqual(['a', 'b', 'c', 'd']) // a,b,c als Top3 (nur 3 Kandidaten ohne d), d ueber Label
-  })
-
-  it('doppelt qualifizierende Abschnitte (Top 3 UND Label) erscheinen nur einmal', () => {
-    const sections = [mk(0, 'a', 'topic'), mk(1, 'b'), mk(2, 'c')]
-    const scores = new Map([['a', 100], ['b', 50], ['c', 10]])
-    const chosen = selectSectionsForEnrich(sections, scores)
-    expect(chosen).toHaveLength(3) // a nur einmal, nicht doppelt
   })
 })
 

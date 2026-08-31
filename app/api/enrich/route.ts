@@ -8,18 +8,19 @@ import { resolveModel } from '@/lib/claude/ghostwriter'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { parseTiptapContent, convertTiptapToMarkdown } from '@/lib/utils/tiptap-to-markdown'
 import { markdownToTiptapServer } from '@/lib/utils/markdown-to-tiptap-server'
-import { extractSections, selectSectionsForEnrich } from '@/lib/enrich/sections'
+import { extractSections } from '@/lib/enrich/sections'
 import { linkPostContent } from '@/lib/glossary/backfill'
 import { getMatcherTerms, getChartProductNames, buildReservedNames } from '@/lib/glossary/terms'
 import type { TiptapDoc, TiptapNode } from '@/lib/email/tiptap-to-html'
+import type { BundleType } from '@/lib/i18n/bundle-labels'
 
 export const runtime = 'nodejs'
-// Sequenziell verarbeitete Abschnitte (typisch 4-6: Take + Top 3 + Labels),
-// jeder mit optionaler Web-Recherche — grosszuegiger als ein einzelner
-// Sektions-Call braucht, aber Web-Suche kann pro Abschnitt mehrere Sekunden
-// zusaetzlich kosten. Gleiche Groessenordnung wie die alte Editor-in-Chief-
-// Route (600s), hier mit Marge nach unten, weil Abschnitte klein sind.
-export const maxDuration = 500
+// Sequenziell verarbeitete Abschnitte — seit der Umstellung auf "alle
+// Abschnitte" (Betreiber-Vorgabe 2026-08-31) potenziell die volle Artikellaenge
+// (auch 10+ News-Items pro Post), nicht mehr nur 4-6. Deshalb hoeher als die
+// alte Editor-in-Chief-Route (600s) angesetzt — an der Obergrenze, die dieses
+// Projekt an anderer Stelle bereits nutzt (article-job-Route, 800s).
+export const maxDuration = 800
 
 /**
  * POST /api/enrich
@@ -27,12 +28,18 @@ export const maxDuration = 500
  * Body: { content: TipTap-JSON (ganzer Artikel), model?: string }
  *
  * Ersetzt die alte Editor-in-Chief-Route (2026-08-31). Arbeitet NICHT auf dem
- * ganzen Artikel in einem Rutsch, sondern waehlt serverseitig eine Teilmenge
- * der H2-Abschnitte aus (lib/enrich/sections.ts: Synthszr-Take-Abschnitt
- * immer, sonst Top 3 nach news_queue.total_score UNION alle mit Bundle-Label)
- * und verarbeitet JEDEN EINZELN — nicht gewaehlte Abschnitte bleiben
- * unangetastet. Streamt pro Abschnitt ein Ereignis, damit bereits fertige
- * Abschnitte im Editor sichtbar bleiben, auch wenn ein spaeterer scheitert.
+ * ganzen Artikel in einem Rutsch, sondern zerlegt ihn in H2-Abschnitte
+ * (lib/enrich/sections.ts) und verarbeitet ALLE EINZELN (Betreiber-Vorgabe
+ * 2026-08-31, geaendert am selben Tag — urspruenglich nur eine Teilmenge).
+ * Streamt pro Abschnitt ein Ereignis, damit bereits fertige Abschnitte im
+ * Editor sichtbar bleiben, auch wenn ein spaeterer scheitert.
+ *
+ * Bundle-Abschnitte (topic/recap/deep_dive) tragen oft einen eingebetteten
+ * "Synthszr Take:"-Absatz, der beim Schreiben haeufig ueber die eigentliche
+ * 5-Satz-Vorgabe hinauswaechst (s. lib/claude/take-cap.ts) — buildSectionMessage
+ * weist das Modell für genau diese Abschnitte an, diesen Take-Absatz um zwei
+ * Saetze zu kuerzen. Der EINE abschliessende Post-Take (isTake-Abschnitt)
+ * ist davon nicht betroffen.
  *
  * Output-Protokoll (SSE-artig, newline-delimited JSON):
  *   {started, totalSections, model, promptName}
@@ -80,19 +87,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Kein aktiver Enrich-Prompt gefunden' }, { status: 400 })
   }
 
-  const allSections = extractSections(doc)
-  const queueItemIds = [...new Set(allSections.map((s) => s.queueItemId).filter((id): id is string => Boolean(id)))]
-
-  let scores = new Map<string, number>()
-  if (queueItemIds.length > 0) {
-    const { data: scoreRows } = await supabase
-      .from('news_queue')
-      .select('id, total_score')
-      .in('id', queueItemIds)
-    scores = new Map((scoreRows ?? []).map((r) => [r.id as string, Number(r.total_score) || 0]))
-  }
-
-  const sections = selectSectionsForEnrich(allSections, scores)
+  const sections = extractSections(doc)
 
   const modelStr = requestedModel || (await getModelForUseCase('enrich').catch(() => 'claude-sonnet-5'))
   const resolved = resolveModel(modelStr) || resolveModel('claude-sonnet-5')!
@@ -132,7 +127,7 @@ export async function POST(request: NextRequest) {
           )
           if (!sectionMarkdown.trim()) throw new Error('Abschnitt ergibt leeren Markdown')
 
-          const userMessage = buildSectionMessage(promptRow.prompt_text, sectionMarkdown, section.isTake)
+          const userMessage = buildSectionMessage(promptRow.prompt_text, sectionMarkdown, section.isTake, section.bundleType)
           const revisedMarkdown = await runSection(userMessage, resolved)
 
           const revisedDoc = await markdownToTiptapServer(revisedMarkdown)
@@ -215,11 +210,17 @@ export async function POST(request: NextRequest) {
   })
 }
 
-function buildSectionMessage(promptText: string, sectionMarkdown: string, isTake: boolean): string {
+function buildSectionMessage(
+  promptText: string,
+  sectionMarkdown: string,
+  isTake: boolean,
+  bundleType: BundleType | null,
+): string {
   return `${promptText}
 
 ---
 ${isTake ? '\nHINWEIS: Dieser Abschnitt IST der Synthszr Take — wende Aufgabe 3 an.\n' : ''}
+${bundleType ? '\nHINWEIS: Dieser Abschnitt enthält einen eingebetteten "Synthszr Take:"-Absatz (Bündel-Abschnitte neigen dazu, ihn zu lang werden zu lassen). Kürze GENAU DIESEN Absatz um zwei Sätze gegenüber der Vorlage — behalte die stärksten Aussagen. Der Rest des Abschnitts folgt normal den Aufgaben 1+2.\n' : ''}
 Hier ist der zu überarbeitende Abschnitt (Markdown, beginnt mit einer Überschrift):
 
 \`\`\`markdown

@@ -905,10 +905,9 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
     )
   }
 
-  // Enrich (ersetzt 2026-08-31 Editor-in-Chief): waehlt serverseitig eine
-  // Teilmenge der Abschnitte aus (Synthszr Take immer, sonst Top 3 nach
-  // news_queue.total_score UNION alle mit Bundle-Label) und verarbeitet jeden
-  // einzeln. Jeder fertige Abschnitt wird SOFORT per applySectionResult
+  // Enrich (ersetzt 2026-08-31 Editor-in-Chief): zerlegt den Artikel serverseitig
+  // in Abschnitte (lib/enrich/sections.ts) und verarbeitet ALLE einzeln
+  // (Betreiber-Vorgabe 2026-08-31). Jeder fertige Abschnitt wird SOFORT per applySectionResult
   // eingesetzt (funktionales setState, damit schnell aufeinanderfolgende
   // Abschnitts-Events nicht auf einen veralteten content-Stand schreiben) —
   // ein spaeter scheiternder Abschnitt kostet keine bereits fertigen. Bleibt
@@ -1147,10 +1146,9 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
             </TabsList>
 
             <TabsContent value="content" className="mt-2 space-y-3">
-              {/* Enrich: nachrecherchiert, verfluessigt und schaerft eine
-                  ausgewaehlte Teilmenge der Abschnitte (Take + Top 3 + gelabelte).
-                  Button ist IMMER aktiv — die Auswahl passt sich dem Artikel an,
-                  keine Vorbedingung noetig. Ersetzt Content nur lokal; Speichern
+              {/* Enrich: nachrecherchiert, verfluessigt und schaerft ALLE
+                  Abschnitte des Artikels. Button ist IMMER aktiv — keine
+                  Vorbedingung noetig. Ersetzt Content nur lokal; Speichern
                   bleibt ein separater Klick (reversibel). */}
               <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-md border bg-muted/30">
                 <div className="flex-1 min-w-0">
