@@ -17,6 +17,11 @@ import type { TiptapNode } from '@/lib/email/tiptap-to-html'
 export interface EnrichSectionResult {
   queueItemId: string | null
   isTake: boolean
+  /** Ordinalposition unter den queueItemId-losen Abschnitten — s. Kommentar
+   *  bei EnrichSection.nullIndex (lib/enrich/sections.ts). Ohne dieses Feld
+   *  landen mehrere Abschnitte ohne queueItemId im selben Artikel beim
+   *  Splicen alle am ERSTEN von ihnen (bestaetigter Praxisfall). */
+  nullIndex: number
   nodes: TiptapNode[]
 }
 
@@ -95,6 +100,7 @@ export async function runEnrichOnTiptap(
         onSectionDone?.({
           queueItemId: (evt.queueItemId as string) ?? null,
           isTake: Boolean(evt.isTake),
+          nullIndex: typeof evt.nullIndex === 'number' ? evt.nullIndex : -1,
           nodes: evt.nodes as TiptapNode[],
         })
       }

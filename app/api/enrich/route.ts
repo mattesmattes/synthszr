@@ -191,6 +191,7 @@ export async function POST(request: NextRequest) {
             sectionDone: true,
             queueItemId: section.queueItemId,
             isTake: section.isTake,
+            nullIndex: section.nullIndex,
             nodes: revisedContentAfterLinking,
           })
           processed++

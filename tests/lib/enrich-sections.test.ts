@@ -26,9 +26,23 @@ describe('extractSections', () => {
     }
     const sections = extractSections(doc)
     expect(sections).toHaveLength(3)
-    expect(sections[0]).toMatchObject({ queueItemId: 'q1', bundleType: null, isTake: false, startIndex: 1, endIndex: 3 })
-    expect(sections[1]).toMatchObject({ queueItemId: 'q2', bundleType: 'topic', isTake: false, startIndex: 3, endIndex: 6 })
-    expect(sections[2]).toMatchObject({ queueItemId: null, isTake: true, startIndex: 6, endIndex: 8 })
+    expect(sections[0]).toMatchObject({ queueItemId: 'q1', bundleType: null, isTake: false, nullIndex: -1, startIndex: 1, endIndex: 3 })
+    expect(sections[1]).toMatchObject({ queueItemId: 'q2', bundleType: 'topic', isTake: false, nullIndex: -1, startIndex: 3, endIndex: 6 })
+    expect(sections[2]).toMatchObject({ queueItemId: null, isTake: true, nullIndex: -1, startIndex: 6, endIndex: 8 })
+  })
+
+  it('vergibt nullIndex fortlaufend NUR an Nicht-Take-Abschnitte ohne queueItemId', () => {
+    const doc: TiptapDoc = {
+      type: 'doc',
+      content: [
+        h2('Mit ID', { queueItemId: 'q1' }), p('x'),
+        h2('Ohne ID A'), p('x'),
+        h2('Synthszr Take'), p('x'), // isTake, hat nie queueItemId, zaehlt NICHT mit
+        h2('Ohne ID B'), p('x'),
+      ],
+    }
+    const sections = extractSections(doc)
+    expect(sections.map((s) => s.nullIndex)).toEqual([-1, 0, -1, 1])
   })
 
   it('liefert leeres Array ohne H2', () => {
@@ -49,7 +63,7 @@ describe('applySectionResult', () => {
     // (3 Absaetze statt 1) — der urspruengliche Index von q2 (2) stimmt jetzt
     // nicht mehr mit seiner tatsaechlichen Position ueberein.
     const afterFirst = applySectionResult(doc, {
-      queueItemId: 'q1', isTake: false,
+      queueItemId: 'q1', isTake: false, nullIndex: -1,
       nodes: [h2('Erste ueberarbeitet', { queueItemId: 'q1' }), p('a'), p('b'), p('c')],
     })
     expect(afterFirst).not.toBeNull()
@@ -57,7 +71,7 @@ describe('applySectionResult', () => {
 
     // q2 jetzt anreichern — MUSS trotz verschobener Position korrekt greifen
     const afterSecond = applySectionResult(afterFirst!, {
-      queueItemId: 'q2', isTake: false,
+      queueItemId: 'q2', isTake: false, nullIndex: -1,
       nodes: [h2('Zweite ueberarbeitet', { queueItemId: 'q2' }), p('neu')],
     })
     expect(afterSecond).not.toBeNull()
@@ -67,19 +81,52 @@ describe('applySectionResult', () => {
 
   it('findet den Take-Abschnitt ueber isTake, nicht ueber queueItemId (der Take hat keinen)', () => {
     const doc: TiptapDoc = { type: 'doc', content: [h2('Synthszr Take'), p('alt')] }
-    const result = applySectionResult(doc, { queueItemId: null, isTake: true, nodes: [h2('Synthszr Take'), p('neu, schärfer')] })
+    const result = applySectionResult(doc, { queueItemId: null, isTake: true, nullIndex: -1, nodes: [h2('Synthszr Take'), p('neu, schärfer')] })
     expect(result!.content![1].content![0].text).toBe('neu, schärfer')
   })
 
   it('gibt null zurueck, wenn der Zielabschnitt nicht mehr existiert', () => {
     const doc: TiptapDoc = { type: 'doc', content: [h2('Andere', { queueItemId: 'q9' })] }
-    expect(applySectionResult(doc, { queueItemId: 'q-geloescht', isTake: false, nodes: [] })).toBeNull()
+    expect(applySectionResult(doc, { queueItemId: 'q-geloescht', isTake: false, nullIndex: -1, nodes: [] })).toBeNull()
   })
 
   it('mutiert das Original-Dokument nicht', () => {
     const doc: TiptapDoc = { type: 'doc', content: [h2('X', { queueItemId: 'q1' }), p('alt')] }
     const original = JSON.stringify(doc)
-    applySectionResult(doc, { queueItemId: 'q1', isTake: false, nodes: [h2('Y', { queueItemId: 'q1' })] })
+    applySectionResult(doc, { queueItemId: 'q1', isTake: false, nullIndex: -1, nodes: [h2('Y', { queueItemId: 'q1' })] })
     expect(JSON.stringify(doc)).toBe(original)
+  })
+
+  it('REGRESSION (Praxisfall 2026-09-01): zwei Abschnitte ohne queueItemId werden nicht verwechselt', () => {
+    // Echter Artikel: Abschnitt 1 ("OpenClaw") und Abschnitt 7 ("Product
+    // Manager") hatten BEIDE queueItemId === null. .find() ueber
+    // "queueItemId === null" traf IMMER den ersten — der zweite Abschnitts-
+    // Ergebnis landete faelschlich im Slot des ersten, dessen echtes Ergebnis
+    // damit verloren ging, waehrend der zweite Abschnitt selbst unveraendert
+    // blieb. nullIndex behebt das.
+    let doc: TiptapDoc = {
+      type: 'doc',
+      content: [
+        h2('EU DSA', { queueItemId: 'qA' }), p('Original EU DSA'),
+        h2('OpenClaw'), p('Original OpenClaw'),
+        h2('Product Manager'), p('Original Product Manager'),
+      ],
+    }
+    const afterOpenClaw = applySectionResult(doc, {
+      queueItemId: null, isTake: false, nullIndex: 0,
+      nodes: [h2('OpenClaw ENRICHED'), p('Neu OpenClaw')],
+    })
+    expect(afterOpenClaw).not.toBeNull()
+    doc = afterOpenClaw!
+
+    const afterProductManager = applySectionResult(doc, {
+      queueItemId: null, isTake: false, nullIndex: 1,
+      nodes: [h2('Product Manager ENRICHED'), p('Neu Product Manager')],
+    })
+    expect(afterProductManager).not.toBeNull()
+
+    const sections = extractSections(afterProductManager!)
+    expect(sections).toHaveLength(3)
+    expect(sections.map((s) => s.headingText)).toEqual(['EU DSA', 'OpenClaw ENRICHED', 'Product Manager ENRICHED'])
   })
 })

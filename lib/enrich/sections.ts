@@ -22,6 +22,19 @@ export interface EnrichSection {
   bundleType: BundleType | null
   /** true fuer den Synthszr-Take-Abschnitt — hat nie einen queueItemId. */
   isTake: boolean
+  /**
+   * 0-basierte Ordinalposition unter ALLEN Nicht-Take-Abschnitten OHNE
+   * queueItemId, in Dokumentreihenfolge; -1 fuer Take-Abschnitte und
+   * Abschnitte MIT queueItemId. Manuell verfasste/nicht an eine News-Queue
+   * gebundene Abschnitte haben queueItemId === null — kommt das mehrfach im
+   * selben Artikel vor (bestaetigter Praxisfall, zwei Abschnitte ohne
+   * queueItemId), reicht "queueItemId === null" allein zur Korrelation
+   * NICHT: applySectionResult traf sonst per .find() immer den ERSTEN
+   * Treffer und splicte den Abschnitt an die falsche Stelle, wodurch der
+   * eigentliche Zielabschnitt unveraendert blieb UND ein anderer doppelt
+   * mit fremdem Inhalt ueberschrieben wurde.
+   */
+  nullIndex: number
   /** Nur fuer Log-/Status-Zwecke, kein Bestandteil der Auswahllogik. */
   headingText: string
 }
@@ -41,18 +54,22 @@ export function extractSections(doc: TiptapDoc): EnrichSection[] {
   const content = doc.content || []
   const sections: EnrichSection[] = []
   let current: EnrichSection | null = null
+  let nextNullIndex = 0
 
   for (let i = 0; i < content.length; i++) {
     const node = content[i]
     if (node.type === 'heading' && Number(node.attrs?.level) === 2) {
       if (current) { current.endIndex = i; sections.push(current) }
       const text = headingText(node)
+      const queueItemId = (node.attrs?.queueItemId as string) || null
+      const isTake = TAKE_HEADING_RE.test(text)
       current = {
         startIndex: i,
         endIndex: content.length,
-        queueItemId: (node.attrs?.queueItemId as string) || null,
+        queueItemId,
         bundleType: (node.attrs?.bundleType as BundleType) || null,
-        isTake: TAKE_HEADING_RE.test(text),
+        isTake,
+        nullIndex: !isTake && !queueItemId ? nextNullIndex++ : -1,
         headingText: text,
       }
     }
@@ -70,18 +87,21 @@ export function extractSections(doc: TiptapDoc): EnrichSection[] {
  * immer: eine Ueberarbeitung hat selten exakt gleich viele Absaetze),
  * verschieben sich alle NACHFOLGENDEN Indizes. Stattdessen wird der
  * betroffene Abschnitt im AKTUELLEN Dokument per queueItemId (bzw. isTake
- * fuer den Take-Abschnitt) neu gesucht. Gibt ein NEUES Dokument zurueck
- * (keine Mutation) — React-State-freundlich. `null`, wenn der Zielabschnitt
+ * fuer den Take-Abschnitt, bzw. nullIndex bei queueItemId === null — s.
+ * Kommentar bei EnrichSection.nullIndex) neu gesucht. Gibt ein NEUES Dokument
+ * zurueck (keine Mutation) — React-State-freundlich. `null`, wenn der Zielabschnitt
  * nicht mehr existiert (z.B. vom User zwischenzeitlich geloescht).
  */
 export function applySectionResult(
   doc: TiptapDoc,
-  result: { queueItemId: string | null; isTake: boolean; nodes: TiptapNode[] },
+  result: { queueItemId: string | null; isTake: boolean; nullIndex: number; nodes: TiptapNode[] },
 ): TiptapDoc | null {
   const current = extractSections(doc)
   const match = result.isTake
     ? current.find((s) => s.isTake)
-    : current.find((s) => !s.isTake && s.queueItemId === result.queueItemId)
+    : result.queueItemId
+      ? current.find((s) => !s.isTake && s.queueItemId === result.queueItemId)
+      : current.find((s) => !s.isTake && !s.queueItemId && s.nullIndex === result.nullIndex)
   if (!match) return null
 
   const content = doc.content || []

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {
   FileText,
   Loader2,
@@ -160,6 +160,9 @@ export default function GeneratedArticlesPage() {
 
   // Enrich state fuer den inline Edit-Dialog.
   const [enriching, setEnriching] = useState(false)
+  // Ref zusaetzlich zum State: schliesst die Race-Luecke bei schnellem
+  // Doppelklick, s. Kommentar bei runEnrich() in edit/[id]/page.tsx.
+  const enrichingRef = useRef(false)
   const [enrichStatus, setEnrichStatus] = useState<string | null>(null)
   const [enrichError, setEnrichError] = useState<string | null>(null)
 
@@ -381,7 +384,8 @@ export default function GeneratedArticlesPage() {
   // spaeter scheiternder Abschnitt kostet keine bereits fertigen. Kein
   // Auto-Save — user reviews and hits Speichern.
   async function runEnrichInDialog() {
-    if (enriching) return
+    if (enrichingRef.current) return
+    enrichingRef.current = true
     setEnriching(true)
     setEnrichError(null)
     setEnrichStatus('Enrich startet…')
@@ -414,6 +418,7 @@ export default function GeneratedArticlesPage() {
       setEnrichError(err instanceof Error ? err.message : 'Unbekannter Fehler')
       setEnrichStatus(null)
     } finally {
+      enrichingRef.current = false
       setEnriching(false)
     }
   }

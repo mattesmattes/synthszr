@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Loader2, ImageIcon, Newspaper, X, ChevronDown, Settings2, Sparkles, CheckCircle2, AlertCircle, Languages, ListPlus, ClipboardEdit } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -143,6 +143,13 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
   // Enrich fuer bereits gespeicherte Posts. Waehlt serverseitig eine Teilmenge
   // der Abschnitte, ersetzt sie lokal — Speichern bleibt ein separater Klick.
   const [enriching, setEnriching] = useState(false)
+  // Zusaetzlich zum State-Flag: ein Ref wird SOFORT/synchron gesetzt, noch vor
+  // dem ersten await. Ein schneller Doppelklick kann zwei runEnrich()-Aufrufe
+  // ausloesen, bevor React den enriching-State neu gerendert und den Button
+  // deaktiviert hat — beide laesen dann denselben (noch false) State-Wert und
+  // starten parallel zwei unabhaengige Enrich-Laeufe auf demselben Dokument-
+  // Stand. Das Ref ist unmittelbar sichtbar, unabhaengig vom Render-Zyklus.
+  const enrichingRef = useRef(false)
   const [enrichStatus, setEnrichStatus] = useState<string | null>(null)
   const [enrichError, setEnrichError] = useState<string | null>(null)
 
@@ -913,7 +920,8 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
   // ein spaeter scheiternder Abschnitt kostet keine bereits fertigen. Bleibt
   // reversibel wie zuvor: nur lokaler State, kein DB-Write vor "Speichern".
   async function runEnrich() {
-    if (enriching) return
+    if (enrichingRef.current) return
+    enrichingRef.current = true
     setEnriching(true)
     setEnrichError(null)
     setEnrichStatus('Enrich startet…')
@@ -947,6 +955,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
       setEnrichError(err instanceof Error ? err.message : 'Unbekannter Fehler')
       setEnrichStatus(null)
     } finally {
+      enrichingRef.current = false
       setEnriching(false)
     }
   }
