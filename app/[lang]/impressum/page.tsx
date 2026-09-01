@@ -3,8 +3,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { createAnonClient } from '@/lib/supabase/admin'
 import { PostContentView } from '@/components/post-content-view'
-import { LanguageSwitcher } from '@/components/language-switcher'
-import { FooterBrands } from '@/components/footer-brands'
+import { SiteFooter } from '@/components/site-footer'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import type { LanguageCode } from '@/lib/types'
@@ -93,28 +92,7 @@ export default async function ImpressumPage({ params }: PageProps) {
         </article>
       </main>
 
-      <footer className="border-t border-border">
-        <div className="mx-auto max-w-5xl px-6 py-12">
-          <div className="flex flex-col items-center gap-6">
-            <FooterBrands />
-            <div className="flex flex-wrap items-center justify-center gap-6 text-xs">
-              <LanguageSwitcher currentLocale={locale} />
-              <Link href={`/${locale}/glossary`} className="hover:text-accent transition-colors">
-                {t['nav.glossary']}
-              </Link>
-              <a href={`/${locale}/sources`} className="hover:text-accent transition-colors">
-                {t['footer.sources'] || 'Sources'}
-              </a>
-              <Link href={`/${locale}/impressum`} className="font-bold">
-                {t['footer.imprint'] || 'Impressum'}
-              </Link>
-              <Link href={`/${locale}/datenschutz`} className="hover:text-accent transition-colors">
-                {t['footer.privacy'] || 'Datenschutz'}
-              </Link>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter locale={locale} showNewsletter={false} />
     </div>
   )
 }

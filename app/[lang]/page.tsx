@@ -1,10 +1,8 @@
 import { Suspense } from "react"
 import Link from "next/link"
 import { FeaturedArticle } from "@/components/featured-article"
-import { FooterBrands } from "@/components/footer-brands"
-import { Newsletter } from "@/components/newsletter"
+import { SiteFooter } from "@/components/site-footer"
 import { AdPromo } from "@/components/ad-promo"
-import { LanguageSwitcher } from "@/components/language-switcher"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
 // import { CalligramFooter } from "@/components/calligram-footer"
 import { createAnonClient, createAdminClient } from "@/lib/supabase/admin"
@@ -342,39 +340,9 @@ export default async function Page({ params }: PageProps) {
           </div>
         )}
 
-        <Newsletter locale={locale} />
       </main>
 
-      <footer className="border-t border-border">
-        <div className="mx-auto w-[704px] max-w-full px-6 py-12">
-          <div className="flex flex-col items-center gap-6">
-            <FooterBrands />
-            <div className="flex flex-wrap items-center justify-center gap-6 text-xs">
-              <Suspense fallback={null}>
-                <LanguageSwitcher currentLocale={locale} />
-              </Suspense>
-              <Link href={`/${locale}/rankings`} className="hover:text-accent transition-colors">
-                Charts
-              </Link>
-              <Link href={`/${locale}/companies`} className="hover:text-accent transition-colors">
-                Companies
-              </Link>
-              <Link href={`/${locale}/glossary`} className="hover:text-accent transition-colors">
-                {t['nav.glossary']}
-              </Link>
-              <a href={`/${locale}/sources`} className="hover:text-accent transition-colors">
-                {t['footer.sources'] || 'Sources'}
-              </a>
-              <Link href={`/${locale}/impressum`} className="hover:text-accent transition-colors">
-                Imprint
-              </Link>
-              <Link href={`/${locale}/datenschutz`} className="hover:text-accent transition-colors">
-                Privacy
-              </Link>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter locale={locale} />
       {/* <CalligramFooter /> */}
     </div>
   )

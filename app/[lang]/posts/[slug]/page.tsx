@@ -6,13 +6,11 @@ import { getImageProps } from "next/image"
 import { createAnonClient, createAdminClient } from "@/lib/supabase/admin"
 import { PostContentView } from "@/components/post-content-view"
 import { PostProductLinks } from "@/components/post-product-links"
-import { FooterBrands } from "@/components/footer-brands"
-import { Newsletter } from "@/components/newsletter"
+import { SiteFooter } from "@/components/site-footer"
 import { AdPromo } from "@/components/ad-promo"
 import { PostCompanies } from "@/components/companies/post-companies"
 import { getCompanyMentionsForPost } from "@/lib/companies/recent-posts"
 import { SwipeNavigation } from "@/components/swipe-navigation"
-import { LanguageSwitcher } from "@/components/language-switcher"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
 import { PostSearchHighlight } from "@/components/post-search-highlight"
 import { AudioPlayer } from "@/components/audio-player"
@@ -623,33 +621,9 @@ export default async function PostPage({ params }: PageProps) {
         />
 
         <AdPromo locale={locale} />
-        <Newsletter locale={locale} />
       </main>
 
-      <footer className="border-t border-border">
-        <div className="mx-auto max-w-5xl px-6 py-12">
-          <div className="flex flex-col items-center gap-6">
-            <FooterBrands />
-            <div className="flex flex-wrap items-center justify-center gap-6 text-xs">
-              <Suspense fallback={null}>
-                <LanguageSwitcher currentLocale={locale} />
-              </Suspense>
-              <Link href={`/${locale}/glossary`} className="hover:text-accent transition-colors">
-                {t['nav.glossary']}
-              </Link>
-              <a href={`/${locale}/sources`} className="hover:text-accent transition-colors">
-                {t['footer.sources'] || 'Sources'}
-              </a>
-              <Link href={`/${locale}/impressum`} className="hover:text-accent transition-colors">
-                Imprint
-              </Link>
-              <Link href={`/${locale}/datenschutz`} className="hover:text-accent transition-colors">
-                Privacy
-              </Link>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter locale={locale} />
     </div>
     </SwipeNavigation>
   )
