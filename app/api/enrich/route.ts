@@ -22,6 +22,14 @@ export const runtime = 'nodejs'
 // Projekt an anderer Stelle bereits nutzt (article-job-Route, 800s).
 export const maxDuration = 800
 
+// Bewusst ABWEICHEND von TAKE_MAX_SENTENCES (5, lib/claude/take-cap.ts) — das
+// ist der Zielwert bei der Erst-Generierung, dieser hier gilt NUR fuer den
+// Enrich-Durchlauf (Betreiber-Korrektur 2026-08-31/09-01). Als benannte
+// Konstante statt Magic Number in der Prompt-Vorlage, damit eine spaetere
+// Aenderung nicht in einem langen Template-String gesucht werden muss.
+const ENRICH_TAKE_TARGET_SENTENCES = 4
+const ENRICH_MAX_LENGTH_GROWTH_PERCENT = 20
+
 /**
  * POST /api/enrich
  *
@@ -34,24 +42,29 @@ export const maxDuration = 800
  * Streamt pro Abschnitt ein Ereignis, damit bereits fertige Abschnitte im
  * Editor sichtbar bleiben, auch wenn ein spaeterer scheitert.
  *
- * buildSectionMessage haengt an den DB-Prompt drei feste Aufgaben an, die
- * NICHT der Admin-UI ueberlassen sind (Betreiber-Korrektur 2026-08-31, nach
- * Praxis-Feedback auf einem echten Artikel):
- *  - Aufgabe 4: jeder eingebettete "Synthszr Take:"-Absatz (nicht nur in
+ * buildSectionMessage haengt an den DB-Prompt einen fest codierten Regelblock
+ * an, der NICHT der Admin-UI ueberlassen ist (Betreiber-Korrektur 2026-08-31,
+ * nach Praxis-Feedback auf einem echten Artikel):
+ *  - Take-Laenge: jeder eingebettete "Synthszr Take:"-Absatz (nicht nur in
  *    Bundle-Abschnitten — jeder Abschnitt kann einen tragen, s.
  *    lib/claude/take-cap.ts) UND der eine abschliessende Post-Take
- *    (isTake-Abschnitt) auf GENAU 4 Saetze bringen. Ausdruecklich als eigene
- *    Aufgabe formuliert, NICHT als Bedingung von Aufgabe 3 (deren "NUR
- *    falls..."-Scoping fuehrte dazu, dass Takes in normalen Abschnitten
- *    unangetastet blieben).
- *  - Aufgabe 5: Laengenbegrenzung, Fliesstext maximal 20% laenger als die
- *    Vorlage (Recherche-Ergaenzungen ersetzen/verdichten statt zu addieren).
+ *    (isTake-Abschnitt) auf ENRICH_TAKE_TARGET_SENTENCES bringen.
+ *  - Laengenbegrenzung: Fliesstext maximal ENRICH_MAX_LENGTH_GROWTH_PERCENT
+ *    laenger als die Vorlage (Recherche-Ergaenzungen ersetzen/verdichten
+ *    statt zu addieren).
  *  - ANTI_LLM_STYLE_RULES (lib/enrich/style-rules.ts): Kernregeln aus dem
  *    Mattes-Schreibe-Skill (keine Gedankenstriche, keine "Nicht X, sondern
  *    Y"-Konstruktionen, keine toten KI-Uebergaenge).
  * Alle drei sind Code-Konstanten, nicht Teil des editierbaren DB-Prompts —
  * der globale TAKE_MAX_SENTENCES-Cap (5) fuer die normale Ghostwriter-
  * Generierung bleibt unangetastet, das hier gilt nur innerhalb von Enrich.
+ *
+ * WICHTIG fuer buildSectionMessage: Der Regelblock ist ABSICHTLICH NICHT
+ * durchnummeriert als "Aufgabe N", weil die DB-Prompt-Aufgabenliste selbst
+ * vom Nutzer editierbar ist (aktuell 1-3, mal mit doppelter "3." — Admin-UI
+ * "Enrich-Prompts"). Eine feste Nummer wie "Aufgabe 4" wuerde bei jeder
+ * Aenderung der DB-Nummerierung mit ihr kollidieren oder falsch anschliessen.
+ * Stattdessen ein eigener, klar abgegrenzter Abschnitt mit Ueberschrift.
  *
  * Output-Protokoll (SSE-artig, newline-delimited JSON):
  *   {started, totalSections, model, promptName}
@@ -228,16 +241,19 @@ function buildSectionMessage(
   sectionMarkdown: string,
   isTake: boolean,
 ): string {
-  const takeTask = isTake
-    ? 'AUFGABE 4 (verbindlich): Dieser Abschnitt IST der Synthszr Take — wende Aufgabe 3 an UND bringe den Take auf GENAU 4 vollständige Sätze, nicht drei, nicht fünf.'
-    : 'AUFGABE 4 (verbindlich, gilt UNABHÄNGIG davon, ob Aufgabe 3 hier greift): Falls dieser Abschnitt — an beliebiger Stelle, auch wenn die Überschrift NICHT "Synthszr Take" lautet — einen mit "Synthszr Take:" beginnenden Absatz enthält, bringe GENAU diesen Absatz auf GENAU 4 vollständige Sätze. Beim Kürzen die schwächste Teilaussage streichen, nicht wahllos Wörter sparen. Ist der Absatz schon kürzer als 4 Sätze, sinnvoll ergänzen, ohne neue Fakten zu erfinden. Diese Aufgabe NICHT überspringen, nur weil Aufgabe 3 laut ihrer eigenen Bedingung hier nicht gilt — Aufgabe 4 gilt trotzdem.'
+  const takeRule = isTake
+    ? `Dieser Abschnitt IST der Synthszr Take — bringe ihn zusätzlich zu den Aufgaben oben auf GENAU ${ENRICH_TAKE_TARGET_SENTENCES} vollständige Sätze, nicht mehr, nicht weniger.`
+    : `Falls dieser Abschnitt — an beliebiger Stelle, unabhängig von seiner Überschrift und unabhängig davon, welche der obigen Aufgaben hier laut ihrer eigenen Bedingung greifen — einen mit "Synthszr Take:" beginnenden Absatz enthält, bringe GENAU diesen Absatz auf GENAU ${ENRICH_TAKE_TARGET_SENTENCES} vollständige Sätze. Beim Kürzen die schwächste Teilaussage streichen, nicht wahllos Wörter sparen. Ist der Absatz schon kürzer, sinnvoll ergänzen, ohne neue Fakten zu erfinden.`
 
   return `${promptText}
 
 ---
-${takeTask}
 
-AUFGABE 5 (verbindlich, Längenbegrenzung): Der überarbeitete Fließtext des Abschnitts (ohne Überschrift, Tags, Quellenzeile) darf höchstens 20% länger sein als die Vorlage, gemessen in Wörtern. Recherche-Ergänzungen aus Aufgabe 1 ERSETZEN oder VERDICHTEN bestehenden Text, statt ihn zu addieren — wähle die wichtigste Ergänzung, nicht alle.
+VERBINDLICHE ZUSATZREGELN (gelten für JEDEN Abschnitt, zusätzlich zu den Aufgaben oben, unabhängig von deren Nummerierung):
+
+TAKE-LÄNGE: ${takeRule}
+
+LÄNGENBEGRENZUNG: Der überarbeitete Fließtext des Abschnitts (ohne Überschrift, Tags, Quellenzeile) darf höchstens ${ENRICH_MAX_LENGTH_GROWTH_PERCENT}% länger sein als die Vorlage, gemessen in Wörtern. Recherche-Ergänzungen ERSETZEN oder VERDICHTEN bestehenden Text, statt ihn zu addieren — wähle die wichtigste Ergänzung, nicht alle.
 
 ${ANTI_LLM_STYLE_RULES}
 
