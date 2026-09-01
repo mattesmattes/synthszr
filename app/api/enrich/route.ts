@@ -8,7 +8,7 @@ import { resolveModel } from '@/lib/claude/ghostwriter'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { parseTiptapContent, convertTiptapToMarkdown } from '@/lib/utils/tiptap-to-markdown'
 import { markdownToTiptapServer } from '@/lib/utils/markdown-to-tiptap-server'
-import { extractSections } from '@/lib/enrich/sections'
+import { extractSections, sectionMatchesKey, type SectionKey } from '@/lib/enrich/sections'
 import { ANTI_LLM_STYLE_RULES } from '@/lib/enrich/style-rules'
 import { linkPostContent } from '@/lib/glossary/backfill'
 import { getMatcherTerms, getChartProductNames, buildReservedNames } from '@/lib/glossary/terms'
@@ -29,6 +29,20 @@ export const maxDuration = 800
 // Aenderung nicht in einem langen Template-String gesucht werden muss.
 const ENRICH_TAKE_TARGET_SENTENCES = 4
 const ENRICH_MAX_LENGTH_GROWTH_PERCENT = 20
+
+// PROD-BEFUND 2026-09-01: ein Artikel mit 18 Abschnitten (seit "alle
+// Abschnitte statt Top-5", Betreiber-Vorgabe 2026-08-31) ueberschritt bei
+// Websuche pro Abschnitt das maxDuration-Limit — Vercel kappte die Funktion
+// mitten im Lauf, der Client sah nur "Enrich-Stream endete ohne
+// Abschluss-Ereignis" (lib/enrich/run-stream.ts). Statt maxDuration weiter
+// hochzudrehen (bricht bei noch mehr Abschnitten wieder), verarbeitet EIN
+// Aufruf jetzt nur so viele Abschnitte, wie sicher ins Zeitbudget passen,
+// beendet den Stream dann SAUBER mit needsContinuation:true, und
+// runEnrichOnTiptap (lib/enrich/run-stream.ts) stoesst automatisch einen
+// Folge-Request an. 150s Marge vor den 800s maxDuration fuer den zuletzt
+// gestarteten Abschnitt (inkl. moeglicher Overload-Retries, s.
+// ghostwriter-pipeline.ts) und den Verbindungsaufbau.
+const SOFT_TIME_BUDGET_MS = 650_000
 
 /**
  * POST /api/enrich
@@ -66,12 +80,21 @@ const ENRICH_MAX_LENGTH_GROWTH_PERCENT = 20
  * Aenderung der DB-Nummerierung mit ihr kollidieren oder falsch anschliessen.
  * Stattdessen ein eigener, klar abgegrenzter Abschnitt mit Ueberschrift.
  *
+ * Fortsetzbar (Betreiber-Korrektur 2026-09-01, s. Kommentar bei
+ * SOFT_TIME_BUDGET_MS): ein einzelner Aufruf verarbeitet nur so viele
+ * Abschnitte, wie sicher ins Zeitbudget passen, und meldet das im
+ * done-Ereignis (needsContinuation). runEnrichOnTiptap (lib/enrich/
+ * run-stream.ts) stoesst bei Bedarf automatisch einen Folge-Aufruf an, mit
+ * excludeKeys fuer die bereits verarbeiteten Abschnitte — fuer die vier
+ * Admin-Aufrufstellen ist das transparent, deren onSectionDone/onSectionError
+ * werden einfach ueber mehrere HTTP-Requests hinweg weiter aufgerufen.
+ *
  * Output-Protokoll (SSE-artig, newline-delimited JSON):
  *   {started, totalSections, model, promptName}
- *   {sectionStart, index, headingText}                    — vor jedem Abschnitt
- *   {sectionDone, index, nodes}                            — TipTap-Knoten des ueberarbeiteten Abschnitts
- *   {sectionError, index, error}                           — Abschnitt bleibt im Editor unveraendert
- *   {done, processed, errors}                              — einmal am Ende
+ *   {sectionStart, queueItemId, isTake, headingText}       — vor jedem Abschnitt
+ *   {sectionDone, queueItemId, isTake, nullIndex, nodes}   — TipTap-Knoten des ueberarbeiteten Abschnitts
+ *   {sectionError, queueItemId, isTake, nullIndex, headingText, error} — Abschnitt bleibt im Editor unveraendert
+ *   {done, processed, errors, needsContinuation}           — einmal am Ende jedes Aufrufs
  */
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -80,9 +103,13 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}))
-  const { content, model: requestedModel } = body as {
+  const { content, model: requestedModel, excludeKeys } = body as {
     content?: Record<string, unknown>
     model?: string
+    /** Abschnitte, die ein vorheriger Aufruf (Fortsetzung nach
+     *  needsContinuation) bereits verarbeitet hat — werden hier
+     *  uebersprungen (sectionMatchesKey, lib/enrich/sections.ts). */
+    excludeKeys?: SectionKey[]
   }
 
   if (!content || typeof content !== 'object') {
@@ -112,7 +139,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Kein aktiver Enrich-Prompt gefunden' }, { status: 400 })
   }
 
-  const sections = extractSections(doc)
+  const allSections = extractSections(doc)
+  const sections = excludeKeys?.length
+    ? allSections.filter((s) => !excludeKeys.some((k) => sectionMatchesKey(s, k)))
+    : allSections
 
   const modelStr = requestedModel || (await getModelForUseCase('enrich').catch(() => 'claude-sonnet-5'))
   const resolved = resolveModel(modelStr) || resolveModel('claude-sonnet-5')!
@@ -133,10 +163,21 @@ export async function POST(request: NextRequest) {
 
       send({ started: true, totalSections: sections.length, model: modelStr, promptName: promptRow.name })
 
+      const startedAt = Date.now()
       let processed = 0
       let errors = 0
+      let needsContinuation = false
 
       for (const section of sections) {
+        // Abschnitts-Grenze pruefen, nicht mittendrin: ein einmal gestarteter
+        // Abschnitt laeuft immer zu Ende, sonst gaebe es einen halb
+        // angewendeten Zustand. Sicher genug, weil ein einzelner Abschnitt
+        // inklusive Overload-Retries (ghostwriter-pipeline.ts) die 150s Marge
+        // bis maxDuration nicht ausschoepft.
+        if (Date.now() - startedAt > SOFT_TIME_BUDGET_MS) {
+          needsContinuation = true
+          break
+        }
         const sectionNodes = doc.content!.slice(section.startIndex, section.endIndex)
         send({
           sectionStart: true,
@@ -214,6 +255,7 @@ export async function POST(request: NextRequest) {
             sectionError: true,
             queueItemId: section.queueItemId,
             isTake: section.isTake,
+            nullIndex: section.nullIndex,
             headingText: section.headingText,
             error: err instanceof Error ? err.message : 'Unbekannter Fehler',
           })
@@ -221,7 +263,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      send({ done: true, processed, errors })
+      send({ done: true, processed, errors, needsContinuation })
       controller.close()
     },
   })

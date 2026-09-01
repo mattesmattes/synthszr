@@ -78,6 +78,26 @@ export function extractSections(doc: TiptapDoc): EnrichSection[] {
   return sections
 }
 
+/** Stabile Identitaet eines Abschnitts ueber mehrere Dokument-Stände hinweg
+ *  (queueItemId, sonst nullIndex, Take separat) — von applySectionResult zum
+ *  Wiederfinden genutzt und vom Enrich-Fortsetzungsprotokoll
+ *  (app/api/enrich/route.ts, excludeKeys) zum Ausschliessen bereits
+ *  verarbeiteter Abschnitte. */
+export interface SectionKey {
+  queueItemId: string | null
+  isTake: boolean
+  nullIndex: number
+}
+
+/** Prueft, ob ein Abschnitt zu einem SectionKey gehoert — dieselbe
+ *  Korrelation wie applySectionResult: isTake identifiziert den einen
+ *  Take-Abschnitt, sonst queueItemId, sonst (queueItemId null) nullIndex. */
+export function sectionMatchesKey(section: EnrichSection, key: SectionKey): boolean {
+  if (key.isTake) return section.isTake
+  if (section.isTake) return false
+  return key.queueItemId ? section.queueItemId === key.queueItemId : section.nullIndex === key.nullIndex
+}
+
 /**
  * Setzt die vom Server zurueckgegebenen Knoten eines ueberarbeiteten
  * Abschnitts ins AKTUELLE Dokument ein. Korreliert bewusst NICHT ueber den
@@ -86,22 +106,17 @@ export function extractSections(doc: TiptapDoc): EnrichSection[] {
  * Abschnitt bereits gesplict wurde und dabei seine Knotenzahl aenderte (fast
  * immer: eine Ueberarbeitung hat selten exakt gleich viele Absaetze),
  * verschieben sich alle NACHFOLGENDEN Indizes. Stattdessen wird der
- * betroffene Abschnitt im AKTUELLEN Dokument per queueItemId (bzw. isTake
- * fuer den Take-Abschnitt, bzw. nullIndex bei queueItemId === null — s.
- * Kommentar bei EnrichSection.nullIndex) neu gesucht. Gibt ein NEUES Dokument
- * zurueck (keine Mutation) — React-State-freundlich. `null`, wenn der Zielabschnitt
- * nicht mehr existiert (z.B. vom User zwischenzeitlich geloescht).
+ * betroffene Abschnitt im AKTUELLEN Dokument per sectionMatchesKey neu
+ * gesucht. Gibt ein NEUES Dokument zurueck (keine Mutation) —
+ * React-State-freundlich. `null`, wenn der Zielabschnitt nicht mehr
+ * existiert (z.B. vom User zwischenzeitlich geloescht).
  */
 export function applySectionResult(
   doc: TiptapDoc,
-  result: { queueItemId: string | null; isTake: boolean; nullIndex: number; nodes: TiptapNode[] },
+  result: SectionKey & { nodes: TiptapNode[] },
 ): TiptapDoc | null {
   const current = extractSections(doc)
-  const match = result.isTake
-    ? current.find((s) => s.isTake)
-    : result.queueItemId
-      ? current.find((s) => !s.isTake && s.queueItemId === result.queueItemId)
-      : current.find((s) => !s.isTake && !s.queueItemId && s.nullIndex === result.nullIndex)
+  const match = current.find((s) => sectionMatchesKey(s, result))
   if (!match) return null
 
   const content = doc.content || []

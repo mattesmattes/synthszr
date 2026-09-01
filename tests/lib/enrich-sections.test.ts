@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractSections, applySectionResult } from '@/lib/enrich/sections'
+import { extractSections, applySectionResult, sectionMatchesKey } from '@/lib/enrich/sections'
 import type { TiptapDoc, TiptapNode } from '@/lib/email/tiptap-to-html'
 
 function h2(text: string, attrs: Record<string, string> = {}): TiptapNode {
@@ -128,5 +128,50 @@ describe('applySectionResult', () => {
     const sections = extractSections(afterProductManager!)
     expect(sections).toHaveLength(3)
     expect(sections.map((s) => s.headingText)).toEqual(['EU DSA', 'OpenClaw ENRICHED', 'Product Manager ENRICHED'])
+  })
+})
+
+describe('sectionMatchesKey', () => {
+  // Realistische Struktur wie im 18-Abschnitte-Praxisfall 2026-09-01, der
+  // die Enrich-Fortsetzung noetig machte: Abschnitte mit queueItemId, ohne
+  // (mehrfach), und der eine Take-Abschnitt.
+  const [take, withId, noIdA, noIdB] = extractSections({
+    type: 'doc',
+    content: [
+      h2('Synthszr Take'), p('x'),
+      h2('Mit ID', { queueItemId: 'q1' }), p('x'),
+      h2('Ohne ID A'), p('x'),
+      h2('Ohne ID B'), p('x'),
+    ],
+  })
+
+  it('matcht ueber queueItemId', () => {
+    expect(sectionMatchesKey(withId, { queueItemId: 'q1', isTake: false, nullIndex: -1 })).toBe(true)
+    expect(sectionMatchesKey(withId, { queueItemId: 'q-anders', isTake: false, nullIndex: -1 })).toBe(false)
+  })
+
+  it('matcht ueber nullIndex, wenn queueItemId null ist', () => {
+    expect(sectionMatchesKey(noIdA, { queueItemId: null, isTake: false, nullIndex: 0 })).toBe(true)
+    expect(sectionMatchesKey(noIdB, { queueItemId: null, isTake: false, nullIndex: 1 })).toBe(true)
+    expect(sectionMatchesKey(noIdA, { queueItemId: null, isTake: false, nullIndex: 1 })).toBe(false)
+  })
+
+  it('matcht den Take-Abschnitt nur ueber isTake, unabhaengig von queueItemId/nullIndex', () => {
+    expect(sectionMatchesKey(take, { queueItemId: null, isTake: true, nullIndex: -1 })).toBe(true)
+    expect(sectionMatchesKey(withId, { queueItemId: 'q1', isTake: true, nullIndex: -1 })).toBe(false)
+    expect(sectionMatchesKey(take, { queueItemId: null, isTake: false, nullIndex: -1 })).toBe(false)
+  })
+
+  it('REGRESSION: filtert bereits verarbeitete Abschnitte fuer die Enrich-Fortsetzung korrekt heraus', () => {
+    const allSections = [take, withId, noIdA, noIdB]
+    // Simuliert eine erste Runde, die wegen Zeitbudget nach dem Take und
+    // "Mit ID" abbrach (needsContinuation) — die Fortsetzungsrunde bekommt
+    // deren Keys als excludeKeys.
+    const excludeKeys = [
+      { queueItemId: take.queueItemId, isTake: take.isTake, nullIndex: take.nullIndex },
+      { queueItemId: withId.queueItemId, isTake: withId.isTake, nullIndex: withId.nullIndex },
+    ]
+    const remaining = allSections.filter((s) => !excludeKeys.some((k) => sectionMatchesKey(s, k)))
+    expect(remaining.map((s) => s.headingText)).toEqual(['Ohne ID A', 'Ohne ID B'])
   })
 })

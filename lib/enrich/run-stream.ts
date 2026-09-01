@@ -11,8 +11,23 @@
  * bereits fertige Abschnitte SOFORT ins Editor-Dokument zu splicen, statt
  * auf den kompletten Lauf zu warten — genau das macht einen fehlgeschlagenen
  * Abschnitt harmlos fuer die uebrigen.
+ *
+ * Fortsetzbar (Betreiber-Korrektur 2026-09-01): ein 18-Abschnitte-Artikel mit
+ * Websuche pro Abschnitt ueberschritt das maxDuration-Limit der Route, Vercel
+ * kappte die Verbindung mitten im Lauf ("Enrich-Stream endete ohne
+ * Abschluss-Ereignis"). Meldet ein Aufruf-Ereignis `needsContinuation: true`
+ * (die Route hat aus Zeitbudget-Gruenden fruehzeitig abgebrochen, s.
+ * app/api/enrich/route.ts), stoesst runEnrichOnTiptap automatisch einen
+ * weiteren Aufruf an — mit denselben Original-Content und einer Ausschluss-
+ * liste der bereits verarbeiteten Abschnitte (sowohl erfolgreiche als auch
+ * gescheiterte, sonst wuerde eine permanent fehlschlagende Section jede Runde
+ * erneut versucht). Fuer die Aufrufer transparent: onSectionDone/
+ * onSectionError/onStatus werden einfach ueber mehrere HTTP-Requests hinweg
+ * weiter aufgerufen, das zurueckgegebene RunEnrichSummary summiert alle
+ * Runden.
  */
 import type { TiptapNode } from '@/lib/email/tiptap-to-html'
+import type { SectionKey } from '@/lib/enrich/sections'
 
 export interface EnrichSectionResult {
   queueItemId: string | null
@@ -28,6 +43,7 @@ export interface EnrichSectionResult {
 export interface EnrichSectionError {
   queueItemId: string | null
   isTake: boolean
+  nullIndex: number
   headingText: string
   error: string
 }
@@ -49,17 +65,31 @@ export interface RunEnrichSummary {
   errors: number
 }
 
-export async function runEnrichOnTiptap(
+type ExcludeKey = SectionKey
+
+// Harte Obergrenze an Fortsetzungs-Runden — reiner Sicherheitsnetz-Wert
+// gegen einen Endlos-Loop, falls die Route aus irgendeinem Grund IMMER
+// needsContinuation meldet. 12 Runden decken selbst einen Artikel mit
+// deutlich mehr als den bisher beobachteten 18 Abschnitten grosszuegig ab.
+const MAX_CONTINUATION_ROUNDS = 12
+
+async function runOneRound(
   content: Record<string, unknown>,
-  options: RunEnrichOptions = {},
-): Promise<RunEnrichSummary> {
-  const { model, onStatus, onSectionDone, onSectionError } = options
+  model: string | null | undefined,
+  excludeKeys: ExcludeKey[],
+  options: RunEnrichOptions,
+): Promise<{ processed: number; errors: number; needsContinuation: boolean; newExcludeKeys: ExcludeKey[] }> {
+  const { onStatus, onSectionDone, onSectionError } = options
 
   const res = await fetch('/api/enrich', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ content, ...(model ? { model } : {}) }),
+    body: JSON.stringify({
+      content,
+      ...(model ? { model } : {}),
+      ...(excludeKeys.length ? { excludeKeys } : {}),
+    }),
   })
 
   if (!res.ok || !res.body) {
@@ -70,7 +100,8 @@ export async function runEnrichOnTiptap(
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
-  let summary: RunEnrichSummary | null = null
+  let result: { processed: number; errors: number; needsContinuation: boolean } | null = null
+  const newExcludeKeys: ExcludeKey[] = []
 
   while (true) {
     const { done, value } = await reader.read()
@@ -97,27 +128,49 @@ export async function runEnrichOnTiptap(
         onStatus(`Bearbeite: ${evt.headingText}…`)
       }
       if (evt.sectionDone) {
-        onSectionDone?.({
-          queueItemId: (evt.queueItemId as string) ?? null,
-          isTake: Boolean(evt.isTake),
-          nullIndex: typeof evt.nullIndex === 'number' ? evt.nullIndex : -1,
-          nodes: evt.nodes as TiptapNode[],
-        })
+        const queueItemId = (evt.queueItemId as string) ?? null
+        const isTake = Boolean(evt.isTake)
+        const nullIndex = typeof evt.nullIndex === 'number' ? evt.nullIndex : -1
+        newExcludeKeys.push({ queueItemId, isTake, nullIndex })
+        onSectionDone?.({ queueItemId, isTake, nullIndex, nodes: evt.nodes as TiptapNode[] })
       }
       if (evt.sectionError) {
-        onSectionError?.({
-          queueItemId: (evt.queueItemId as string) ?? null,
-          isTake: Boolean(evt.isTake),
-          headingText: (evt.headingText as string) || '',
-          error: evt.error as string,
-        })
+        const queueItemId = (evt.queueItemId as string) ?? null
+        const isTake = Boolean(evt.isTake)
+        const nullIndex = typeof evt.nullIndex === 'number' ? evt.nullIndex : -1
+        newExcludeKeys.push({ queueItemId, isTake, nullIndex })
+        onSectionError?.({ queueItemId, isTake, nullIndex, headingText: (evt.headingText as string) || '', error: evt.error as string })
       }
       if (evt.done) {
-        summary = { totalSections: 0, processed: evt.processed as number, errors: evt.errors as number }
+        result = {
+          processed: evt.processed as number,
+          errors: evt.errors as number,
+          needsContinuation: Boolean(evt.needsContinuation),
+        }
       }
     }
   }
 
-  if (!summary) throw new Error('Enrich-Stream endete ohne Abschluss-Ereignis')
-  return summary
+  if (!result) throw new Error('Enrich-Stream endete ohne Abschluss-Ereignis')
+  return { ...result, newExcludeKeys }
+}
+
+export async function runEnrichOnTiptap(
+  content: Record<string, unknown>,
+  options: RunEnrichOptions = {},
+): Promise<RunEnrichSummary> {
+  const excludeKeys: ExcludeKey[] = []
+  let processed = 0
+  let errors = 0
+
+  for (let round = 0; round < MAX_CONTINUATION_ROUNDS; round++) {
+    const roundResult = await runOneRound(content, options.model, excludeKeys, options)
+    processed += roundResult.processed
+    errors += roundResult.errors
+    excludeKeys.push(...roundResult.newExcludeKeys)
+    if (!roundResult.needsContinuation) break
+    options.onStatus?.(`Enrich läuft weiter (Fortsetzung ${round + 2}) — ${excludeKeys.length} Abschnitt(e) bereits fertig…`)
+  }
+
+  return { totalSections: excludeKeys.length, processed, errors }
 }
