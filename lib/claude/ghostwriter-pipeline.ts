@@ -1123,37 +1123,65 @@ async function callModelNonStreaming(
       }
     }
 
-    // Thinking + große Requests streamen: vermeidet den 10-Minuten-Reject des SDK,
-    // und die Schleife verwirft thinking_delta sauber (nur text_delta zählt).
-    if (tokenLimit > 16384 || prompt.length > 30000 || options?.thinking) {
-      let result = ''
-      // stop_reason mitschneiden: bei einer leeren Antwort ist er der einzige
-      // Hinweis darauf, WARUM nichts kam (Budget aufgebraucht vs. Verweigerung).
-      // Er kommt im message_delta-Event, nicht in den content_block_deltas.
-      let stopReason: string | null = null
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const stream = anthropic.messages.stream(params as any)
-      for await (const event of stream) {
-        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-          result += event.delta.text
-        } else if (event.type === 'message_delta') {
-          stopReason = event.delta.stop_reason ?? stopReason
+    // Zusaetzliche Wartezeit-Ebene UEBER dem SDK-eigenen Retry (nur 2 Versuche,
+    // max. ~2s Gesamt-Backoff — s. calculateDefaultRetryTimeoutMillis im
+    // @anthropic-ai/sdk-Client). Anthropics 'overloaded_error' (HTTP 529) haelt
+    // in der Praxis oft zehn bis hundert Sekunden an, nicht Millisekunden.
+    // PROD-BEFUND 2026-09-01: zwei Bundle-Abschnitte desselben Tages-Artikels
+    // landeten trotz SDK-Retry mit dem rohen
+    // '*Fehler: {"type":"overloaded_error",...}*'-JSON im Artikeltext (s.
+    // assertNonEmptyModelOutput-Kommentar oben — der Wurf selbst ist gewollt,
+    // aber der SDK-Backoff war laengst durch, bevor Anthropic wieder Kapazitaet
+    // hatte). Hier zusaetzlich bis zu drei Versuche mit 5s/15s/30s Wartezeit,
+    // NUR bei 5xx/Overload — Verweigerungen (assertNonEmptyModelOutput wirft
+    // einen normalen Error, keinen Anthropic.APIError) werden weiterhin sofort
+    // durchgereicht, ein Retry wuerde daran nichts aendern.
+    const OVERLOAD_RETRY_DELAYS_MS = [5000, 15000, 30000]
+    for (let attempt = 0; attempt <= OVERLOAD_RETRY_DELAYS_MS.length; attempt++) {
+      try {
+        // Thinking + große Requests streamen: vermeidet den 10-Minuten-Reject des SDK,
+        // und die Schleife verwirft thinking_delta sauber (nur text_delta zählt).
+        if (tokenLimit > 16384 || prompt.length > 30000 || options?.thinking) {
+          let result = ''
+          // stop_reason mitschneiden: bei einer leeren Antwort ist er der einzige
+          // Hinweis darauf, WARUM nichts kam (Budget aufgebraucht vs. Verweigerung).
+          // Er kommt im message_delta-Event, nicht in den content_block_deltas.
+          let stopReason: string | null = null
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const stream = anthropic.messages.stream(params as any)
+          for await (const event of stream) {
+            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+              result += event.delta.text
+            } else if (event.type === 'message_delta') {
+              stopReason = event.delta.stop_reason ?? stopReason
+            }
+          }
+          // Thinking-Deltas zaehlen bewusst nicht als Ausgabe (s. Schleife oben) —
+          // eine Antwort, die NUR aus Thinking bestand, ist hier also leer und muss
+          // scheitern statt einen leeren Abschnitt zu liefern.
+          return assertNonEmptyModelOutput(result, `${model} (streaming)`, stopReason)
         }
-      }
-      // Thinking-Deltas zaehlen bewusst nicht als Ausgabe (s. Schleife oben) —
-      // eine Antwort, die NUR aus Thinking bestand, ist hier also leer und muss
-      // scheitern statt einen leeren Abschnitt zu liefern.
-      return assertNonEmptyModelOutput(result, `${model} (streaming)`, stopReason)
-    }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const response = (await anthropic.messages.create(params as any)) as Anthropic.Message
-    for (const block of response.content) {
-      if (block.type === 'text') {
-        return assertNonEmptyModelOutput(block.text, `${model}`, response.stop_reason)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const response = (await anthropic.messages.create(params as any)) as Anthropic.Message
+        for (const block of response.content) {
+          if (block.type === 'text') {
+            return assertNonEmptyModelOutput(block.text, `${model}`, response.stop_reason)
+          }
+        }
+        return assertNonEmptyModelOutput('', `${model} (kein Text-Block)`, response.stop_reason)
+      } catch (err) {
+        const status = err instanceof Anthropic.APIError ? err.status : undefined
+        const isOverload = typeof status === 'number' && status >= 500
+        if (!isOverload || attempt === OVERLOAD_RETRY_DELAYS_MS.length) throw err
+        const delay = OVERLOAD_RETRY_DELAYS_MS[attempt]
+        console.warn(`[Ghostwriter] Anthropic überlastet (Status ${status}), Versuch ${attempt + 2}/${OVERLOAD_RETRY_DELAYS_MS.length + 1} in ${delay}ms`)
+        await new Promise((r) => setTimeout(r, delay))
       }
     }
-    return assertNonEmptyModelOutput('', `${model} (kein Text-Block)`, response.stop_reason)
+    // Unerreichbar: die Schleife kehrt in jedem Durchlauf entweder per return
+    // zurueck oder wirft im letzten Versuch. TypeScript kennt das nicht.
+    throw new Error('Anthropic-Aufruf fehlgeschlagen (unerreichter Code-Pfad)')
   }
 
   if (resolved?.provider === 'openai') {
