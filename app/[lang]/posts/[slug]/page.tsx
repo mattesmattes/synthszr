@@ -634,9 +634,9 @@ export default async function PostPage({ params }: PageProps) {
               <Suspense fallback={null}>
                 <LanguageSwitcher currentLocale={locale} />
               </Suspense>
-              <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
-                LinkedIn
-              </a>
+              <Link href={`/${locale}/glossary`} className="hover:text-accent transition-colors">
+                {t['nav.glossary']}
+              </Link>
               <a href={`/${locale}/sources`} className="hover:text-accent transition-colors">
                 {t['footer.sources'] || 'Sources'}
               </a>

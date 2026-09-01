@@ -107,9 +107,9 @@ export default async function WhyPage({ params }: PageProps) {
             <FooterBrands />
             <div className="flex flex-wrap items-center justify-center gap-6 text-xs">
               <LanguageSwitcher currentLocale={locale} />
-              <a href="https://www.linkedin.com/in/mattes/" target="_blank" rel="noopener noreferrer" className="hover:text-accent transition-colors">
-                LinkedIn
-              </a>
+              <Link href={`/${locale}/glossary`} className="hover:text-accent transition-colors">
+                {t['nav.glossary']}
+              </Link>
               <a href={`/${locale}/sources`} className="hover:text-accent transition-colors">
                 {t['footer.sources'] || 'Sources'}
               </a>
