@@ -19,6 +19,14 @@ import { sanitizeLexTags } from '@/lib/glossary/lex-tags'
 import { enforceHeadingLength, sanitizeHeading } from '@/lib/claude/heading-length'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { enforceTakeEnding, TAKE_MARKER_RE } from '@/lib/claude/take-ending'
+import {
+  NEGATION_REFRAME_PATTERNS,
+  EM_DASH_REPLACEMENT,
+  FILLER_ADVERBS,
+  DEAD_TRANSITIONS,
+  DEAD_AI_PHRASES,
+  BUSINESS_FLUFF,
+} from '@/lib/claude/anti-llm-patterns'
 import { capSummarySentences, shortenBySentences, BUNDLE_TAG_LINE_RE } from '@/lib/claude/bundle-length'
 import { stripLoneSurrogates, escapeQuellmaterialTag } from '@/lib/claude/sanitize'
 import { repoRetrievalParams } from '@/lib/mattes/repo-intensity'
@@ -249,22 +257,15 @@ Dein Take MUSS sich auf die vorliegende News beziehen. Verwende konkrete Fakten,
 KEINE Militär-/Kriegsbildsprache (Schlachten, Waffen, Mobilmachung, Kampfverbände, Offensiven, Artillerie, Munition, Trojanische Pferde).
 
 INTERPUNKTION & SATZBAU — VERBOTEN FÜR SYNTHSZR TAKES:
-- **Keine Em-Dashes (— oder –) als Satzteiler.** Stattdessen: Punkt, Komma, Doppelpunkt, Semikolon oder Klammer. Em-Dashes sind ein klassisches AI-Tell.
-- **Verstärker-Adverbien streichen** ("exakt", "zufällig", "buchstäblich", "tatsächlich", "letztendlich") wenn sie nichts hinzufügen.
+- **Keine Em-Dashes (— oder –) als Satzteiler.** Stattdessen: ${EM_DASH_REPLACEMENT}. Em-Dashes sind ein klassisches AI-Tell.
+- **Verstärker-Adverbien streichen** (${FILLER_ADVERBS.map((a) => `"${a}"`).join(', ')}) wenn sie nichts hinzufügen.
 - **Drei-Listen-Aufzählungen vermeiden** ("X ist optional, Y ist privat, Z ist diffus" — wirken rhythmisch geschult statt gedacht). Maximal zwei parallele Glieder, dann Punkt.
 
 KONTRAST-KONSTRUKTIONEN — FATAL, KEINE EINZIGE ERLAUBT:
 Diese Konstruktion ist das stärkste AI-Tell überhaupt: ein erstes Framing aufbauen, um es zu negieren und durch ein "tieferes" zu ersetzen. Wirkt rhetorisch hohl, klingt nach LinkedIn-Influencer. Wenn auch nur EINE im Take auftaucht, ist der Take durchgefallen — du musst zurück und umformulieren.
 
 VERBOTENE MUSTER (in jeder Variation):
-- "Das ist kein X, sondern Y."
-- "Das ist kein X mehr, sondern Y."
-- "Das ist nicht X. Das ist Y."
-- "Nicht X. Y."
-- "Vergiss X. Das ist Y."
-- "Weniger X, mehr Y."
-- "X ist nicht Y, X ist Z."
-- "Was wie X aussieht, ist eigentlich Y."
+${NEGATION_REFRAME_PATTERNS.map((p) => `- "${p}"`).join('\n')}
 
 NEGATIVBEISPIEL (FATALER FEHLER):
 > "Das ist kein gewöhnliches Venture Capital mehr, sondern vertikale Integration durch die Hintertür."
@@ -285,7 +286,9 @@ INHALTLICHE VERBOTE (toxische Muster):
 - Engagement-Köder: "Lass das mal sacken", "Das verändert alles", "Punkt."
 - Offsite-/Ritual-Floskeln: "erst nach dem nächsten Offsite", "beim/bei dem nächsten Strategie- oder Security-Offsite", "nicht bis zum nächsten Workshop/Quartals-Review/Townhall" — und JEDE Variante, die Handlung an ein künftiges Firmen-Ritual (Offsite, Workshop, Retreat, Townhall, Jour fixe) koppelt. Sag stattdessen direkt, dass es jetzt entscheidbar/umsetzbar ist.
 - Generische Insider-Behauptungen: "Was dir keiner sagt", "niemand", "die meisten merken nicht"
-- Tote KI-Sprache: "In der heutigen...", "Es ist wichtig zu beachten", "Gamechanger", "bahnbrechend"
+- Tote KI-Sprache: ${DEAD_AI_PHRASES.map((p) => `"${p}"`).join(', ')}
+- Mechanische Übergangsfloskeln: ${DEAD_TRANSITIONS.map((t) => `"${t}"`).join(', ')}
+- Leere Business-Floskeln: ${BUSINESS_FLUFF.join(', ')}
 - Zielgruppen-Anrede: KEINE Anrede-Substantive wie "Führungskräfte", "Manager", "Entscheider", "CEOs", "Leader". Schreibe direkt und allgemein. Statt "Mein Rat an Führungskräfte:" oder "Was Manager jetzt tun sollten:" die Handlung direkt ausformulieren.
 - Ich-Perspektive im Rat: Der abschließende Rat und die Empfehlung NICHT aus der Ich-Perspektive — KEIN "Mein Rat:", "Ich rate/empfehle/würde", "Aus meiner Sicht", "Ich halte X für". Formuliere Rat und Empfehlung objektiv und unpersönlich, mit klarer Haltung, aber ohne "ich"/"mein". Statt "Mein Rat: jetzt einsteigen." → "Jetzt einzusteigen ist der richtige Zug." oder die Konsequenz direkt als Aussage.
 - Scharnier-Reflex: "Genau deshalb", "Genau da", "Genau hier" als Übergang zur Pointe — bring die Aussage direkt, ohne das "Genau"-Signal.
@@ -1691,10 +1694,10 @@ KORRIGIEREN:
 2. Falsche Kommasetzung und Zeichensetzung.
 
 AI-TELLS UMSCHREIBEN (nur diese, minimal-invasiv, Aussage erhalten — NICHT den ganzen Text neu schreiben):
-3. Kontrast-/Negations-Reframe: "Das ist kein X, sondern Y", "nicht X, sondern Y", "X ist nicht Y, sondern Z", "weniger X, mehr Y", "Was wie X aussieht, ist Y", "nicht mehr X, sondern Y". → Negation streichen, Y direkt als Aussage ausschreiben. Bsp.: "entscheidet sich nicht an der Spitze, sondern am unscheinbarsten Ende" → "entscheidet sich am unscheinbarsten Ende der Wertschöpfung."
-4. Em-Dashes (— oder –) als Satzteiler → Punkt, Komma, Doppelpunkt, Semikolon oder Klammer.
+3. Kontrast-/Negations-Reframe: ${NEGATION_REFRAME_PATTERNS.map((p) => `"${p}"`).join(', ')}. → Negation streichen, Y direkt als Aussage ausschreiben. Bsp.: "entscheidet sich nicht an der Spitze, sondern am unscheinbarsten Ende" → "entscheidet sich am unscheinbarsten Ende der Wertschöpfung."
+4. Em-Dashes (— oder –) als Satzteiler → ${EM_DASH_REPLACEMENT}.
 5. Hohler Schluss-Aphorismus: ein letzter Satz, der wie ein tiefsinniges Motto klingt, aber nichts Konkretes sagt (z.B. "Die Resilienz einer Lieferkette misst man am schwächsten Molekül"). → Durch eine konkrete Aussage mit Fakt oder Konsequenz ersetzen, oder streichen, falls der vorletzte Satz stärker schließt.
-6. Rule-of-three-Aufzählungen und leere Verstärker-Adverbien ("exakt", "buchstäblich", "letztendlich", "tatsächlich") straffen, wenn sie nichts hinzufügen.
+6. Rule-of-three-Aufzählungen und leere Verstärker-Adverbien (${FILLER_ADVERBS.map((a) => `"${a}"`).join(', ')}) straffen, wenn sie nichts hinzufügen.
 7. "Wer …"-Schlussfigur in Synthszr Takes: Beginnt der letzte oder vorletzte Satz eines Takes mit "Wer" ("Wer jetzt noch …", "Wer heute …", "Wer sein X für Y hält, …", "Wer X baut/plant, sollte …"), forme ihn in eine direkte Aussage um — die Konsequenz als Statement ohne "Wer"-Rahmen (aus "Wer heute noch auf X setzt, verliert Y" wird "X kostet ab jetzt Y."). Diese Belehr-Formel stand in über der Hälfte aller Takes am Schluss; pro Artikel darf sie höchstens EINMAL überleben, und nur wenn die Umformung die Aussage verfälschen würde.
 
 NICHT VERÄNDERN:
