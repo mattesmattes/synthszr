@@ -283,9 +283,21 @@ function buildSectionMessage(
   sectionMarkdown: string,
   isTake: boolean,
 ): string {
+  // PROD-BEFUND 2026-09-01: "GENAU 4 Sätze" allein hat das Ziel technisch
+  // erfuellt und die Absicht verfehlt — das Modell erreichte die Vier, indem
+  // es mehrere Aussagen per Semikolon zu einem einzigen langen Satz
+  // verschmolz (ein Semikolon beendet keinen Satz, zaehlt also nicht mit).
+  // Ergebnis: vier gleichfoermig lange, dichte Saetze statt eines echten
+  // Wechsels aus kurz und lang. Kuerzen heisst Aussagen STREICHEN, nicht
+  // Saetze VERKETTEN — deshalb hier explizit gegen die Semikolon-Umgehung UND
+  // fuer die Satzlaengen-Varianz, die ANTI_LLM_STYLE_RULES ("Satzlänge
+  // variieren") allgemein fordert, aber bei einer harten Satzzahl-Vorgabe
+  // offenbar nicht von selbst durchsetzt.
+  const sentenceLengthGuard = `Die ${ENRICH_TAKE_TARGET_SENTENCES} Sätze müssen UNTERSCHIEDLICH lang sein — mindestens einer kurz und hart (unter 12 Wörtern), nicht alle vier gleichmäßig lang. Kein Semikolon, das zwei eigenständige Aussagen zu einem Satz verschmilzt, um die Satzzahl zu unterlaufen: das zählt als Verstoß gegen diese Regel, nicht als Erfüllung. Beim Kürzen ganze Teilaussagen STREICHEN, nicht mehrere Sätze zu einem langen zusammenziehen.`
+
   const takeRule = isTake
-    ? `Dieser Abschnitt IST der Synthszr Take — bringe ihn zusätzlich zu den Aufgaben oben auf GENAU ${ENRICH_TAKE_TARGET_SENTENCES} vollständige Sätze, nicht mehr, nicht weniger.`
-    : `Falls dieser Abschnitt — an beliebiger Stelle, unabhängig von seiner Überschrift und unabhängig davon, welche der obigen Aufgaben hier laut ihrer eigenen Bedingung greifen — einen mit "Synthszr Take:" beginnenden Absatz enthält, bringe GENAU diesen Absatz auf GENAU ${ENRICH_TAKE_TARGET_SENTENCES} vollständige Sätze. Beim Kürzen die schwächste Teilaussage streichen, nicht wahllos Wörter sparen. Ist der Absatz schon kürzer, sinnvoll ergänzen, ohne neue Fakten zu erfinden.`
+    ? `Dieser Abschnitt IST der Synthszr Take — bringe ihn zusätzlich zu den Aufgaben oben auf GENAU ${ENRICH_TAKE_TARGET_SENTENCES} vollständige Sätze, nicht mehr, nicht weniger. ${sentenceLengthGuard}`
+    : `Falls dieser Abschnitt — an beliebiger Stelle, unabhängig von seiner Überschrift und unabhängig davon, welche der obigen Aufgaben hier laut ihrer eigenen Bedingung greifen — einen mit "Synthszr Take:" beginnenden Absatz enthält, bringe GENAU diesen Absatz auf GENAU ${ENRICH_TAKE_TARGET_SENTENCES} vollständige Sätze. ${sentenceLengthGuard} Ist der Absatz schon kürzer, sinnvoll ergänzen, ohne neue Fakten zu erfinden.`
 
   return `${promptText}
 
