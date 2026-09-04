@@ -865,23 +865,32 @@ export async function writeBundleSection(
     repoIntensity?: number
   },
 ): Promise<string> {
+  // pickPrimaryAndSecondarySources bestimmt NUR NOCH, welche Quelle als
+  // Haupt-Link zitiert wird (buildBundleSourceBlock unten) — nicht mehr, wie
+  // die Quellen inhaltlich gewichtet werden. Bis 2026-09-04 bekam dieselbe
+  // "laengster Content gewinnt"-Auswahl auch das groesste Content-Budget UND
+  // das "[HAUPTQUELLE]"-Etikett im Schreib-Prompt: Ein langer Multi-Themen-
+  // Newsletter-Digest (z.B. ein taeglicher AlphaSignal-Rundbrief, der
+  // "Commerce Agents" nur als eine von mehreren Zeilen erwaehnt) wurde dadurch
+  // faelschlich zur "wichtigsten" Quelle, obwohl zwei andere, fokussierte
+  // Artikel das eigentliche Bündel-Thema exakt trafen — der Take driftete zum
+  // Nebenrauschen der laengsten Quelle statt die Quellen zu EINER Meldung zu
+  // verweben (Praxisfall 2026-09-04, "Anthropic Shopping Agents..."-Digest
+  // verdraengte zwei Claude-Commerce-Agents-Artikel). Jetzt bekommt jede
+  // Quelle dasselbe Budget und dieselbe neutrale Kennzeichnung, die Aufgabe
+  // bleibt "fuehre ALLE Quellen zu einem Abschnitt zusammen" (s. Prompt
+  // unten), nicht "schreibe ueber die laengste Quelle".
   const { primary, secondary } = pickPrimaryAndSecondarySources(items)
   const publicCompanyList = context.relevantCompanies.public.join(', ') || '(keine erkannt)'
   const premarketCompanyList = context.relevantCompanies.premarket.join(', ') || '(keine erkannt)'
 
-  // Quellen-Blöcke fürs Prompt. Haupt-Quelle bekommt mehr Kontext-Budget als die
-  // Nebenquellen. JEDER content-Slice MUSS durch stripLoneSurrogates, sonst macht
-  // ein an der Grenze zerschnittenes Surrogate den Anthropic-Body zu 400-Invalid-JSON.
-  const sourceBlocks: string[] = []
-  const primaryName = primary.source_display_name || primary.source_identifier
-  sourceBlocks.push(
-    `[HAUPTQUELLE] ${primaryName}${primary.source_url ? ` | URL: ${primary.source_url}` : ''}\n${escapeQuellmaterialTag(stripLoneSurrogates((primary.content || 'Kein Inhalt verfügbar.').slice(0, 5000)))}`,
-  )
-  secondary.forEach((it, i) => {
+  // Quellen-Blöcke fürs Prompt — alle gleichrangig, gleiches Content-Budget.
+  // JEDER content-Slice MUSS durch stripLoneSurrogates, sonst macht ein an der
+  // Grenze zerschnittenes Surrogate den Anthropic-Body zu 400-Invalid-JSON.
+  const BUNDLE_SOURCE_CONTENT_CHARS = 4000
+  const sourceBlocks = items.map((it, i) => {
     const name = it.source_display_name || it.source_identifier
-    sourceBlocks.push(
-      `[QUELLE ${i + 2}] ${name}${it.source_url ? ` | URL: ${it.source_url}` : ''}\n${escapeQuellmaterialTag(stripLoneSurrogates((it.content || 'Kein Inhalt verfügbar.').slice(0, 3000)))}`,
-    )
+    return `[QUELLE ${i + 1}] ${name}${it.source_url ? ` | URL: ${it.source_url}` : ''}\n${escapeQuellmaterialTag(stripLoneSurrogates((it.content || 'Kein Inhalt verfügbar.').slice(0, BUNDLE_SOURCE_CONTENT_CHARS)))}`
   })
 
   // Voice-Grounding (Mattes-Korpus) + historische Callbacks — non-fatal, parallel,
