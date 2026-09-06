@@ -78,8 +78,14 @@ function isAbbreviation(name: string): boolean {
  * technical" verlinkt. Der Name hat GENAU vier Zeichen und faellt damit knapp
  * auf die Kompositum-Seite der Laengenregel (`4 < 4` ist falsch) — im Deutschen
  * kollidiert er zusaetzlich mit "Differenz" und "Diffusion".
+ *
+ * "state" kam am 2026-09-06 dazu: im Take stand "{lex:Draft Registration
+ * Statement} bei der SEC" — der Lexikonbegriff "State" traf als Praefix von
+ * "Statement" (englisches Lehnwort, kein deutsches Kompositum mit "State" als
+ * Erstglied). "ment" ist keine Flexionsendung aus INFLECTIONS, blieb also als
+ * Rest neben dem Link stehen.
  */
-const WHOLE_WORD_ONLY = new Set(['compute', 'branch', 'diff'])
+const WHOLE_WORD_ONLY = new Set(['compute', 'branch', 'diff', 'state'])
 
 /**
  * Wie matchNameInText, aber mit Wortgrenze auf BEIDEN Seiten — für Namen, bei

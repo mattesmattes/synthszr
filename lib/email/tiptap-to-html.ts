@@ -367,7 +367,11 @@ async function getChartProducts(): Promise<ChartProductEntry[]> {
       for (const r of data ?? []) described.add(r.product_id as string)
     }
     return capped
-      .filter((p) => described.has(p.id) && !isAutolinkStopword(p.canonicalName))
+      // Laengen-Wache wie im Web (lib/tiptap/dom-processors/product-links.ts) —
+      // fehlte hier trotz des Anspruchs oben ("EXAKT dieselbe Quelle wie das
+      // Web"). Ohne sie verlinkte die Mail einen niedrig-konfidenten
+      // Kandidaten ("Kai", identity_confidence 0) mitten in "Kai Wegner".
+      .filter((p) => described.has(p.id) && p.canonicalName.trim().length >= 4 && !isAutolinkStopword(p.canonicalName))
       .map((p) => ({ name: p.canonicalName, slug: p.slug, rank: p.catRank, trend: p.trend }))
   } catch {
     return []
