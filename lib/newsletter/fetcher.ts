@@ -1077,6 +1077,15 @@ export async function runArticleExtraction(options: {
 
         // ── Attempt 2: markdown.new fallback ──
         const decodedUrl = decodeTrackingUrl(article.url)
+
+        if (!isLikelyArticleUrl(decodedUrl)) {
+          return {
+            globalIndex, article, status: 'skipped' as const,
+            title: article.title, url: decodedUrl,
+            error: 'Decoded URL is not an article'
+          }
+        }
+
         const markdownResult = await extractViaMarkdownNew(decodedUrl !== article.url ? decodedUrl : article.url)
 
         if (markdownResult && markdownResult.content) {
