@@ -51,6 +51,8 @@ export interface TechmemeRunResult {
   modi: Record<string, number>
   /** Wie viele Stories als „Thema des Tages" laufen. */
   themen: number
+  /** Bereits vorhandene Quellen, die nachträglich auf „Thema des Tages" gehoben wurden. */
+  themenNachtraeglich: number
   fehler: string[]
 }
 
@@ -155,6 +157,65 @@ async function loadActiveTopicStories(supabase: AdminClient): Promise<Set<string
   return keys
 }
 
+/**
+ * Hebt Quellen, die schon in der Queue liegen, nachträglich auf „Thema des
+ * Tages", wenn ihre Story inzwischen dazu gehört.
+ *
+ * DIE LÜCKE, DIE DAS SCHLIESST: buildQueueItem setzt bundleType/status nur
+ * beim ANLEGEN einer Zeile. Eine Story, deren Quellen schon VOR ihrer
+ * Themen-Kür als gewöhnliche pending-Einträge eingesammelt wurden (weil sie
+ * damals noch nicht unter den Top-5-KI-relevanten war), bliebe sonst für immer
+ * unsichtbar: „0 Quellen neu" hieße dann nicht „schon vollständig gebündelt",
+ * sondern „liegt zerstreut als Einzelmeldungen in der Queue" — PROD-BEFUND
+ * 2026-09-08 an „Astra working with Blender via computer use...": sechs
+ * Quellen über drei Läufe seit dem Vorabend gesammelt, alle status=pending /
+ * bundle_type=null, obwohl der Lauf die Story inzwischen korrekt als Thema
+ * erkennt.
+ */
+async function promoteExistingTopicSources(
+  supabase: AdminClient,
+  themen: Set<string>,
+): Promise<number> {
+  if (themen.size === 0) return 0
+  const seit = new Date(Date.now() - KNOWN_URL_DAYS * 24 * 60 * 60 * 1000).toISOString()
+  const PAGE = 1000
+  const zuHeben: string[] = []
+
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('news_queue')
+      .select('id, metadata')
+      .eq('status', 'pending')
+      .gte('queued_at', seit)
+      .range(from, from + PAGE - 1)
+    if (error) {
+      throw new Error(`Nachtraegliche Themen-Zuordnung nicht lesbar: ${error.message}`)
+    }
+    const seite = (data ?? []) as Array<{ id: string; metadata: Record<string, unknown> | null }>
+    for (const zeile of seite) {
+      const key = zeile.metadata?.techmeme_story
+      if (typeof key === 'string' && themen.has(key)) zuHeben.push(zeile.id)
+    }
+    if (seite.length < PAGE) break
+  }
+  if (zuHeben.length === 0) return 0
+
+  const UPDATE_BATCH = 100
+  let angehoben = 0
+  for (let i = 0; i < zuHeben.length; i += UPDATE_BATCH) {
+    const batch = zuHeben.slice(i, i + UPDATE_BATCH)
+    const { error } = await supabase
+      .from('news_queue')
+      .update({ bundle_type: 'topic', status: 'selected', selected_at: new Date().toISOString() })
+      .in('id', batch)
+    if (error) {
+      throw new Error(`Nachtraegliche Themen-Zuordnung fehlgeschlagen: ${error.message}`)
+    }
+    angehoben += batch.length
+  }
+  return angehoben
+}
+
 interface Aufgabe {
   story: TechmemeStory
   source: { url: string; publication: string }
@@ -217,7 +278,8 @@ export async function runTechmemeJob(
   const deadline = Date.now() + (opts.budgetMs ?? DEFAULT_BUDGET_MS)
   const ergebnis: TechmemeRunResult = {
     stories: 0, relevant: 0, kandidaten: 0, verarbeitet: 0,
-    hinzugefuegt: 0, ohneText: 0, offen: 0, modi: {}, themen: 0, fehler: [],
+    hinzugefuegt: 0, ohneText: 0, offen: 0, modi: {}, themen: 0,
+    themenNachtraeglich: 0, fehler: [],
   }
 
   const stories = await fetchTopStories(opts.maxStories ?? 20)
@@ -241,6 +303,7 @@ export async function runTechmemeJob(
     await loadActiveTopicStories(supabase),
   )
   ergebnis.themen = Math.min(themen.size, TOPIC_STORY_LIMIT)
+  ergebnis.themenNachtraeglich = await promoteExistingTopicSources(supabase, themen)
 
   // Techmemes Reihenfolge bleibt erhalten: Rang 0 ist die Hauptmeldung. Der
   // Rang wird VOR dem Abgleich vergeben, damit er die Position bei Techmeme

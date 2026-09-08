@@ -260,7 +260,12 @@ export default function DailyRepoPage() {
       // zweiter Klick holt es nach, der Job ist zustandslos.
       const rest = data.offen > 0 ? `\n\n${data.offen} Quellen blieben offen (Zeitbudget) — nochmal klicken holt sie nach.` : ''
       const fehler = Array.isArray(data.fehler) && data.fehler.length > 0 ? `\n\nFehler: ${data.fehler.length}` : ''
-      alert(`Techmeme: ${data.hinzugefuegt} Quellen neu in der Queue, ${data.themen} als Thema des Tages.\n${data.relevant} von ${data.stories} Meldungen waren KI-relevant.${rest}${fehler}`)
+      // Quellen, die schon vor der Themen-Kuer als einzelne pending-Eintraege
+      // in der Queue lagen und jetzt nachtraeglich gebuendelt wurden (s.
+      // promoteExistingTopicSources) — ohne diesen Hinweis sieht "0 Quellen
+      // neu" wie ein leerer Lauf aus, obwohl gerade das die Story sichtbar macht.
+      const gehoben = data.themenNachtraeglich > 0 ? `\n${data.themenNachtraeglich} bereits vorhandene Quelle(n) nachträglich als Thema gebündelt.` : ''
+      alert(`Techmeme: ${data.hinzugefuegt} Quellen neu in der Queue, ${data.themen} als Thema des Tages.\n${data.relevant} von ${data.stories} Meldungen waren KI-relevant.${gehoben}${rest}${fehler}`)
       fetchRepoSummaries()
     } catch (err) {
       alert('Techmeme-Lauf fehlgeschlagen: ' + (err instanceof Error ? err.message : 'Unbekannter Fehler'))
