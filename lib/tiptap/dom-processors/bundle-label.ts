@@ -1,7 +1,7 @@
 // DOM processor: render a visible language-dependent label above bundled
-// section headings ("Thema des Tages" / "Deep Dive" / "Nachlese"), sourced from the
-// `data-bundle-type` attribute the HeadingWithQueueId extension renders onto
-// the H2 (see lib/tiptap/heading-with-queue-id.ts + lib/utils/markdown-to-tiptap.ts).
+// section headings ("Cover Story" / "Thema des Tages" / "Deep Dive" / "Nachlese"),
+// sourced from the `data-bundle-type` attribute the HeadingWithQueueId extension
+// renders onto the H2 (see lib/tiptap/heading-with-queue-id.ts + lib/utils/markdown-to-tiptap.ts).
 
 import { bundleLabel, type BundleType } from '@/lib/i18n/bundle-labels'
 
@@ -22,7 +22,7 @@ export function processBundleLabels(container: HTMLElement, locale: string): voi
     if (heading.dataset.bundleLabelProcessed) return
 
     const type = heading.getAttribute('data-bundle-type')
-    if (type !== 'topic' && type !== 'recap' && type !== 'deep_dive') return
+    if (type !== 'topic' && type !== 'recap' && type !== 'deep_dive' && type !== 'cover_story') return
 
     const badge = document.createElement('div')
     badge.className = `${BUNDLE_LABEL_CLASS} inline-block mb-2 rounded-full bg-foreground px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-background`

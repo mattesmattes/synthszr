@@ -6,29 +6,31 @@ import { bundleKeyOf } from '@/lib/claude/queue-article'
 type AdminClient = ReturnType<typeof createAdminClient>
 
 /**
- * Story-Schluessel EINES bereits aktiven Themen-Bündels, wenn es genau eines
- * gibt — sonst null.
+ * Story-Schluessel EINES bereits aktiven Bündels DESSELBEN Typs, wenn es genau
+ * eines gibt — sonst null.
  *
  * WARUM: `bundleKeyOf` (queue-article.ts) und darüber computeBundleUnits
- * (ghostwriter-pipeline.ts) gruppieren Abschnitte nach `metadata.techmeme_story`.
- * Von Hand als "Thema des Tages" markierte Items haben dieses Feld nie — sie
- * fallen auf den generischen Schluessel "topic" zurueck. Deckt sich das
- * manuell markierte Item inhaltlich mit einer Techmeme-Story, die schon als
- * eigenes Bündel läuft (anderer Schluessel), entstehen daraus ZWEI Abschnitte
- * statt einem — PROD-BEFUND 2026-09-11 an "DeepSeek V4.1-Flash": zwei von Hand
- * markierte Artikel liefen getrennt von zwei Techmeme-Quellen zur selben
- * Meldung.
+ * (ghostwriter-pipeline.ts) gruppieren Abschnitte nach (Typ, `metadata.techmeme_story`).
+ * Von Hand markierte Items haben dieses Feld nie — sie fallen auf den
+ * generischen Schluessel (den Typ selbst) zurueck. Deckt sich das manuell
+ * markierte Item inhaltlich mit einer Techmeme-Story, die schon als eigenes
+ * Bündel DESSELBEN Typs läuft (anderer Schluessel), entstehen daraus ZWEI
+ * Abschnitte statt einem — PROD-BEFUND 2026-09-11 an "DeepSeek V4.1-Flash":
+ * zwei von Hand markierte "Thema des Tages"-Artikel liefen getrennt von zwei
+ * Techmeme-Quellen zur selben Meldung. Gilt genauso für "Cover Story"
+ * (2026-09-13) — beide sind Leitmeldungs-Typen, bei denen dieselbe Story
+ * mehrfach von Hand nachgetragen werden kann.
  *
  * Nur bei GENAU EINEM aktiven Schluessel greift das automatisch — bei keinem
  * oder mehreren waere das Raten, welche Story gemeint ist, und der Bestand
  * bleibt lieber unveraendert (alter, generischer Bucket) als falsch verknuepft.
  */
-async function findSoleActiveTopicStoryKey(supabase: AdminClient): Promise<string | null> {
+async function findSoleActiveStoryKey(supabase: AdminClient, bundleType: string): Promise<string | null> {
   const { data, error } = await supabase
     .from('news_queue')
     .select('metadata')
     .eq('status', 'selected')
-    .eq('bundle_type', 'topic')
+    .eq('bundle_type', bundleType)
     .range(0, 999)
   if (error || !data) return null
 
@@ -45,9 +47,9 @@ export async function PATCH(request: NextRequest) {
   if (!session?.isAdmin) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   const { id, bundle_type } = await request.json()
   // Zulaessige Werte an EINER Stelle — dieselbe Liste wie der DB-Constraint
-  // (Migration 20260813120000). Ohne 'deep_dive' haette die Route den neuen
+  // (Migration 20260913080000). Ohne 'cover_story' haette die Route den neuen
   // Knopf mit 400 abgelehnt, waehrend die Oberflaeche ihn anbietet.
-  const ERLAUBT = ['topic', 'recap', 'deep_dive']
+  const ERLAUBT = ['topic', 'recap', 'deep_dive', 'cover_story']
   if (!id || (bundle_type !== null && !ERLAUBT.includes(bundle_type))) {
     return NextResponse.json({ error: 'Ungültige Parameter' }, { status: 400 })
   }
@@ -55,7 +57,7 @@ export async function PATCH(request: NextRequest) {
   const supabase = createAdminClient()
   const patch: Record<string, unknown> = { bundle_type }
 
-  if (bundle_type === 'topic') {
+  if (bundle_type === 'topic' || bundle_type === 'cover_story') {
     const { data: current } = await supabase
       .from('news_queue')
       .select('metadata')
@@ -64,7 +66,7 @@ export async function PATCH(request: NextRequest) {
     const currentMetadata = (current?.metadata ?? {}) as Record<string, unknown>
 
     if (!bundleKeyOf(currentMetadata)) {
-      const soleKey = await findSoleActiveTopicStoryKey(supabase)
+      const soleKey = await findSoleActiveStoryKey(supabase, bundle_type)
       if (soleKey) patch.metadata = { ...currentMetadata, techmeme_story: soleKey }
     }
   }

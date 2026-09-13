@@ -4,8 +4,13 @@ import type { LanguageCode } from '@/lib/types'
  * Aufschrift über einem gebündelten Abschnitt. „Deep Dive" kam 2026-08-13
  * hinzu (Betreiber-Wunsch): gleiche Mechanik und Länge wie „Thema des Tages",
  * nur eine andere Aufschrift, die im Editor umgestellt werden kann.
+ *
+ * „Cover Story" kam 2026-09-13 hinzu (Betreiber-Wunsch): gleiche Mechanik,
+ * aber der Abschnitt darf doppelt so lang werden wie „Thema des Tages" — s.
+ * BUNDLE_MAX_SENTENCES in ghostwriter-pipeline.ts. Der Synthszr Take bleibt
+ * unverändert kurz (Bündel-Regel gilt für alle Typen gleich).
  */
-export type BundleType = 'topic' | 'recap' | 'deep_dive'
+export type BundleType = 'topic' | 'recap' | 'deep_dive' | 'cover_story'
 
 /**
  * Visible label for a bundled article section ("Thema des Tages" / "Nachlese"),
@@ -36,6 +41,15 @@ const BUNDLE_LABELS: Record<BundleType, Partial<Record<LanguageCode, string>>> =
     fr: 'Résumé',
     cs: 'Shrnutí',
     nds: 'Torüchblick',
+  },
+  cover_story: {
+    // Wie „Deep Dive": als Format-Aufschrift international gebräuchlich,
+    // eine Übersetzung („Titelgeschichte") wäre hier ungewohnt.
+    de: 'Cover Story',
+    en: 'Cover Story',
+    fr: 'Cover Story',
+    cs: 'Cover Story',
+    nds: 'Cover Story',
   },
 }
 

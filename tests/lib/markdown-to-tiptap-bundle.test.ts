@@ -20,6 +20,20 @@ describe('extractBundleMarkers', () => {
     expect(cleaned).toBe(md)
     expect(markers).toEqual([])
   })
+
+  // Regression: die vorherige Fassung matchte nur (topic|recap) wörtlich —
+  // "deep_dive" (seit 2026-08-13) und "cover_story" (seit 2026-09-13) wurden
+  // dadurch nie erkannt: der Marker blieb als HTML-Kommentar in der Zeile
+  // stehen und verschwand beim Parsen kommentarlos, ohne bundleType zu setzen.
+  it('recognizes multi-word bundle types (deep_dive, cover_story), not just topic/recap', () => {
+    const md = '## Foo <!-- data-bundle-type:deep_dive -->\n\ntext\n\n## Bar <!-- data-bundle-type:cover_story -->'
+    const { cleaned, markers } = extractBundleMarkers(md)
+    expect(cleaned).not.toContain('data-bundle-type')
+    expect(markers).toEqual([
+      { headingIndex: 0, bundleType: 'deep_dive' },
+      { headingIndex: 1, bundleType: 'cover_story' },
+    ])
+  })
 })
 
 describe('applyBundleMarkers', () => {

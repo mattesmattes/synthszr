@@ -110,10 +110,26 @@ export interface BundleUnitIndices {
 }
 
 /**
- * Reihenfolge der Bündel-Typen im Artikel: Themen führen, Deep Dives folgen,
- * die Nachlese steht hinten.
+ * Reihenfolge der Bündel-Typen im Artikel: Die Cover Story führt (die
+ * gewichtigste Meldung des Tages), Themen und Deep Dives folgen, die
+ * Nachlese steht hinten.
  */
-const BUNDLE_TYPE_ORDER: BundleType[] = ['topic', 'deep_dive', 'recap']
+const BUNDLE_TYPE_ORDER: BundleType[] = ['cover_story', 'topic', 'deep_dive', 'recap']
+
+/**
+ * Obergrenze der Bündel-Zusammenfassung in Sätzen, je Bündel-Typ.
+ *
+ * Betreiber-Vorgabe 2026-09-13: die Cover Story darf doppelt so lang werden
+ * wie „Thema des Tages" — der Synthszr Take bleibt für ALLE Typen gleich kurz
+ * (s. BUNDLE_SYSTEM_ADDENDUM unten, die Take-Regel ist dort fix und hängt
+ * nicht von diesem Wert ab).
+ */
+const BUNDLE_MAX_SENTENCES: Record<BundleType, number> = {
+  topic: 25,
+  deep_dive: 25,
+  recap: 25,
+  cover_story: 50,
+}
 
 /**
  * Bündel-Einheiten aus den Items — die zentrale Gruppierung.
@@ -157,8 +173,10 @@ export function computeBundleGroups(items: PipelineItem[]): { topic: number[]; r
   const topic: number[] = []
   const recap: number[] = []
   items.forEach((item, i) => {
-    // Deep Dives zählen für den Plan wie Themen — beide führen den Artikel an.
-    if (item.bundle_type === 'topic' || item.bundle_type === 'deep_dive') topic.push(i + 1)
+    // Deep Dives und Cover Stories zaehlen fuer den Plan wie Themen — alle
+    // drei fuehren den Artikel an. Die feinere Unterscheidung (Reihenfolge,
+    // Laenge) macht computeBundleUnits/BUNDLE_MAX_SENTENCES.
+    if (item.bundle_type === 'topic' || item.bundle_type === 'deep_dive' || item.bundle_type === 'cover_story') topic.push(i + 1)
     else if (item.bundle_type === 'recap') recap.push(i + 1)
   })
   return { topic, recap }
@@ -680,20 +698,30 @@ async function shortenHeadingViaModel(heading: string, model: AIModel): Promise<
 
 // Der Bündel-Modus überschreibt gezielt die EIN-Thema-Regel des Section-Prompts:
 // hier werden mehrere Quellen zusammengeführt, statt eine Meldung zu fokussieren.
-const BUNDLE_SYSTEM_ADDENDUM = `
+//
+// PARAMETRISIERT NACH BUNDLE_MAX_SENTENCES (seit „Cover Story", 2026-09-13):
+// die Obergrenze der Zusammenfassung haengt vom Bündel-Typ ab, die Take-Regel
+// darunter bleibt für ALLE Typen wörtlich identisch — sie ist bewusst NICHT
+// von maxSentences abgeleitet, damit ein längeres Bündel den Take nie mitzieht.
+function buildBundleSystemAddendum(bundleType: BundleType): string {
+  const maxSentences = BUNDLE_MAX_SENTENCES[bundleType]
+  return `
 
 BÜNDEL-MODUS (überschreibt die EIN-Thema-Regel oben):
 - Dieser Abschnitt ist ein ausführlicher Leitartikel, der MEHRERE Quellen zusammenfasst. Anders als bei einer Einzelmeldung führst du hier ALLE Quellen redundanzfrei zusammen: decke JEDEN unterschiedlichen Aspekt ab, wiederhole Redundantes NICHT.
-- Die Zusammenfassung darf ausführlicher sein (bis zu ~25 Sätze), bleibt aber ein NÜCHTERNER Bericht ohne Wertung. Jede Wertung gehört in den Synthszr Take.
+- Die Zusammenfassung darf ausführlicher sein (bis zu ~${maxSentences} Sätze), bleibt aber ein NÜCHTERNER Bericht ohne Wertung. Jede Wertung gehört in den Synthszr Take.
 - Gliedere diese längere Zusammenfassung in MEHRERE Absätze, getrennt durch eine Leerzeile: pro thematischem Block bzw. Aspekt/Quelle ein eigener Absatz (Richtwert 3-6 Sätze je Absatz). KEIN einziger Textblock über viele Sätze — der Leitartikel muss durch Absätze gegliedert und lesbar sein. Nur die Zusammenfassung wird so gegliedert; der Synthszr Take bleibt EIN Absatz.
 - DER SYNTHSZR TAKE IST GENAU SO LANG WIE IN JEDEM ANDEREN ABSCHNITT: 5 Sätze, ein Absatz, nicht mehr. Er wächst NICHT mit der Zahl der Quellen und NICHT mit der Länge der Zusammenfassung darüber.
-- Das ist die häufigste Abweichung in diesem Modus: Weil die Zusammenfassung hier bis zu 25 Sätze hat, wirkt ein Take von fünf Sätzen daneben knapp — er ist es nicht, er ist richtig. Widerstehe dem Sog, den Take mitwachsen zu lassen. Ein sechster Satz ist bereits zu viel und wird abgeschnitten.
+- Das ist die häufigste Abweichung in diesem Modus: Weil die Zusammenfassung hier bis zu ${maxSentences} Sätze hat, wirkt ein Take von fünf Sätzen daneben knapp — er ist es nicht, er ist richtig. Widerstehe dem Sog, den Take mitwachsen zu lassen. Ein sechster Satz ist bereits zu viel und wird abgeschnitten.
 - Genau EIN Take mit EINEM Blickwinkel, nicht mehrere aneinandergereihte Takes zu den einzelnen Quellen. Mehr Quellen heißt nicht mehr Meinung, sondern dieselbe Haltung auf breiterer Grundlage.
 - Company-Tags wie gewohnt (max 3 relevanteste über alle Quellen), ABER gib KEINE Quellen-Pfeil-Zeile aus (kein "→ [Quelle](URL)"): die Quellenangaben (Haupt- und Nebenquellen) werden deterministisch nach der Generierung ergänzt.
 - NENNE DIE PUBLIKATIONEN NICHT IM FLIESSTEXT. Keine Wendungen wie "wie TechCrunch berichtet", "laut Reuters", "einem Bericht der Financial Times zufolge". Der Abschnitt fasst mehrere Quellen zusammen; würde jede beim Namen genannt, zerfiele der Text in eine Aufzählung von Presseschauen. Die Quellenangaben stehen ohnehin vollständig unter dem Abschnitt.
 - Schreibe stattdessen die SACHE: nicht "TechCrunch berichtet, dass Amazon Twitch-Streams zum Training nutzt", sondern "Amazon nutzt Twitch-Streams zum Training". Wo sich Quellen widersprechen oder eine etwas exklusiv meldet, genügt eine unpersönliche Zuschreibung ("nach Angaben von Insidern", "in einem Fall wird von … berichtet").`
+}
 
-const BUNDLE_SYSTEM_PROMPT = SECTION_SYSTEM_PROMPT + BUNDLE_SYSTEM_ADDENDUM
+function buildBundleSystemPrompt(bundleType: BundleType): string {
+  return SECTION_SYSTEM_PROMPT + buildBundleSystemAddendum(bundleType)
+}
 
 /**
  * Haupt-Quelle = Quelle mit dem größten übernommenen Inhaltsanteil (primärer
@@ -945,7 +973,7 @@ COMPANY-TAGS (nur {Company}-Tags, KEINE Quellen-Pfeil-Zeile — Quellen werden s
 PUBLIC: ${publicCompanyList}
 PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${historyBlock ? `\n\n${historyBlock}` : ''}`
 
-  const text = await callModelNonStreaming(userPrompt, BUNDLE_SYSTEM_PROMPT, model, {
+  const text = await callModelNonStreaming(userPrompt, buildBundleSystemPrompt(bundleType), model, {
     cacheableUserPrefix: context.cacheableUserPrefix,
     thinking: true,
     effort: context.effort ?? 'high',
@@ -1359,8 +1387,9 @@ export function buildBundleWriteUnits(orderedItems: PipelineItem[], plan: Articl
     // loescht, was er nicht will.
     //
     // NICHT fuer die Nachlese: Sie ist ein Rueckblick, keine Leitmeldung, fuer
-    // die eine Einzelfassung sinnvoll waere.
-    if (einheit.bundleType === 'topic' || einheit.bundleType === 'deep_dive') {
+    // die eine Einzelfassung sinnvoll waere. Cover Story zaehlt dazu (sogar
+    // die gewichtigste Leitmeldung) — dieselbe Logik wie topic/deep_dive.
+    if (einheit.bundleType === 'topic' || einheit.bundleType === 'deep_dive' || einheit.bundleType === 'cover_story') {
       // Dieselbe Wahl wie beim Quellenblock: die inhaltsstaerkste Quelle traegt
       // die Meldung am besten allein.
       const staerkste = teile.reduce((a, b) =>

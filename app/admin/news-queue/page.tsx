@@ -1297,6 +1297,11 @@ export default function NewsQueuePage() {
                                     Thema des Tages
                                   </Badge>
                                 )}
+                                {item.bundle_type === 'cover_story' && (
+                                  <Badge className="text-[9px] px-1 h-4 border-0 shrink-0 bg-violet-400 text-black">
+                                    Cover Story
+                                  </Badge>
+                                )}
                               </div>
                             )}
                           <div
@@ -1341,6 +1346,19 @@ export default function NewsQueuePage() {
                                     <Trash2 className="h-3.5 w-3.5" />
                                   )}
                                 </Button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleBundleType(item.id, 'cover_story')}
+                                  disabled={actionLoading === `bundle-${item.id}`}
+                                  title="Cover Story"
+                                  className={`text-[9px] px-1.5 h-[18px] rounded-full border font-medium whitespace-nowrap shrink-0 transition-colors ${
+                                    item.bundle_type === 'cover_story'
+                                      ? 'bg-violet-400 text-black border-violet-500'
+                                      : 'bg-transparent text-muted-foreground border-muted-foreground/30 hover:border-violet-500 hover:text-violet-600'
+                                  }`}
+                                >
+                                  Cover Story
+                                </button>
                                 <button
                                   type="button"
                                   onClick={() => handleBundleType(item.id, 'topic')}

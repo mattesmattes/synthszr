@@ -13,7 +13,14 @@ export interface BundleMarker {
 }
 
 const HEADING_LINE_RE = /^\s*#{1,6}\s/
-const BUNDLE_MARKER_RE = /\s*<!--\s*data-bundle-type:(topic|recap)\s*-->\s*$/
+// Generisch statt fest aufgezählt: die Liste hier lief bereits einmal
+// auseinander (der Vorgänger deckte nur "topic|recap" ab, "deep_dive"-Marker
+// von ensureBundleMarker/writeBundleSection wurden dadurch nie erkannt — der
+// HTML-Kommentar blieb unverändert in der Zeile stehen und verschwand beim
+// Parsen kommentarlos, statt das bundleType-Attribut zu setzen). BundleType-
+// Werte sind immer `[a-z_]+` (s. lib/i18n/bundle-labels.ts); ein neuer Typ
+// braucht diese Zeile künftig nicht mehr anzufassen.
+const BUNDLE_MARKER_RE = /\s*<!--\s*data-bundle-type:([a-z_]+)\s*-->\s*$/
 
 /**
  * Scans markdown for `<!-- data-bundle-type:topic|recap -->` markers appended

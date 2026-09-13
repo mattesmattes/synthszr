@@ -1264,6 +1264,19 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
                         <div className="flex items-center gap-1 mt-1.5">
                           <button
                             type="button"
+                            onClick={() => handleBundleType(item.id, 'cover_story')}
+                            disabled={bundleLoadingId === item.id}
+                            title="Cover Story"
+                            className={`text-[9px] px-1.5 h-[18px] rounded-full border font-medium whitespace-nowrap shrink-0 transition-colors ${
+                              item.bundle_type === 'cover_story'
+                                ? 'bg-violet-400 text-black border-violet-500'
+                                : 'bg-transparent text-muted-foreground border-muted-foreground/30 hover:border-violet-500 hover:text-violet-600'
+                            }`}
+                          >
+                            Cover Story
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleBundleType(item.id, 'topic')}
                             disabled={bundleLoadingId === item.id}
                             title="Thema des Tages"

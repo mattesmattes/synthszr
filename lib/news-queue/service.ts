@@ -293,7 +293,7 @@ export async function addToQueue(
      * Story-Zugehörigkeit bereits — sie nachträglich zu setzen hieße, die eben
      * geschriebenen Zeilen über ihre URL wiederzufinden.
      */
-    bundleType?: 'topic' | 'recap' | 'deep_dive' | null
+    bundleType?: 'topic' | 'recap' | 'deep_dive' | 'cover_story' | null
     /** Abweichender Anfangsstatus (Techmeme-Themen starten auf 'selected'). */
     status?: 'pending' | 'selected'
     synthesisScore?: number

@@ -274,6 +274,28 @@ export function TiptapEditorWithPatterns({
               type="button"
               variant="ghost"
               size="sm"
+              title="Als 'Cover Story' markieren (Bündel)"
+              onClick={() =>
+                editor
+                  .chain()
+                  .focus()
+                  .updateAttributes("heading", {
+                    bundleType: editor.getAttributes("heading").bundleType === "cover_story" ? null : "cover_story",
+                  })
+                  .run()
+              }
+              className={cn(
+                "h-7 px-2 text-[11px]",
+                editor.getAttributes("heading").bundleType === "cover_story" &&
+                  "bg-violet-100 text-violet-800 hover:bg-violet-200 dark:bg-violet-900/30 dark:text-violet-300",
+              )}
+            >
+              Cover Story
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               title="Als 'Thema des Tages' markieren (Bündel)"
               onClick={() =>
                 editor

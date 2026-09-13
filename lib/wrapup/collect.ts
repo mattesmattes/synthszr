@@ -53,9 +53,9 @@ function textOf(node: unknown): string {
 /**
  * Wählt aus einem Artikel-Content den Abschnitt für den Wrap-up.
  *
- * Reihenfolge: `bundleType === 'topic'`, sonst der ERSTE Abschnitt. Der Fallback
- * ist kein Randfall — an Prod hatte Dienstag der 04.08.2026 keinen
- * topic-Abschnitt, in der ersten geprüften Woche überhaupt.
+ * Reihenfolge: `bundleType === 'cover_story'`, sonst `'topic'`, sonst der ERSTE
+ * Abschnitt. Der Fallback ist kein Randfall — an Prod hatte Dienstag der
+ * 04.08.2026 keinen topic-Abschnitt, in der ersten geprüften Woche überhaupt.
  *
  * Der Abschnitt endet an der nächsten Überschrift. Ohne diese Grenze zöge der
  * Wrap-up den halben Artikel mit und das Modell bekäme Material, das gar nicht
@@ -81,10 +81,15 @@ export function pickTopicFromPost(content: unknown): {
     .filter((x) => x.node.type === 'heading')
   if (headings.length === 0) return null
 
+  // Cover Story (seit 2026-09-13) ist die gewichtigste Leitmeldung — geht vor
+  // "Thema des Tages", wenn beide im selben Post vorkommen.
+  const coverStory = headings.find(
+    (x) => ((x.node.attrs ?? {}) as Record<string, unknown>).bundleType === 'cover_story',
+  )
   const topic = headings.find(
     (x) => ((x.node.attrs ?? {}) as Record<string, unknown>).bundleType === 'topic',
   )
-  const chosen = topic ?? headings[0]
+  const chosen = coverStory ?? topic ?? headings[0]
 
   const nextHeadingPos = headings.find((x) => x.i > chosen.i)?.i ?? nodes.length
   const sectionNodes = nodes.slice(chosen.i + 1, nextHeadingPos) as Record<string, unknown>[]
