@@ -317,7 +317,7 @@
   margin-bottom: 0.5rem;
 }
 
-/* Bündel-Marker (Thema des Tages / Deep Dive / Nachlese) NUR im Editor sichtbar machen:
+/* Bündel-Marker (Cover Story / Thema des Tages / Deep Dive / Nachlese) NUR im Editor sichtbar machen:
    ein kleines Badge vor der H2, gespeist aus dem data-bundle-type-Attribut
    (gesetzt durch die Toolbar-Toggles bzw. die markdown→TipTap-Konvertierung).
    Der Reader nutzt denselben ProseMirror, trägt aber zusätzlich .tiptap-content
@@ -345,6 +345,11 @@
   content: "Deep Dive";
   background: #fecdd3;
   color: #9f1239;
+}
+.ProseMirror:not(.tiptap-content) h2[data-bundle-type="cover_story"]::before {
+  content: "Cover Story";
+  background: #ddd6fe;
+  color: #5b21b6;
 }
 .ProseMirror:not(.tiptap-content) h2[data-bundle-type="recap"]::before {
   content: "Nachlese";
