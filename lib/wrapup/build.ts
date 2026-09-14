@@ -82,7 +82,7 @@ export async function buildWeekWrapup(
     const { injectGlossaryMarks } = await import('@/lib/glossary/inject-marks')
     const [terms, chartNames] = await Promise.all([getMatcherTerms('de'), getChartProductNames()])
     if (terms && terms.length > 0) {
-      tiptap = injectGlossaryMarks(
+      tiptap = await injectGlossaryMarks(
         tiptap, terms.map((t) => t.slug), terms,
         { reserved: buildReservedNames(chartNames), lang: 'de' },
       ) as Record<string, unknown>

@@ -367,17 +367,17 @@ export async function reinjectGlossaryMarksForTranslation(
  * Backfill-Pfad nicht die Prüfung unterschlägt: eine Übersetzung, die weniger
  * Marks bekommt als das Original hatte, muss in beiden Fällen auffallen.
  */
-function finishInjection(
+async function finishInjection(
   translatedContent: unknown,
   slugs: string[],
   terms: GlossaryMatcherTerm[],
   reserved: string[],
   targetLang: LanguageCode,
-): unknown {
+): Promise<unknown> {
   // targetLang mitgeben: in der Uebersetzung darf die deutsche Kompositum-Regel
   // nicht greifen. Prod-Befund 2026-08-07: im englischen Text war "The
   // diff|erence sounds technical" als Begriff "Diff" verlinkt.
-  const injected = injectGlossaryMarks(translatedContent, slugs, terms, { reserved, lang: targetLang })
+  const injected = await injectGlossaryMarks(translatedContent, slugs, terms, { reserved, lang: targetLang })
 
   const actuallyLinked = extractLinkedSlugs(injected).length
   if (actuallyLinked < slugs.length) {

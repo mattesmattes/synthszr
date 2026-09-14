@@ -232,7 +232,7 @@ export async function POST(request: NextRequest) {
           // lib/glossary/inject-marks.ts.
           let revisedContentAfterLinking = revisedContent
           if (glossaryTerms) {
-            const relinked = linkPostContent(
+            const relinked = await linkPostContent(
               { type: 'doc', content: revisedContent },
               glossaryTerms,
               glossaryReserved,

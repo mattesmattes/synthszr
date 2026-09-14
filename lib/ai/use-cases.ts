@@ -28,6 +28,7 @@ export type UseCase =
   | 'glossary_generation'
   | 'glossary_readability_qa'
   | 'glossary_news_context'
+  | 'glossary_mention_context_qa'
   | 'glossary_product_assignment'
   | 'glossary_review'
   | 'glossary_translation'
@@ -149,6 +150,12 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
   glossary_news_context: {
     label: 'Glossar — News-Einordnung',
     description: 'Einordnungssatz für gematchte News-Titel im wöchentlichen Refresh schreiben (hochvolumig)',
+    defaultModel: 'claude-haiku-4-5-20251001',
+    allowedProviders: ['anthropic'],
+  },
+  glossary_mention_context_qa: {
+    label: 'Glossar — Erwähnungs-Kontext-QS',
+    description: 'Pro Fundstelle prüfen, ob ein Begriffsname wirklich das Lexikon-Konzept meint (nicht ein gleichnamiges Alltagswort, z.B. "Environment" in "Environmental") — hochvolumig, läuft bei jeder Verlinkung',
     defaultModel: 'claude-haiku-4-5-20251001',
     allowedProviders: ['anthropic'],
   },

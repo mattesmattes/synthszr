@@ -40,17 +40,17 @@ export const POSTS_PER_BACKFILL = 25
  * serialisierte JSON, weil injectGlossaryMarks ein neues Objekt zurückgibt und ein
  * Referenzvergleich damit immer „geändert" meldete.
  */
-export function linkPostContent(
+export async function linkPostContent(
   content: unknown,
   terms: GlossaryMatcherTerm[],
   reserved: string[],
-): { content: unknown; changed: boolean } {
+): Promise<{ content: unknown; changed: boolean }> {
   if (!content || typeof content !== 'object' || terms.length === 0) {
     return { content, changed: false }
   }
   try {
     const before = JSON.stringify(content)
-    const injected = injectGlossaryMarks(content, terms.map((t) => t.slug), terms, { reserved })
+    const injected = await injectGlossaryMarks(content, terms.map((t) => t.slug), terms, { reserved })
     return { content: injected, changed: JSON.stringify(injected) !== before }
   } catch (err) {
     // Ein einzelner unlesbarer Artikel darf einen Lauf über 219 nicht abbrechen.
@@ -115,7 +115,7 @@ export async function backfillGlossaryLinks(
   for (const post of rows) {
     lastCursor = post.created_at
     const parsed = typeof post.content === 'string' ? safeParseJSON(post.content) : post.content
-    const result = linkPostContent(parsed, terms, reserved)
+    const result = await linkPostContent(parsed, terms, reserved)
     if (!result.changed) { unchanged++; continue }
 
     // Als String schreiben, wie der Speicherpfad: content ist in dieser Tabelle

@@ -143,6 +143,6 @@ export async function applyGlossaryConfirmation(
   // in lib/glossary/translate.ts gebraucht, eine Policy-Regel darf dort
   // nicht unbemerkt auseinanderlaufen).
   const reserved = buildReservedNames(chartProductNames)
-  const injected = injectGlossaryMarks(parsed, publishedSlugs, terms, { reserved })
+  const injected = await injectGlossaryMarks(parsed, publishedSlugs, terms, { reserved })
   return { publishedSlugs, content: JSON.stringify(injected) }
 }

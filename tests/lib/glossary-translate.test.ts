@@ -84,6 +84,10 @@ vi.mock('@/lib/supabase/admin', () => ({
       const chain: Record<string, unknown> = { table }
       chain.select = vi.fn(() => chain)
       chain.eq = vi.fn(() => chain)
+      // injectGlossaryMarks fragt seit der Erwaehnungs-Kontext-QS (2026-09-14)
+      // via .in() Kurzbeschreibungen ab (fetchSummaries) — leere Antwort haelt
+      // die neue QS-Schicht inert, exakt das Verhalten von vor dem Umbau.
+      chain.in = vi.fn(async () => ({ data: [], error: null }))
       chain.maybeSingle = vi.fn(async () => {
         if (table === 'glossary_terms') return { data: state.termRow, error: state.termError }
         return { data: null, error: null }

@@ -86,14 +86,8 @@ function isAbbreviation(name: string): boolean {
  * kurz gedehnter — extendToWordEnd (s.u.) haette hier "Statement" komplett,
  * aber weiterhin FALSCH verlinkt.
  *
- * "environment" kam am 2026-09-14 dazu: "Environment" (Alias von
- * "Trainingsumgebung", ein RL-Begriff) traf als Praefix im englischen Adjektiv
- * "environmental" — hier im Firmennamen "Environmental Protection Network".
- * Dieselbe zufaellige Kollision wie "Intel" in "Intelligenz", nur ohne die
- * Firmennamen-Sonderbehandlung (matchWholeWordInText), weil es ein
- * Lexikonbegriff ist.
  */
-const WHOLE_WORD_ONLY = new Set(['compute', 'branch', 'diff', 'state', 'environment'])
+const WHOLE_WORD_ONLY = new Set(['compute', 'branch', 'diff', 'state'])
 
 /**
  * Wie matchNameInText, aber mit Wortgrenze auf BEIDEN Seiten — für Namen, bei

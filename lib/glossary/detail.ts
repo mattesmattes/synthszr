@@ -222,7 +222,7 @@ async function linkRelatedTerms(
   // client-seitig und kommen hier nie zum Zug.
   // lang mitgeben: auf /en/glossary/* ist der Text englisch, dort darf die
   // deutsche Kompositum-Regel nicht greifen (s. matchNameInText).
-  const withGlossary = injectGlossaryMarks(term.body, slugs, candidates, { lang })
+  const withGlossary = await injectGlossaryMarks(term.body, slugs, candidates, { lang })
   const body = injectStockLinks(withGlossary, lang)
 
   const fromText = candidates

@@ -23,6 +23,7 @@ const EXPECTED_USE_CASES: UseCase[] = [
   'glossary_generation',
   'glossary_readability_qa',
   'glossary_news_context',
+  'glossary_mention_context_qa',
   'glossary_product_assignment',
   'glossary_review',
   'glossary_translation',

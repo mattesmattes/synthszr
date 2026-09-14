@@ -2,6 +2,8 @@ import { matchNameInText } from '@/lib/glossary/mentions'
 import type { GlossaryMatcherTerm } from '@/lib/glossary/types'
 import { waehrungFuerSlug } from '@/lib/currency/currencies'
 import { betragVorFundstelle, betragFuerUrl } from '@/lib/currency/amounts'
+import { filterMentionsByContext, type MentionContextCandidate } from '@/lib/glossary/mention-context-qa'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 const MARK_TYPE = 'glossaryLink'
 
@@ -32,6 +34,79 @@ function stripMarks(node: unknown): unknown {
 }
 
 /**
+ * Findet, ohne zu verändern, die ERSTE unverlinkte Fundstelle je Begriff —
+ * dieselbe Logik (Heading-Skip, Link-Skip, reservierte/mehrdeutige Namen,
+ * Namens-Prioritaet) wie die anwendende Walk-Funktion unten, aber rein lesend.
+ * Liefert pro gefundenem Begriff den vollen Text seines Knotens als Kontext
+ * fuer die Erwaehnungs-QS (s. mention-context-qa.ts).
+ */
+function collectCandidateExcerpts(
+  node: unknown,
+  wanted: GlossaryMatcherTerm[],
+  reserved: Set<string>,
+  ambiguous: Set<string>,
+  lang: string,
+  done: Set<string>,
+  out: Map<string, string>,
+): void {
+  if (!node || typeof node !== 'object') return
+  const o = node as Node
+  if ((o as { type?: string }).type === 'heading') return
+
+  if (typeof o.text === 'string') {
+    if (hasMark(o, 'link')) return
+    for (const term of wanted) {
+      if (done.has(term.slug)) continue
+      const names = [term.canonicalName, ...term.aliases]
+        .filter((n) => !reserved.has(n.toLowerCase()))
+        .filter((n) => n === term.canonicalName || !ambiguous.has(n.toLowerCase()))
+        .sort((a, b) => b.length - a.length)
+      for (const name of names) {
+        const pos = matchNameInText(o.text as string, name, lang)
+        if (!pos) continue
+        done.add(term.slug)
+        out.set(term.slug, o.text as string)
+        break
+      }
+    }
+    return
+  }
+
+  if (Array.isArray(o.content)) {
+    for (const child of o.content) collectCandidateExcerpts(child, wanted, reserved, ambiguous, lang, done, out)
+  }
+}
+
+/**
+ * Fragt für die übergebenen Slugs die Kurzbeschreibung ab — NUR für die, die
+ * tatsächlich als Kandidat im Artikel gefunden wurden (typischerweise wenige
+ * Dutzend), nicht für den gesamten Begriffsbestand. GlossaryMatcherTerm trägt
+ * bewusst kein summary-Feld (schmale, gecachte Begriffsliste, s. types.ts) —
+ * dieser gezielte Zusatz-Read bleibt deshalb hier lokal statt die geteilte
+ * Liste aufzublähen.
+ */
+async function fetchSummaries(slugs: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  if (slugs.length === 0) return out
+  try {
+    const { data, error } = await createAdminClient()
+      .from('glossary_terms')
+      .select('slug, summary')
+      .in('slug', slugs)
+    if (error) {
+      console.error('[Glossary] fetchSummaries:', error.message)
+      return out
+    }
+    for (const row of (data ?? []) as Array<{ slug: string; summary: string | null }>) {
+      if (row.summary) out.set(row.slug, row.summary)
+    }
+  } catch (err) {
+    console.error('[Glossary] fetchSummaries failed:', err)
+  }
+  return out
+}
+
+/**
  * Schreibt glossaryLink-Marks für die bestätigten Slugs in das TipTap-JSON.
  *
  * Idempotent: bestehende Marks werden zuerst entfernt und neu gesetzt. Damit
@@ -42,8 +117,17 @@ function stripMarks(node: unknown): unknown {
  * Pro Begriff wird nur die erste Erwähnung verlinkt, insgesamt maximal
  * beliebig viele Begriffe. Text, der schon eine `link`-Mark trägt
  * (Quellenlink) oder bereits Company-/Produkt-verlinkt ist, wird übersprungen.
+ *
+ * ERWÄHNUNGS-KONTEXT-QS (Betreiber-Vorgabe 2026-09-14): Manche Begriffsnamen
+ * sind zugleich Allgemeinwörter ("Environment" = Alias von "Trainingsumgebung",
+ * kollidiert zufällig mit dem Firmennamen "Environmental Protection Network").
+ * Eine kuratierte Ausnahmeliste wäre hier falsch — der Begriff ist im
+ * richtigen Kontext ein legitimer Treffer, nur diese eine Erwähnung nicht.
+ * Deshalb wird JEDE gefundene Fundstelle einzeln per LLM gegen die
+ * Begriffs-Definition geprüft (mention-context-qa.ts), BEVOR die Marks
+ * geschrieben werden — nicht der Begriffsname als Ganzes gesperrt.
  */
-export function injectGlossaryMarks(
+export async function injectGlossaryMarks(
   content: unknown,
   slugs: string[],
   terms: GlossaryMatcherTerm[],
@@ -52,7 +136,7 @@ export function injectGlossaryMarks(
   // im Original deutsch sind — die Uebersetzungspfade reichen ihre Zielsprache
   // durch.
   opts: { reserved?: string[]; lang?: string } = {},
-): unknown {
+): Promise<unknown> {
   const cleaned = stripMarks(content)
   // `reserved` sind Company- und Chart-Produktnamen. Die Kollisionsregel kann
   // NICHT über eine bestehende Mark geprüft werden: die Produkt- und
@@ -93,6 +177,34 @@ export function injectGlossaryMarks(
   }
   const ambiguous = new Set([...aliasOwners.entries()].filter(([, n]) => n > 1).map(([k]) => k))
 
+  // PHASE 1: Fundstellen sammeln, ohne zu schreiben.
+  const excerptBySlug = new Map<string, string>()
+  collectCandidateExcerpts(cleaned, wanted, reserved, ambiguous, opts.lang ?? 'de', new Set(), excerptBySlug)
+
+  // PHASE 2: Kontext-QS — nur für Slugs mit einer Fundstelle UND einer
+  // Kurzbeschreibung. Fehlt die Beschreibung (Zusatz-Read fehlgeschlagen) oder
+  // gab es gar keine Fundstelle, bleibt der Begriff unangetastet und verhält
+  // sich wie vor diesem Umbau (fail-open, s. Modul-Kommentar).
+  let rejected: Set<string> = new Set()
+  if (excerptBySlug.size > 0) {
+    const summaries = await fetchSummaries([...excerptBySlug.keys()])
+    const candidates: MentionContextCandidate[] = []
+    const termBySlug = new Map(wanted.map((t) => [t.slug, t]))
+    for (const [slug, excerpt] of excerptBySlug) {
+      const summary = summaries.get(slug)
+      const term = termBySlug.get(slug)
+      if (!summary || !term) continue
+      candidates.push({ slug, name: term.canonicalName, summary, excerpt })
+    }
+    if (candidates.length > 0) {
+      const approved = await filterMentionsByContext(candidates)
+      rejected = new Set(candidates.map((c) => c.slug).filter((s) => !approved.has(s)))
+    }
+  }
+  const linkable = rejected.size === 0 ? wanted : wanted.filter((t) => !rejected.has(t.slug))
+  if (linkable.length === 0) return cleaned
+
+  // PHASE 3: wie zuvor, nur mit den kontext-geprüften Begriffen.
   const done = new Set<string>()
 
   const walk = (node: unknown): unknown => {
@@ -111,7 +223,7 @@ export function injectGlossaryMarks(
       // Link geschachtelt werden.
       if (hasMark(o, 'link')) return o
 
-      for (const term of wanted) {
+      for (const term of linkable) {
         if (done.has(term.slug)) continue
         // Reservierte Namen fallen einzeln raus, nicht der ganze Begriff —
         // ein Alias-Kollision mit einer Company/einem Produkt darf den

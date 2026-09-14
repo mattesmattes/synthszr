@@ -255,7 +255,7 @@ export async function runGlossaryDedupe(
           continue
         }
         const parsed = typeof postRow.content === 'string' ? safeParseJSON(postRow.content) : postRow.content
-        const relinkResult = linkPostContent(parsed, terms, reserved)
+        const relinkResult = await linkPostContent(parsed, terms, reserved)
         if (!relinkResult.changed) continue
         const { error: upErr } = await supabase
           .from('generated_posts')
