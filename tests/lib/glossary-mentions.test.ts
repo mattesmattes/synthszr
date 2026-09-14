@@ -119,6 +119,39 @@ describe('findGlossaryMentions', () => {
     expect(hits.map((h) => h.slug)).toEqual(['diff'])
   })
 
+  // PROD-BEFUND 2026-09-14: "Abschreibungshorizonte" wurde als
+  // "[Abschreibung]shorizonte" verlinkt — der Alias "Abschreibung" traf
+  // korrekt als Kompositum-Praefix, aber "shorizonte" war keine bekannte
+  // Flexionsendung und blieb als kaputt wirkender Rest ausserhalb des Links.
+  // extendToWordEnd dehnt seither bis zum tatsaechlichen Wortende, egal
+  // welche Endung folgt.
+  const abschreibungTerm: GlossaryMatcherTerm = {
+    slug: 'abschreibungszyklus', canonicalName: 'Abschreibungszyklus', aliases: ['Abschreibung'],
+  }
+
+  it('dehnt den Treffer bis zum Wortende, auch bei unbekannter Endung (Abschreibungshorizonte)', () => {
+    const hits = findGlossaryMentions('Die Abschreibungshorizonte verlängern sich.', [abschreibungTerm])
+    expect(hits).toEqual([{ slug: 'abschreibungszyklus', matchedText: 'Abschreibungshorizonte' }])
+  })
+
+  // PROD-BEFUND 2026-09-14: "Environment" (Alias von "Trainingsumgebung", ein
+  // RL-Begriff) traf als Praefix im englischen Adjektiv "environmental" —
+  // hier im Firmennamen "Environmental Protection Network". Dieselbe
+  // zufaellige Kollision wie "Intel" in "Intelligenz" (s.o.), nur ohne die
+  // Firmennamen-Sonderbehandlung, weil es ein Lexikonbegriff ist.
+  const environmentTerm: GlossaryMatcherTerm = {
+    slug: 'trainingsumgebung', canonicalName: 'Trainingsumgebung', aliases: ['Environment'],
+  }
+
+  it('trifft nicht das Adjektiv "environmental" (Environment/Environmental Protection Network)', () => {
+    expect(findGlossaryMentions('Die Environmental Protection Network warnte.', [environmentTerm])).toEqual([])
+  })
+
+  it('trifft "Environment" weiterhin als eigenständiges Wort', () => {
+    const hits = findGlossaryMentions('Das Environment wird neu trainiert.', [environmentTerm])
+    expect(hits.map((h) => h.slug)).toEqual(['trainingsumgebung'])
+  })
+
   // Die Kompositum-Regel ist eine DEUTSCHE Regel: "Inferenzkosten" ist ein
   // zusammengesetztes Wort mit "Inferenz" als Erstglied. Im Englischen gibt es
   // diese Zusammenschreibung nicht — dort ist ein Treffer im Wortinneren immer

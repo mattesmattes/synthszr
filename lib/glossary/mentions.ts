@@ -68,9 +68,9 @@ function isAbbreviation(name: string): boolean {
  * "branch" kam ueber einen Scan aller Begriffs-Bodies dazu und war der mit
  * ABSTAND haeufigste Fehltreffer des Lexikons: auf 148 Seiten war das Wort
  * "Branche" als Git-Branch verlinkt, dazu 19-mal "Branchen". Dieser Fall ist
- * heimtueckischer als "Compute", weil "e" als Flexionsendung gilt —
- * extendByInflection dehnte den Treffer ueber das ganze Wort aus, der Link sah
- * also voellig korrekt aus und fiel nur beim Draufklicken auf. Der Name deckt
+ * heimtueckischer als "Compute", weil "e" damals als Flexionsendung galt —
+ * der Treffer wurde ueber das ganze Wort ausgedehnt (heute extendToWordEnd),
+ * der Link sah also voellig korrekt aus und fiel nur beim Draufklicken auf. Der Name deckt
  * alle drei Begriffe ab, die ihn tragen (branch, branch-versionskontrolle,
  * feature-branch), weil hier NAMEN stehen und keine Slugs.
  *
@@ -82,10 +82,18 @@ function isAbbreviation(name: string): boolean {
  * "state" kam am 2026-09-06 dazu: im Take stand "{lex:Draft Registration
  * Statement} bei der SEC" — der Lexikonbegriff "State" traf als Praefix von
  * "Statement" (englisches Lehnwort, kein deutsches Kompositum mit "State" als
- * Erstglied). "ment" ist keine Flexionsendung aus INFLECTIONS, blieb also als
- * Rest neben dem Link stehen.
+ * Erstglied) und war damit von Anfang an der falsche Treffer, nicht nur ein zu
+ * kurz gedehnter — extendToWordEnd (s.u.) haette hier "Statement" komplett,
+ * aber weiterhin FALSCH verlinkt.
+ *
+ * "environment" kam am 2026-09-14 dazu: "Environment" (Alias von
+ * "Trainingsumgebung", ein RL-Begriff) traf als Praefix im englischen Adjektiv
+ * "environmental" — hier im Firmennamen "Environmental Protection Network".
+ * Dieselbe zufaellige Kollision wie "Intel" in "Intelligenz", nur ohne die
+ * Firmennamen-Sonderbehandlung (matchWholeWordInText), weil es ein
+ * Lexikonbegriff ist.
  */
-const WHOLE_WORD_ONLY = new Set(['compute', 'branch', 'diff', 'state'])
+const WHOLE_WORD_ONLY = new Set(['compute', 'branch', 'diff', 'state', 'environment'])
 
 /**
  * Wie matchNameInText, aber mit Wortgrenze auf BEIDEN Seiten — für Namen, bei
@@ -117,43 +125,32 @@ export function matchWholeWordInText(
  * Matcher und Mark-Injektor müssen dieselbe Antwort bekommen.
  */
 /**
- * Deutsche Flexionsendungen, die zum Treffer GEHOEREN.
+ * Dehnt einen Kompositum-Treffer bis zum Ende des umschliessenden Wortes aus.
  *
  * PROD-BEFUND 2026-08-05: "Grafikkarten-Vergleiche" wurde als
- * "[Grafikkarte]n-Vergleiche" verlinkt — das n stand ausserhalb des Links und sah
- * wie ein Fehler aus. Die Kompositum-Regel erlaubt den Treffer IM Wort, dehnt ihn
- * aber nicht auf die Beugung aus.
+ * "[Grafikkarte]n-Vergleiche" verlinkt — das n stand ausserhalb des Links und
+ * sah wie ein Fehler aus. Die Kompositum-Regel erlaubt den Treffer IM Wort,
+ * dehnte ihn aber vorher nur auf eine kuratierte Liste bekannter
+ * Flexionsendungen (en/es/er/em/ns/n/s/e/ing/ings).
  *
- * Bewusst eine kurze, geschlossene Liste und keine Heuristik: sie darf nur
- * greifen, wo das Folgende WIRKLICH eine Endung ist. "Intel" + "ligenz" bleibt
- * damit unberuehrt, und "Inferenzkosten" verlinkt weiterhin nur "Inferenz" —
- * "kosten" ist keine Endung, sondern ein zweites Wort.
+ * Diese Liste ist am 2026-09-14 gefallen: "Abschreibungshorizonte" (Alias
+ * "Abschreibung" von "Abschreibungszyklus") brauchte "shorizonte" als
+ * Endung — die naechste unbekannte Endung waere unweigerlich gefolgt, die
+ * Liste haette nie aufgehoert zu wachsen. Die allgemeine Regel: hat
+ * isCompositionMismatch den Treffer schon als plausibles Kompositum
+ * durchgelassen (Gross-/Kleinschreibung passt), gehoert IMMER das ganze Wort
+ * in den Link, nicht nur ein bekannter Rest — Betreiber-Vorgabe: lieber ein
+ * einzelnes, ganzes Wort auf der falschen Seite als ein kaputt aussehendes
+ * halbes Wort.
  *
- * "ing"/"ings" sind keine deutschen Flexionsendungen, gehoeren hier aber dazu:
- * Diese Texte sind voller englischer Gerundien (Hosting, Training, Prompting),
- * und ohne sie stand im Take "europaeisches Host ing" — der Begriff verlinkt,
- * die Endung als Rest daneben (Betreiber-Befund 2026-08-14). Sie sind ebenso
- * geschlossen wie die uebrigen: "ing" folgt nur dort, wo es wirklich die Endung
- * ist, nicht vor einem zweiten Wort.
- *
- * Laengste zuerst, damit "en" vor "e", "es" vor "e" und "ings" vor "ing" greift.
+ * Begriffe, bei denen selbst das ganze Wort falsch waere (zufaellige Kollision
+ * ohne echten Kompositum-Bezug, z.B. "Environment" in "Environmental"),
+ * gehoeren weiterhin in WHOLE_WORD_ONLY — dort greift diese Funktion gar
+ * nicht erst (s. wholeWord-Weiche in matchNameInText).
  */
-const INFLECTIONS = ['ings', 'ing', 'en', 'es', 'er', 'em', 'ns', 'n', 's', 'e']
-
-/**
- * Dehnt einen Treffer um eine Flexionsendung aus, wenn danach eine Wortgrenze
- * folgt. Ohne diese Bedingung wuerde aus "Token" in "Tokenisierung" ein
- * "Tokenis"-Treffer.
- */
-function extendByInflection(text: string, end: number): number {
-  const rest = text.slice(end)
-  for (const suffix of INFLECTIONS) {
-    if (!rest.startsWith(suffix)) continue
-    const after = rest.slice(suffix.length)
-    // Wortgrenze dahinter: Satzende, Leerzeichen, Bindestrich, Satzzeichen.
-    if (after === '' || /^[^\p{L}\p{N}]/u.test(after)) return end + suffix.length
-  }
-  return end
+function extendToWordEnd(text: string, end: number): number {
+  const m = /^[\p{L}\p{N}]+/u.exec(text.slice(end))
+  return m ? end + m[0].length : end
 }
 
 /** Beginnt der Text mit einem Grossbuchstaben? \p{Lu} statt [A-Z], damit auch
@@ -265,7 +262,7 @@ export function matchNameInText(
   while ((m = re.exec(text)) !== null) {
     const start = m.index + m[1].length
     const rawEnd = start + m[2].length
-    const end = extendByInflection(text, rawEnd)
+    const end = extendToWordEnd(text, rawEnd)
     if (!wholeWord && isCompositionMismatch(text, name, m[2], rawEnd)) {
       // Ab dem Zeichen NACH dem Treffer-Anfang weitersuchen. re.lastIndex steht
       // hinter den Grenzgruppen und wuerde einen direkt anschliessenden Treffer

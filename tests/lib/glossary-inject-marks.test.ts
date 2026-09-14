@@ -179,7 +179,7 @@ describe('injectGlossaryMarks — mehrdeutige Aliasse', () => {
   })
 })
 
-describe('injectGlossaryMarks — Flexionsendungen', () => {
+describe('injectGlossaryMarks — Wortende (extendToWordEnd)', () => {
   const t = (n: string, s: string) => [{ slug: s, canonicalName: n, aliases: [] }]
 
   it('nimmt die Pluralendung mit in den Link', () => {
@@ -195,11 +195,15 @@ describe('injectGlossaryMarks — Flexionsendungen', () => {
     expect(linked(out)[0].text).toBe('Tokens')
   })
 
-  it('dehnt NICHT auf ein anderes Wort aus', () => {
-    // "Intelligenz" ist keine Flexion von "Intel" — "ligenz" steht nicht in der
-    // Endungsliste. Der Kompositum-Treffer bleibt, wie er ist.
+  it('dehnt bis zum Wortende, auch ohne bekannte Endung (2026-09-14: kein Fest-Liste mehr)', () => {
+    // Frueher blieb der Treffer bei "Intel" stehen, weil "ligenz" auf keiner
+    // kuratierten Endungsliste stand — das Wort sah dann kaputt aus (nur
+    // "Intel" verlinkt, "ligenz" bloss daneben). extendToWordEnd zieht den
+    // Link seither immer bis zum tatsaechlichen Wortende (Betreiber-Vorgabe:
+    // ganzes Wort statt kaputtem Teil). Fuer die ECHTE Firma "Intel" gilt das
+    // nicht, die laeuft ueber matchWholeWordInText (s. lib/data/company-exclusions.ts).
     const out = injectGlossaryMarks(doc('Die Intelligenz wuchs.'), ['intel'], t('Intel', 'intel'))
-    expect(linked(out)[0]?.text).toBe('Intel')
+    expect(linked(out)[0]?.text).toBe('Intelligenz')
   })
 
   it('nimmt die englische -ing-Form mit in den Link', () => {
@@ -212,11 +216,13 @@ describe('injectGlossaryMarks — Flexionsendungen', () => {
     expect(linked(out)[0]?.text).toBe('Hosting')
   })
 
-  it('lässt ein Kompositum unangetastet', () => {
-    // "Inferenzkosten": "kosten" ist keine Flexionsendung, der Link umfasst
-    // weiterhin nur den Begriff.
+  it('zieht den Link über das ganze Kompositum, nicht nur den Erstgliedbegriff', () => {
+    // "Inferenzkosten": "kosten" ist kein flektierender Rest, sondern ein
+    // eigenes Wort — extendToWordEnd zieht den Link trotzdem bis zum
+    // Wortende, statt nur "Inferenz" zu verlinken und "kosten" abzuschneiden
+    // (PROD-BEFUND 2026-09-14, "Abschreibungshorizonte": derselbe Fall).
     const out = injectGlossaryMarks(doc('Die Inferenzkosten sanken.'), ['inferenz'], t('Inferenz', 'inferenz'))
-    expect(linked(out)[0].text).toBe('Inferenz')
+    expect(linked(out)[0].text).toBe('Inferenzkosten')
   })
 })
 
