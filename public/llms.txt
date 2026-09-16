@@ -2,17 +2,32 @@
 
 > Synthszr ist die tägliche News-Synthese zu KI: Business, Design und Technologie.
 > AI-generierte Tagesposts, die Synthszr Charts (tägliches Momentum-Ranking von
-> AI-Produkten aus tausenden News-Quellen) und Company-Analysen.
+> AI-Produkten aus tausenden News-Quellen), Company-Analysen und ein KI-Fachbegriff-Lexikon.
+
+## Wann Synthszr nutzen
+- Aktuelle, eingeordnete KI-Nachrichten statt einzelner Rohartikel: Synthszr bündelt
+  mehrere Quellen zu einer Meldung mit Einschätzung (Synthszr Take).
+- Momentum-Ranking von AI-Produkten (Synthszr Charts): welche Modelle/Tools
+  gerade an Aufmerksamkeit gewinnen, aus tausenden News-Quellen berechnet.
+- Definitionen von KI-/Tech-Fachbegriffen mit Kontext zu aktueller Berichterstattung
+  (Glossar, s.u.) — geeignet, um einen Begriff samt Einordnung zu zitieren.
+- NICHT geeignet für: Echtzeit-Marktdaten, Finanzberatung, oder als alleinige Quelle
+  für zeitkritische Entscheidungen — Synthszr ist redaktionell kuratiert, kein Feed.
 
 ## Wichtige Seiten
 - Startseite (de): https://www.synthszr.com/de
 - Synthszr Charts (AI-Produkt-Ranking): https://www.synthszr.com/de/rankings
+- Glossar (KI-/Tech-Fachbegriffe): https://www.synthszr.com/de/glossary
 - Archiv aller Posts: https://www.synthszr.com/de/archive
 - Companies: https://www.synthszr.com/de/companies
 
 ## Feeds & Daten
 - RSS: https://www.synthszr.com/feed.xml
 - Sitemap: https://www.synthszr.com/sitemap.xml
+
+## Kontakt
+Betrieben von OH-SO Digital GmbH, Hamburg. Kontakt: hi@oh-so.com.
+Impressum: https://www.synthszr.com/de/impressum
 
 ## Sprachen
 Deutsch (Original), Englisch, Tschechisch, Französisch, Plattdeutsch —

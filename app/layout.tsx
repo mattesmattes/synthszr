@@ -61,13 +61,31 @@ export const metadata: Metadata = {
 
 // Site-weite Organization-Entity — Grundlage für Publisher-Verknüpfung in
 // Article-/Breadcrumb-Schemas (Posts) und Brand-Erkennung.
+//
+// description/contactPoint/address ergänzt (is-agentic-Scan 2026-09-16,
+// "Organization schema completeness"). Adresse und E-Mail sind dieselben
+// bereits öffentlichen Angaben wie im Impressum (OH-SO Digital GmbH, Betreiber
+// von Synthszr) — keine neue Offenlegung, nur strukturiert für Agenten lesbar.
 const orgLd = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
   name: 'Synthszr',
+  description: 'Tägliche News-Synthese zu KI: Business, Design und Technologie. AI-generierte Tagesposts, Synthszr Charts (Momentum-Ranking von AI-Produkten) und Company-Analysen.',
   url: 'https://www.synthszr.com',
   logo: 'https://www.synthszr.com/apple-touch-icon.png',
   sameAs: ['https://www.linkedin.com/in/mattes/'],
+  contactPoint: {
+    '@type': 'ContactPoint',
+    email: 'hi@oh-so.com',
+    contactType: 'customer support',
+  },
+  address: {
+    '@type': 'PostalAddress',
+    streetAddress: 'Kaiser-Wilhelm-Straße 83',
+    postalCode: '20355',
+    addressLocality: 'Hamburg',
+    addressCountry: 'DE',
+  },
 }
 
 export default function RootLayout({

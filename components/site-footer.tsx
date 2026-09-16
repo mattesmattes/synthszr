@@ -33,6 +33,9 @@ export async function SiteFooter({ locale, showNewsletter = true }: { locale: st
               <a href={`/${locale}/sources`} className="hover:text-accent transition-colors">
                 {t['footer.sources'] || 'Sources'}
               </a>
+              <Link href={`/${locale}/contact`} className="hover:text-accent transition-colors">
+                Contact
+              </Link>
               <Link href={`/${locale}/impressum`} className="hover:text-accent transition-colors">
                 Imprint
               </Link>

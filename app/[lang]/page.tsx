@@ -264,6 +264,14 @@ export default async function Page({ params }: PageProps) {
       {/* 704px max-width to match cover image and post pages */}
       <main className="mx-auto w-[704px] max-w-full px-6 py-12 md:py-20">
 
+        {/* Visuell versteckt, aber im HTML vorhanden: die Seite hatte bisher
+            gar kein H1 (is-agentic-Scan 2026-09-16, "Content without JS" nur
+            PARTIAL). Der Titel steht bewusst nicht sichtbar, weil das Design
+            keine zusätzliche Überschrift über dem Featured Article vorsieht —
+            der Artikel-Titel selbst bleibt H2, wie auf jeder anderen Seite mit
+            Artikel-Vorschau auch. */}
+        <h1 className="sr-only">{`Synthszr — ${t['meta.description'] || 'AI is about Synthesis not Efficiency.'}`}</h1>
+
         {/* Bloom Language Switcher — wrapped in Suspense because it uses
             useSearchParams(), which would bail ISR prerender otherwise. */}
         <Suspense fallback={null}>
