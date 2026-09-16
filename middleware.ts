@@ -3,6 +3,7 @@ import type { NextRequest, NextFetchEvent } from 'next/server'
 import { verifySession } from '@/lib/auth/session-store'
 import { createClient } from '@supabase/supabase-js'
 import { PUBLIC_LOCALES } from '@/lib/i18n/config'
+import { wantsMarkdown } from '@/lib/seo/markdown-negotiation'
 
 const SESSION_COOKIE_NAME = 'synthszr_session'
 const LOCALE_COOKIE_NAME = 'synthszr_locale'
@@ -229,6 +230,21 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
       return NextResponse.redirect(redirectUrl, 301)
     }
 
+    // Content-Negotiation für Agenten (is-agentic-Scan 2026-09-16): ein
+    // `Accept: text/markdown`-Request auf derselben URL bekommt Markdown
+    // statt HTML, über einen Rewrite auf den Route-Handler unter
+    // /api/markdown — die HTML-Seiten selbst bleiben unangetastet. `Vary:
+    // Accept` verhindert, dass ein Edge/Proxy-Cache die falsche Fassung an
+    // den jeweils anderen Client-Typ ausliefert.
+    if (wantsMarkdown(request.headers.get('accept'))) {
+      const rest = pathname.slice(`/${urlLocale}`.length).replace(/^\/+/, '')
+      const rewriteUrl = new URL(`/api/markdown/${urlLocale}${rest ? `/${rest}` : ''}`, request.url)
+      const response = NextResponse.rewrite(rewriteUrl)
+      response.headers.set('x-locale', urlLocale)
+      response.headers.set('Vary', 'Accept')
+      return response
+    }
+
     // Locale is active - continue with locale header.
     // Set a cacheable public Cache-Control so Vercel's edge + Google can cache
     // the rendered HTML for 60s (SWR 5min). Without this, the Supabase server
@@ -237,6 +253,7 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     const response = NextResponse.next()
     response.headers.set('x-locale', urlLocale)
     response.headers.set('cache-control', 'public, s-maxage=60, stale-while-revalidate=300')
+    response.headers.set('Vary', 'Accept')
     return response
   }
 
