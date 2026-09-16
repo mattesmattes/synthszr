@@ -118,14 +118,24 @@ async function fetchSummaries(slugs: string[]): Promise<Map<string, string>> {
  * beliebig viele Begriffe. Text, der schon eine `link`-Mark trägt
  * (Quellenlink) oder bereits Company-/Produkt-verlinkt ist, wird übersprungen.
  *
- * ERWÄHNUNGS-KONTEXT-QS (Betreiber-Vorgabe 2026-09-14): Manche Begriffsnamen
- * sind zugleich Allgemeinwörter ("Environment" = Alias von "Trainingsumgebung",
- * kollidiert zufällig mit dem Firmennamen "Environmental Protection Network").
- * Eine kuratierte Ausnahmeliste wäre hier falsch — der Begriff ist im
- * richtigen Kontext ein legitimer Treffer, nur diese eine Erwähnung nicht.
- * Deshalb wird JEDE gefundene Fundstelle einzeln per LLM gegen die
- * Begriffs-Definition geprüft (mention-context-qa.ts), BEVOR die Marks
- * geschrieben werden — nicht der Begriffsname als Ganzes gesperrt.
+ * ERWÄHNUNGS-KONTEXT-QS (Betreiber-Vorgabe 2026-09-14, opt-in seit 2026-09-16):
+ * Manche Begriffsnamen sind zugleich Allgemeinwörter ("Environment" = Alias
+ * von "Trainingsumgebung", kollidiert zufällig mit dem Firmennamen
+ * "Environmental Protection Network"). Eine kuratierte Ausnahmeliste wäre
+ * hier falsch — der Begriff ist im richtigen Kontext ein legitimer Treffer,
+ * nur diese eine Erwähnung nicht. Mit `opts.checkContext: true` wird JEDE
+ * gefundene Fundstelle einzeln per LLM gegen die Begriffs-Definition geprüft
+ * (mention-context-qa.ts), BEVOR die Marks geschrieben werden.
+ *
+ * PROD-BEFUND 2026-09-16, 200-400€/Tag: Default war zunächst AN für alle
+ * Aufrufer. `linkPostContent` (backfill.ts) läuft aber über den taeglichen
+ * `relink`-Job endlos im Ein-Minuten-Cron-Takt durch den GESAMTEN
+ * Artikelbestand (Cursor setzt sich am Ende zurück, s. relinkNextBatch in
+ * crawl.ts) — laut eigenem Kommentar dort AUSDRÜCKLICH "kein Kostenrisiko:
+ * macht keine Modell-Aufrufe". Ohne Opt-in bekam jede bereits korrekt
+ * verlinkte Fundstelle bei JEDEM Zyklus erneut einen LLM-Aufruf, unbegrenzt
+ * oft am Tag. Jetzt Standard AUS; nur der Freigabe-Pfad (confirm.ts, eine
+ * bewusste Operator-Aktion je Artikel) schaltet es ein.
  */
 export async function injectGlossaryMarks(
   content: unknown,
@@ -135,7 +145,7 @@ export async function injectGlossaryMarks(
   // Wortinneren treffen (s. matchNameInText). Default 'de', weil die Artikel
   // im Original deutsch sind — die Uebersetzungspfade reichen ihre Zielsprache
   // durch.
-  opts: { reserved?: string[]; lang?: string } = {},
+  opts: { reserved?: string[]; lang?: string; checkContext?: boolean } = {},
 ): Promise<unknown> {
   const cleaned = stripMarks(content)
   // `reserved` sind Company- und Chart-Produktnamen. Die Kollisionsregel kann
@@ -177,17 +187,20 @@ export async function injectGlossaryMarks(
   }
   const ambiguous = new Set([...aliasOwners.entries()].filter(([, n]) => n > 1).map(([k]) => k))
 
-  // PHASE 1: Fundstellen sammeln, ohne zu schreiben.
-  const excerptBySlug = new Map<string, string>()
-  collectCandidateExcerpts(cleaned, wanted, reserved, ambiguous, opts.lang ?? 'de', new Set(), excerptBySlug)
-
-  // PHASE 2: Kontext-QS — nur für Slugs mit einer Fundstelle UND einer
-  // Kurzbeschreibung. Fehlt die Beschreibung (Zusatz-Read fehlgeschlagen) oder
-  // gab es gar keine Fundstelle, bleibt der Begriff unangetastet und verhält
-  // sich wie vor diesem Umbau (fail-open, s. Modul-Kommentar).
+  // PHASE 1+2: nur mit ausdruecklichem Opt-in (s. Funktions-Kommentar oben —
+  // sonst zahlt jeder Aufrufer, auch endlos laufende Cron-Batches, fuer LLM-
+  // Aufrufe, die er nie angefordert hat).
   let rejected: Set<string> = new Set()
-  if (excerptBySlug.size > 0) {
-    const summaries = await fetchSummaries([...excerptBySlug.keys()])
+  if (opts.checkContext) {
+    // PHASE 1: Fundstellen sammeln, ohne zu schreiben.
+    const excerptBySlug = new Map<string, string>()
+    collectCandidateExcerpts(cleaned, wanted, reserved, ambiguous, opts.lang ?? 'de', new Set(), excerptBySlug)
+
+    // PHASE 2: Kontext-QS — nur für Slugs mit einer Fundstelle UND einer
+    // Kurzbeschreibung. Fehlt die Beschreibung (Zusatz-Read fehlgeschlagen) oder
+    // gab es gar keine Fundstelle, bleibt der Begriff unangetastet und verhält
+    // sich wie vor diesem Umbau (fail-open, s. Modul-Kommentar).
+    const summaries = excerptBySlug.size > 0 ? await fetchSummaries([...excerptBySlug.keys()]) : new Map<string, string>()
     const candidates: MentionContextCandidate[] = []
     const termBySlug = new Map(wanted.map((t) => [t.slug, t]))
     for (const [slug, excerpt] of excerptBySlug) {

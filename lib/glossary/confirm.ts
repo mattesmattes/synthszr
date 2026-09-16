@@ -143,6 +143,10 @@ export async function applyGlossaryConfirmation(
   // in lib/glossary/translate.ts gebraucht, eine Policy-Regel darf dort
   // nicht unbemerkt auseinanderlaufen).
   const reserved = buildReservedNames(chartProductNames)
-  const injected = await injectGlossaryMarks(parsed, publishedSlugs, terms, { reserved })
+  // checkContext: true — einzige Stelle mit dem Opt-in (s. injectGlossaryMarks-
+  // Kommentar, PROD-BEFUND 2026-09-16): eine bewusste Operator-Freigabe je
+  // Artikel, kein endlos laufender Cron-Batch. Hier war die Erwaehnungs-
+  // Kontext-QS ueberhaupt gedacht.
+  const injected = await injectGlossaryMarks(parsed, publishedSlugs, terms, { reserved, checkContext: true })
   return { publishedSlugs, content: JSON.stringify(injected) }
 }

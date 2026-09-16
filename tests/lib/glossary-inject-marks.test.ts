@@ -2,15 +2,20 @@ import { describe, expect, it, vi } from 'vitest'
 import { injectGlossaryMarks } from '@/lib/glossary/inject-marks'
 import type { GlossaryMatcherTerm } from '@/lib/glossary/types'
 
-// injectGlossaryMarks fragt seit der Erwaehnungs-Kontext-QS (2026-09-14) pro
-// Kandidat eine Kurzbeschreibung nach (fetchSummaries) — ein echter, wenn auch
-// kleiner DB-Zugriff. Diese Datei prueft die MATCHING-Logik, nicht die neue
-// QS-Schicht (die hat ihre eigenen Tests, s. mention-context-qa.test.ts),
+// injectGlossaryMarks fragt mit opts.checkContext:true pro Kandidat eine
+// Kurzbeschreibung nach (fetchSummaries) — ein echter, wenn auch kleiner
+// DB-Zugriff. Diese Datei prueft die MATCHING-Logik, nicht die QS-Schicht
+// selbst (die hat ihre eigenen Tests, s. glossary-mention-context-qa.test.ts),
 // deshalb hier gemockt: leere Ergebnisliste ⇒ kein Kandidat bekommt eine
 // Summary ⇒ die QS greift gar nicht ⇒ exakt das Verhalten von vor dem Umbau.
+// fetchSummariesSpy misst zusaetzlich, OB ueberhaupt gefragt wurde — Grundlage
+// fuer den Opt-in-Test unten (PROD-BEFUND 2026-09-16, 200-400€/Tag).
+const { fetchSummariesSpy } = vi.hoisted(() => ({
+  fetchSummariesSpy: vi.fn(async () => ({ data: [], error: null })),
+}))
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
-    from: () => ({ select: () => ({ in: async () => ({ data: [], error: null }) }) }),
+    from: () => ({ select: () => ({ in: fetchSummariesSpy }) }),
   }),
 }))
 
@@ -270,5 +275,28 @@ describe('injectGlossaryMarks — Ueberschriften', () => {
       content: Array<{ content: Array<{ text?: string }> }>
     }
     expect(out.content[0].content.map(n => n.text).join('')).toBe('Inferenz wird teurer')
+  })
+})
+
+describe('injectGlossaryMarks — Erwähnungs-Kontext-QS ist Opt-in', () => {
+  // PROD-BEFUND 2026-09-16: die QS war zunaechst fuer ALLE Aufrufer an. Der
+  // taegliche "relink"-Job (backfill.ts) laeuft aber im Ein-Minuten-Cron-Takt
+  // ENDLOS durch den gesamten Artikelbestand (Cursor setzt sich am Ende
+  // zurueck) und war laut eigenem Kommentar dort ausdruecklich "kein
+  // Kostenrisiko: macht keine Modell-Aufrufe" — jede bereits korrekt
+  // verlinkte Fundstelle bekam bei JEDEM Zyklus erneut einen LLM-Aufruf,
+  // unbegrenzt oft am Tag (200-400€/Tag). Diese Tests sichern das Opt-in ab.
+  const terms = [{ slug: 'inferenz', canonicalName: 'Inferenz', aliases: [] }]
+
+  it('fragt OHNE checkContext keine Kurzbeschreibung ab (kein DB-Zusatzaufruf)', async () => {
+    fetchSummariesSpy.mockClear()
+    await injectGlossaryMarks(doc('Die Inferenz ist teuer.'), ['inferenz'], terms)
+    expect(fetchSummariesSpy).not.toHaveBeenCalled()
+  })
+
+  it('fragt MIT checkContext:true eine Kurzbeschreibung ab', async () => {
+    fetchSummariesSpy.mockClear()
+    await injectGlossaryMarks(doc('Die Inferenz ist teuer.'), ['inferenz'], terms, { checkContext: true })
+    expect(fetchSummariesSpy).toHaveBeenCalled()
   })
 })
