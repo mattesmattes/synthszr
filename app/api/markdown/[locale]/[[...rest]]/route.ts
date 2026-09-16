@@ -6,6 +6,8 @@ import { getCategoryCappedProductsShared, getActiveCategories } from '@/lib/rank
 import { toDisplayScore } from '@/lib/rankings/score'
 import { PUBLIC_LOCALES } from '@/lib/i18n/config'
 import { SITE_URL } from '@/lib/seo/site'
+import { getTranslations } from '@/lib/i18n/get-translations'
+import type { LanguageCode } from '@/lib/types'
 
 /**
  * Markdown-Gegenstück zu den öffentlichen Seiten (Startseite, Artikel,
@@ -30,18 +32,18 @@ function md(body: string, status = 200): NextResponse {
   })
 }
 
-function footer(locale: string): string {
+function footer(locale: string, t: Record<string, string>): string {
   return [
     '---',
-    `[Startseite](${SITE_URL}/${locale}) · [Synthszr Charts](${SITE_URL}/${locale}/rankings) · [Glossar](${SITE_URL}/${locale}/glossary) · [Archiv](${SITE_URL}/${locale}/archive)`,
+    `[${t['common.home']}](${SITE_URL}/${locale}) · [Synthszr Charts](${SITE_URL}/${locale}/rankings) · [${t['nav.glossary']}](${SITE_URL}/${locale}/glossary) · [${t['nav.archive']}](${SITE_URL}/${locale}/archive)`,
   ].join('\n')
 }
 
-function notFoundMarkdown(locale: string): NextResponse {
-  return md(['# 404 — Seite nicht gefunden', '', 'Diese Seite existiert nicht oder wurde entfernt.', '', footer(locale)].join('\n'), 404)
+function notFoundMarkdown(locale: string, t: Record<string, string>): NextResponse {
+  return md(['# 404 — Seite nicht gefunden', '', 'Diese Seite existiert nicht oder wurde entfernt.', '', footer(locale, t)].join('\n'), 404)
 }
 
-async function renderHome(locale: string): Promise<NextResponse> {
+async function renderHome(locale: string, t: Record<string, string>): Promise<NextResponse> {
   const supabase = createAnonClient()
   const { data: posts } = await supabase
     .from('generated_posts')
@@ -58,17 +60,17 @@ async function renderHome(locale: string): Promise<NextResponse> {
       .eq('language_code', locale)
       .eq('translation_status', 'completed')
       .in('generated_post_id', posts.map((p) => p.id))
-    for (const t of translations ?? []) {
-      if (t.generated_post_id) translationsMap.set(t.generated_post_id, { title: t.title, slug: t.slug, excerpt: t.excerpt })
+    for (const t9n of translations ?? []) {
+      if (t9n.generated_post_id) translationsMap.set(t9n.generated_post_id, { title: t9n.title, slug: t9n.slug, excerpt: t9n.excerpt })
     }
   }
 
   const lines: string[] = [
     '# Synthszr — AI is about Synthesis not Efficiency.',
     '',
-    'Tägliche News-Synthese zu KI: Business, Design und Technologie. Synthszr bündelt mehrere Quellen zu einer Meldung mit Einschätzung (Synthszr Take), berechnet ein tägliches Momentum-Ranking von AI-Produkten (Synthszr Charts) und pflegt ein KI-Fachbegriff-Lexikon.',
+    t['meta.description'],
     '',
-    '## Neueste Artikel',
+    `## ${t['home.all_articles']}`,
     '',
   ]
 
@@ -82,11 +84,11 @@ async function renderHome(locale: string): Promise<NextResponse> {
     lines.push('')
   }
 
-  lines.push(footer(locale))
+  lines.push(footer(locale, t))
   return md(lines.join('\n'))
 }
 
-async function renderPost(locale: string, slug: string): Promise<NextResponse> {
+async function renderPost(locale: string, slug: string, t: Record<string, string>): Promise<NextResponse> {
   const supabase = createAnonClient()
   let { data: post } = await supabase
     .from('generated_posts')
@@ -117,7 +119,7 @@ async function renderPost(locale: string, slug: string): Promise<NextResponse> {
     }
   }
 
-  if (!post) return notFoundMarkdown(locale)
+  if (!post) return notFoundMarkdown(locale, t)
 
   let title = post.title
   let excerpt = post.excerpt
@@ -141,13 +143,13 @@ async function renderPost(locale: string, slug: string): Promise<NextResponse> {
   const doc = parseTiptapContent(content)
   const body = doc ? convertTiptapToMarkdown(doc) : ''
 
-  const lines = [`# ${title}`, '', ...(excerpt ? [`*${excerpt}*`, ''] : []), body, '', footer(locale)]
+  const lines = [`# ${title}`, '', ...(excerpt ? [`*${excerpt}*`, ''] : []), body, '', footer(locale, t)]
   return md(lines.join('\n'))
 }
 
-async function renderGlossaryTerm(locale: string, slug: string): Promise<NextResponse> {
+async function renderGlossaryTerm(locale: string, slug: string, t: Record<string, string>): Promise<NextResponse> {
   const term = await getGlossaryTerm(slug, locale)
-  if (!term) return notFoundMarkdown(locale)
+  if (!term) return notFoundMarkdown(locale, t)
 
   const doc = parseTiptapContent(term.body)
   const body = doc ? convertTiptapToMarkdown(doc) : ''
@@ -155,17 +157,17 @@ async function renderGlossaryTerm(locale: string, slug: string): Promise<NextRes
   const lines = [`# ${term.canonicalName}`, '', term.summary, '', body]
 
   if (term.relatedTerms.length > 0) {
-    lines.push('', '## Verwandte Begriffe', '')
+    lines.push('', `## ${t['glossary.related_terms']}`, '')
     for (const related of term.relatedTerms) {
       lines.push(`- [${related.canonicalName}](${SITE_URL}/${locale}/glossary/${related.slug})`)
     }
   }
 
-  lines.push('', footer(locale))
+  lines.push('', footer(locale, t))
   return md(lines.join('\n'))
 }
 
-async function renderRankings(locale: string): Promise<NextResponse> {
+async function renderRankings(locale: string, t: Record<string, string>): Promise<NextResponse> {
   const [capped, categories] = await Promise.all([getCategoryCappedProductsShared(50, false), getActiveCategories()])
   const nameBySlug = new Map(categories.map((c) => [c.slug, c.name]))
 
@@ -187,7 +189,7 @@ async function renderRankings(locale: string): Promise<NextResponse> {
     const trendSymbol = p.trend === 'up' ? '↑' : p.trend === 'down' ? '↓' : '→'
     lines.push(`| ${p.catRank} | [${p.canonicalName}](${SITE_URL}/${locale}/rankings/${p.slug}) | ${p.vendor} | ${category} | ${score} | ${trendSymbol} |`)
   }
-  lines.push('', footer(locale))
+  lines.push('', footer(locale, t))
   return md(lines.join('\n'))
 }
 
@@ -195,11 +197,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
   const { locale: rawLocale, rest } = await params
   const locale = (PUBLIC_LOCALES as string[]).includes(rawLocale) ? rawLocale : 'de'
   const segments = rest ?? []
+  const t = await getTranslations(locale as LanguageCode)
 
-  if (segments.length === 0) return renderHome(locale)
-  if (segments[0] === 'posts' && segments.length === 2) return renderPost(locale, segments[1])
-  if (segments[0] === 'glossary' && segments.length === 2) return renderGlossaryTerm(locale, segments[1])
-  if (segments[0] === 'rankings' && segments.length === 1) return renderRankings(locale)
+  if (segments.length === 0) return renderHome(locale, t)
+  if (segments[0] === 'posts' && segments.length === 2) return renderPost(locale, segments[1], t)
+  if (segments[0] === 'glossary' && segments.length === 2) return renderGlossaryTerm(locale, segments[1], t)
+  if (segments[0] === 'rankings' && segments.length === 1) return renderRankings(locale, t)
 
-  return notFoundMarkdown(locale)
+  return notFoundMarkdown(locale, t)
 }
