@@ -2,7 +2,7 @@ import Link from 'next/link'
 import ReactDOM from 'react-dom'
 import { Suspense } from 'react'
 import type { Metadata } from 'next'
-import { getRankedProducts, getActiveCategories } from '@/lib/rankings/leaderboard'
+import { getRankedProductsShared, getActiveCategories } from '@/lib/rankings/leaderboard'
 import { getCategoryIntro } from '@/lib/rankings/category-intros'
 import { SITE_URL, safeJsonLd } from '@/lib/seo/site'
 import { CATEGORY_GROUPS, groupForCategory, groupBySlug } from '@/lib/rankings/category-groups'
@@ -85,7 +85,7 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
   const activeGroup = activeGroupSlug ? groupBySlug(activeGroupSlug) : undefined
 
   const [ranked, categories, translations] = await Promise.all([
-    getRankedProducts({
+    getRankedProductsShared({
       // Harter Cut: max. 50 pro Kategorie (kein Aufklappen), 100 in der
       // Gesamtansicht. Long-Tail-Produktseiten bleiben über die Sitemap und
       // Related-Products-Module erreichbar.

@@ -1,15 +1,17 @@
+import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { momentumScore, momentumHistory } from '@/lib/rankings/score'
-import { getRankedProducts } from '@/lib/rankings/leaderboard'
+import { getRankedProductsShared } from '@/lib/rankings/leaderboard'
 
 export interface ProductMentionView {
+  /** product_mentions.id — Schlüssel für den Volltext (getMentionSourceText). */
+  id: string
   excerpt: string | null
   mentionDate: string | null
   sentiment: number | null
   sourceTitle: string | null
   sourceMedium: string | null
   sourceUrl: string | null
-  sourceContent: string | null
 }
 
 export interface ProductDetail {
@@ -77,8 +79,12 @@ function cleanTitle(t: string | null): string | null {
   return cleaned || null
 }
 
-/** Lädt eine sichtbare Produkt-Detailansicht (Header + Belege + Rang/Score). */
-export async function getProductDetail(slug: string, locale = 'de'): Promise<ProductDetail | null> {
+/** Lädt eine sichtbare Produkt-Detailansicht (Header + Belege + Rang/Score).
+ *
+ *  cache(): generateMetadata und die Page rufen beide getProductDetail — ohne
+ *  Memoisierung liefen alle Queries pro Render doppelt (vgl. getGlossaryTerm in
+ *  lib/glossary/detail.ts, dort auch, warum das nicht unit-testbar ist). */
+export const getProductDetail = cache(async (slug: string, locale = 'de'): Promise<ProductDetail | null> => {
   const supabase = createAdminClient()
 
   const { data: product, error: pErr } = await supabase
@@ -104,7 +110,10 @@ export async function getProductDetail(slug: string, locale = 'de'): Promise<Pro
 
   const { data: mentions, error: mErr } = await supabase
     .from('product_mentions')
-    .select('excerpt, mention_date, sentiment, daily_repo:daily_repo_id(title, content, source_email, source_url)')
+    // OHNE daily_repo.content: der Newsletter-Volltext war im Schnitt 41 von
+    // 65 KB je Render (Egress-Befund 2026-09-19), gebraucht nur im Quellen-
+    // Dialog — der lädt ihn jetzt auf Klick (getMentionSourceText).
+    .select('id, excerpt, mention_date, sentiment, daily_repo:daily_repo_id(title, source_email, source_url)')
     .eq('product_id', product.id)
     .order('mention_date', { ascending: false })
     .limit(60)
@@ -127,7 +136,7 @@ export async function getProductDetail(slug: string, locale = 'de'): Promise<Pro
   // Rang/Score relativ zur KATEGORIE (Position innerhalb der Kategorie, nicht über alle).
   // includeHistory:false — hier wird nur rank/score von entry gebraucht; der
   // Verlaufs-Chart der Seite kommt aus `dates` (oben), nicht aus ranked[].history.
-  const ranked = await getRankedProducts({ limit: 10_000, minMentions: 2, category: category?.slug, includeHistory: false })
+  const ranked = await getRankedProductsShared({ limit: 10_000, minMentions: 2, category: category?.slug, includeHistory: false })
   const entry = ranked.find((r) => r.slug === slug)
 
   // Sentiment + Features (enrich, 1b-iii)
@@ -192,13 +201,33 @@ export async function getProductDetail(slug: string, locale = 'de'): Promise<Pro
     features,
     history: momentumHistory(dates, new Date(), 90, 90),
     mentions: rows.map((m) => ({
+      id: m.id as string,
       excerpt: m.excerpt as string | null,
       mentionDate: m.mention_date as string | null,
       sentiment: m.sentiment as number | null,
       sourceTitle: cleanTitle(joinedField(m.daily_repo, 'title')),
       sourceMedium: parseMedium(joinedField(m.daily_repo, 'source_email')),
       sourceUrl: joinedField(m.daily_repo, 'source_url'),
-      sourceContent: htmlToText(joinedField(m.daily_repo, 'content'))?.slice(0, 6000) ?? null,
     })),
   }
+})
+
+/**
+ * Volltext der Quelle hinter einer Erwähnung (Quellen-Dialog der Produktseite),
+ * einzeln auf Klick statt für alle 60 Erwähnungen im Seiten-Render.
+ *
+ * Nur für Erwähnungen SICHTBARER Produkte — die Route dahinter ist öffentlich
+ * und soll nicht mehr herausgeben als die Produktseite selbst. undefined = gibt
+ * es nicht (404), null = Quelle ohne Text.
+ */
+export async function getMentionSourceText(mentionId: string): Promise<string | null | undefined> {
+  const { data, error } = await createAdminClient()
+    .from('product_mentions')
+    .select('daily_repo:daily_repo_id(content), products!inner(visibility_status)')
+    .eq('id', mentionId)
+    .eq('products.visibility_status', 'visible')
+    .maybeSingle()
+  if (error) throw new Error(`mention source: ${error.message}`)
+  if (!data) return undefined
+  return htmlToText(joinedField(data.daily_repo, 'content'))?.slice(0, 6000) ?? null
 }

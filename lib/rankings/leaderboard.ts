@@ -185,3 +185,33 @@ export async function getCategoryCappedProductsShared(
     (v) => Array.isArray(v) && v.length > 0,
   )
 }
+
+type RankedProductsOpts = Parameters<typeof getRankedProducts>[0]
+
+/** Schlüssel für getRankedProductsShared. Defaults wie in getRankedProducts,
+ *  categoryIn sortiert — gleiche Abfrage, gleicher Eintrag. */
+export const rankedProductsCacheKey = (opts: RankedProductsOpts = {}) => {
+  const { limit, category, categoryIn, minMentions = 1, includeHistory = true } = opts
+  const inList = categoryIn?.length ? [...categoryIn].sort().join(',') : ''
+  return `charts:v1:ranked:${limit ?? 'all'}:${minMentions}:${includeHistory}:c=${category ?? ''}:in=${inList}`
+}
+
+/**
+ * Wie getRankedProducts, aber instanzuebergreifend gecacht (Redis).
+ *
+ * WARUM (Egress-Befund 2026-09-19): /rankings ist force-dynamic (Facetten per
+ * searchParams) und zog bei JEDEM Aufruf die Top 100 samt history-JSONB —
+ * gemessen 467 KB. Ein Crawler rief die Übersicht ~260×/h auf, das war der
+ * größte Einzelposten des verdoppelten Egress. Die Produktseiten laden hier
+ * zusätzlich die volle Kategorie-Liste für ihren Rang (~22 KB je Render).
+ *
+ * Frische wie bei getCategoryCappedProductsShared: Werte entstehen im täglichen
+ * precompute-Cron, eine Stunde TTL ist unkritisch.
+ */
+export async function getRankedProductsShared(opts: RankedProductsOpts = {}): Promise<RankedProduct[]> {
+  return withSharedCache(
+    rankedProductsCacheKey(opts),
+    () => getRankedProducts(opts),
+    (v) => Array.isArray(v) && v.length > 0,
+  )
+}

@@ -25,10 +25,12 @@ import { AUTHOR } from "@/lib/data/author"
 import type { LanguageCode } from "@/lib/types"
 import type { Metadata } from "next"
 
-// ISR: revalidate every 60s. Post + translation reads use the anon client,
+// ISR: revalidate every 10 min. Post + translation reads use the anon client,
 // so Next.js prerenders and the Vercel edge caches. Invalidate via
-// revalidatePath() when a post is edited.
-export const revalidate = 60
+// revalidatePostPaths() when a post is edited (admin generated-posts PATCH/PUT)
+// or a comment changes. War 60 s — unter Crawler-Dauerlast rendert eine
+// Seite so oft neu, wie revalidate erlaubt (Egress-Befund 2026-09-19).
+export const revalidate = 600
 
 // Leeres generateStaticParams aktiviert on-demand ISR: ohne diese Funktion
 // behandelt Vercel Dynamic-Segment-Routen als voll-dynamisch und ignoriert

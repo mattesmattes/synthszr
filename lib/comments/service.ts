@@ -89,10 +89,11 @@ export async function postExists(supabase: AdminClient, source: PostSource, post
  *    zurück), UND zusätzlich unter dem je Sprache abweichenden Übersetzungs-
  *    Slug.
  * Ein einzelnes revalidatePath('/de/…') ließe die übrigen Locale-Kopien bis zu
- * 60 s mit veraltetem Kommentarstand stehen.
+ * 10 min mit veraltetem Kommentarstand stehen.
  *
- * Best-effort: schlägt die Revalidation fehl, läuft die ISR-Uhr (60 s) sie
- * ohnehin ein — der Kommentar erscheint dann eine Minute später im SSR-HTML.
+ * Best-effort: schlägt die Revalidation fehl, läuft die ISR-Uhr (600 s) sie
+ * ohnehin ein — der Kommentar erscheint dann bis zu 10 Minuten später im
+ * SSR-HTML. Seit 2026-09-19 nutzt auch das Speichern von Artikeln diesen Pfad.
  */
 export async function revalidatePostPaths(
   supabase: AdminClient,

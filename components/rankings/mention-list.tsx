@@ -5,12 +5,12 @@ import { X, ExternalLink } from 'lucide-react'
 import { useTranslation } from '@/lib/i18n/context'
 
 export interface MentionView {
+  id: string
   excerpt: string | null
   mentionDate: string | null
   sourceTitle: string | null
   sourceMedium: string | null
   sourceUrl: string | null
-  sourceContent: string | null
 }
 
 function fmtDate(d: string | null): string {
@@ -25,6 +25,18 @@ function fmtDate(d: string | null): string {
 export function MentionList({ mentions }: { mentions: MentionView[] }) {
   const t = useTranslation()
   const [open, setOpen] = useState<MentionView | null>(null)
+  // Volltext je Erwähnung, erst beim Öffnen geladen (Egress-Befund 2026-09-19,
+  // s. getProductDetail). Fehlt der Schlüssel noch = lädt, null = kein Text.
+  const [sourceText, setSourceText] = useState<Record<string, string | null>>({})
+
+  const openMention = (m: MentionView) => {
+    setOpen(m)
+    if (m.id in sourceText) return
+    fetch(`/api/rankings/mention-source/${m.id}`)
+      .then((r) => (r.ok ? r.json() : { content: null }))
+      .then((d: { content: string | null }) => setSourceText((prev) => ({ ...prev, [m.id]: d.content ?? null })))
+      .catch(() => setSourceText((prev) => ({ ...prev, [m.id]: null })))
+  }
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   useEffect(() => {
@@ -74,7 +86,7 @@ export function MentionList({ mentions }: { mentions: MentionView[] }) {
             {ms.map((m, i) => (
               <li key={i}>
                 <button
-                  onClick={() => setOpen(m)}
+                  onClick={() => openMention(m)}
                   className="w-full flex items-baseline gap-2 text-left rounded-md border border-border px-2.5 py-1.5 text-sm hover:border-foreground transition-colors"
                 >
                   <span className="text-foreground text-xs font-bold shrink-0 tabular-nums">{fmtDate(m.mentionDate)}</span>
@@ -101,9 +113,11 @@ export function MentionList({ mentions }: { mentions: MentionView[] }) {
             {open.excerpt && (
               <p className="text-sm font-semibold text-foreground border-l-2 border-[#CCFF00] pl-3 mb-4">„{open.excerpt}"</p>
             )}
-            {open.sourceContent
-              ? <div className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">{open.sourceContent}</div>
-              : <p className="text-sm text-muted-foreground/70">Kein Volltext verfügbar.</p>}
+            {!(open.id in sourceText)
+              ? <p className="text-sm text-muted-foreground/70">Lädt…</p>
+              : sourceText[open.id]
+                ? <div className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">{sourceText[open.id]}</div>
+                : <p className="text-sm text-muted-foreground/70">Kein Volltext verfügbar.</p>}
             {open.sourceUrl && (
               <a href={open.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-semibold text-foreground underline mt-4">
                 {t('rankings.to_original')} <ExternalLink className="w-3.5 h-3.5" />

@@ -9,6 +9,7 @@ import { embedPostContent, upsertPostEmbedding } from '@/lib/search/embeddings'
 import { applyGlossaryConfirmation } from '@/lib/glossary/confirm'
 import { createOrGetJob } from '@/lib/glossary/jobs/service'
 import type { GlossaryCandidate } from '@/lib/glossary/types'
+import { revalidatePostPaths } from '@/lib/comments/service'
 
 // maxDuration=300 ist raus (Umbau 2026-08-06): das war ausschliesslich fuer
 // die synchrone Begriffs-Erzeugung im PATCH-Pfad da (bis zu drei Begriffe a
@@ -328,6 +329,9 @@ export async function PATCH(request: NextRequest) {
       .eq('id', id)
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    // Artikelseiten cachen seit 2026-09-19 10 statt 1 Minute (Egress) —
+    // Änderungen daher aktiv in alle Locale-Kopien schieben.
+    await revalidatePostPaths(supabase, 'generated_posts', id)
     return NextResponse.json({ ok: true })
   } catch (error) {
     return NextResponse.json(
@@ -468,6 +472,8 @@ export async function PUT(request: NextRequest) {
       })()
     }
 
+    // s. PATCH: aktiv revalidieren statt auf die 10-Minuten-ISR zu warten.
+    await revalidatePostPaths(supabase, 'generated_posts', id)
     return NextResponse.json(data)
   } catch (error) {
     return NextResponse.json(
