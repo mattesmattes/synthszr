@@ -108,7 +108,8 @@ export default function CreateArticlePage() {
   // Slider value persists across page reloads via localStorage so the
   // explicit choice survives navigation. Default 30 reflects the typical
   // working volume — the prior default of 20 silently capped users who
-  // expected more sections.
+  // expected more sections. Sind Items manuell ausgewählt, setzt loadData den
+  // Wert beim Laden auf deren Anzahl (s. dort).
   const [maxQueueItems, setMaxQueueItems] = useState(() => {
     if (typeof window === 'undefined') return 30
     const stored = window.localStorage.getItem('synthszr:maxQueueItems')
@@ -238,6 +239,11 @@ export default function CreateArticlePage() {
           used: stats.used || 0,
           oldestSelectedAt: stats.oldestSelectedAt || null
         })
+        // Beim Laden auf die Zahl der manuell ausgewählten Items stellen
+        // (Betreiber-Vorgabe 2026-09-19) — ein kleinerer gespeicherter Wert
+        // schnitt die Auswahl sonst still ab. Ohne Auswahl bleibt der
+        // gespeicherte Wert für die Pending-Fallback-Auswahl.
+        if (stats.selected > 0) setMaxQueueItems(stats.selected)
       }
 
       // Load source distribution
@@ -821,6 +827,53 @@ export default function CreateArticlePage() {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Left Column: Settings */}
         <div className="space-y-6">
+          {/* Publish Date */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-muted-foreground">Datum:</label>
+            <input
+              type="date"
+              value={publishDate}
+              onChange={e => setPublishDate(e.target.value)}
+              className="text-sm border rounded px-2 py-1 bg-background"
+            />
+          </div>
+
+          {/* Generate Button */}
+          <Button
+            onClick={generateArticle}
+            disabled={generating || !selectedDigestId || !activePrompt}
+            className="w-full gap-2"
+            size="lg"
+          >
+            {generating ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin" />
+                {pipelineStatus ? pipelineStatus.slice(0, 50) : 'Generiere Artikel...'}
+              </>
+            ) : (
+              <>
+                <Wand2 className="h-5 w-5" />
+                Artikel generieren
+              </>
+            )}
+          </Button>
+
+          {/* Pipeline progress bar */}
+          {generating && pipelineProgress && (
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Abschnitt {pipelineProgress.current} von {pipelineProgress.total}</span>
+                <span>{Math.round((pipelineProgress.current / pipelineProgress.total) * 100)}%</span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all duration-500"
+                  style={{ width: `${(pipelineProgress.current / pipelineProgress.total) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Queue Status */}
           <Card>
             <CardHeader className="pb-3">
@@ -858,7 +911,7 @@ export default function CreateArticlePage() {
                   value={[maxQueueItems]}
                   onValueChange={([v]) => setMaxQueueItems(v)}
                   min={1}
-                  max={40}
+                  max={Math.max(40, queueStats.selected)}
                   step={1}
                   className="w-full"
                 />
@@ -1070,53 +1123,6 @@ export default function CreateArticlePage() {
               </CollapsibleContent>
             </Card>
           </Collapsible>
-
-          {/* Publish Date */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-muted-foreground">Datum:</label>
-            <input
-              type="date"
-              value={publishDate}
-              onChange={e => setPublishDate(e.target.value)}
-              className="text-sm border rounded px-2 py-1 bg-background"
-            />
-          </div>
-
-          {/* Generate Button */}
-          <Button
-            onClick={generateArticle}
-            disabled={generating || !selectedDigestId || !activePrompt}
-            className="w-full gap-2"
-            size="lg"
-          >
-            {generating ? (
-              <>
-                <Loader2 className="h-5 w-5 animate-spin" />
-                {pipelineStatus ? pipelineStatus.slice(0, 50) : 'Generiere Artikel...'}
-              </>
-            ) : (
-              <>
-                <Wand2 className="h-5 w-5" />
-                Artikel generieren
-              </>
-            )}
-          </Button>
-
-          {/* Pipeline progress bar */}
-          {generating && pipelineProgress && (
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Abschnitt {pipelineProgress.current} von {pipelineProgress.total}</span>
-                <span>{Math.round((pipelineProgress.current / pipelineProgress.total) * 100)}%</span>
-              </div>
-              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                <div
-                  className="h-full bg-primary transition-all duration-500"
-                  style={{ width: `${(pipelineProgress.current / pipelineProgress.total) * 100}%` }}
-                />
-              </div>
-            </div>
-          )}
 
           {/* Enrich — manueller Trigger, immer aktiv sobald Content da ist.
               Vor dem Speichern greift nur Take+Label (kein queueItemId fuer
