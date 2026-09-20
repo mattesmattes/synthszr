@@ -16,6 +16,7 @@
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { OPENERS, CLOSERS, type Mode } from '@/lib/podcast/openers'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -164,7 +165,7 @@ export async function refreshModes(
   try {
     const Anthropic = (await import('@anthropic-ai/sdk')).default
     const { getModelForUseCase } = await import('@/lib/ai/model-config')
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'podcast_modes')
     const model = await getModelForUseCase('ghostwriter')
 
     const resp = await client.messages.create({

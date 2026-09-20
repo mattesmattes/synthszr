@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { DIMENSION_EN } from '@/lib/rankings/dimension-i18n'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 export interface ResearchedFeature { dimension: string; value: string; valueEn?: string }
 export interface ResearchResult {
@@ -129,7 +130,7 @@ export async function researchProduct(
   if (!process.env.ANTHROPIC_API_KEY) return EMPTY_RESULT
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const client: any = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const client: any = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'ranking_research')
   const dims = dimensions.map((d) => `- ${d}`).join('\n')
   const prompt = `Recherchiere per WEB-SUCHE die offiziellen, aktuellen Specs des AI-Produkts "${name}" von ${vendor} (Kategorie: ${categoryName}).
 ${evidence ? `\nKontext aus AI-News (nur als Suchhilfe, KEIN Beleg):\n${evidence}\n` : ''}

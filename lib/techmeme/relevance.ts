@@ -13,6 +13,7 @@
  * Bewertung in der Queue sortiert später ohnehin nach Relevanz.
  */
 import { z } from 'zod'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 const VerdictSchema = z.object({
   keep: z.array(z.number().int()),
@@ -80,7 +81,7 @@ export async function filterRelevantStories(headlines: string[]): Promise<Releva
   try {
     const Anthropic = (await import('@anthropic-ai/sdk')).default
     const { getModelForUseCase } = await import('@/lib/ai/model-config')
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'techmeme_relevance')
     const model = await getModelForUseCase('glossary_candidate_identification')
 
     const resp = await client.messages.create({

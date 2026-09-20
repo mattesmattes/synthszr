@@ -25,6 +25,7 @@
  */
 import { z } from 'zod'
 import { isExcludedGlossaryTerm } from '@/lib/data/glossary-exclusions'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 const VerdictSchema = z.object({
   reject: z.array(z.object({
@@ -146,7 +147,7 @@ export async function filterCandidates(
   try {
     const Anthropic = (await import('@anthropic-ai/sdk')).default
     const { getModelForUseCase } = await import('@/lib/ai/model-config')
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'glossary_candidate_identification')
     const model = await getModelForUseCase('glossary_candidate_identification')
 
     const resp = await client.messages.create({

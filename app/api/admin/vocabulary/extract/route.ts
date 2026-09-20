@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/session'
 import Anthropic from '@anthropic-ai/sdk'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 // Dynamic import for pdf-parse to avoid build issues
 async function parsePDF(buffer: Buffer): Promise<string> {
@@ -125,9 +126,9 @@ export async function POST(request: NextRequest) {
     console.log(`[Vocabulary Extract] Analyzing ${textContent.length} chars from ${file.name}`)
 
     // Call Claude to analyze the text
-    const anthropic = new Anthropic({
+    const anthropic = withUsageLogging(new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
-    })
+    }), 'vocabulary_extract')
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',

@@ -14,6 +14,7 @@
  * temperature, KEIN thinking — in diesem Projekt nachweislich stabil.
  */
 import Anthropic from '@anthropic-ai/sdk'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 export type ModerationVerdict = 'publish' | 'review' | 'reject'
 
@@ -58,7 +59,7 @@ export async function moderateComment(body: string, articleTitle: string): Promi
     return { verdict: 'review', reason: 'Moderation nicht verfügbar (kein API-Key)' }
   }
   try {
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const anthropic = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'comment_moderation')
     const res = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 300,

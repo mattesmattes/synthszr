@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 const LLM_TIMEOUT_MS = 90_000
 
@@ -35,7 +36,7 @@ export async function distillCategoryDimensions(categorySlug: string, categoryNa
 
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const client: any = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const client: any = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'ranking_distill')
   const tool = {
     name: 'report_dimensions',
     description: 'Melde die Vergleichs-Dimensionen der Kategorie',

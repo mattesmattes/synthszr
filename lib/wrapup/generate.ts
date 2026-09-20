@@ -21,6 +21,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { getModelCapabilities } from '@/lib/claude/model-capabilities'
 import type { WrapupTopic } from '@/lib/wrapup/collect'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 export interface WrapupParts {
   /** 3-4 Zeilen über die große Linie der Woche. */
@@ -112,7 +113,7 @@ export async function generateWrapupParts(
   weekLabel: string,
   model: string,
 ): Promise<{ title: string; parts: WrapupParts }> {
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const anthropic = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'wrapup')
   const { adaptiveThinking, supportsDisabledThinking } = getModelCapabilities(model)
 
   const params: Record<string, unknown> = {

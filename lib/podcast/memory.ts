@@ -21,6 +21,7 @@ import { episodeTimeReference, stripEpisodeNumbers } from '@/lib/podcast/episode
 import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateEmbedding } from '@/lib/embeddings/generator'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 export interface EpisodePosition {
   topic: string
@@ -76,7 +77,7 @@ export async function extractEpisodeMemory(params: {
       console.warn('[PodcastMemory] No ANTHROPIC_API_KEY, skipping extraction')
       return
     }
-    const anthropic = new Anthropic({ apiKey })
+    const anthropic = withUsageLogging(new Anthropic({ apiKey }), 'podcast_memory')
 
     const prompt = buildExtractionPrompt(script)
     const response = await anthropic.messages.create({

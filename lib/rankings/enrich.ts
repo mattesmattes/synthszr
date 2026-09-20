@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 export interface EnrichableProduct {
   name: string
@@ -81,7 +82,7 @@ export async function enrichProduct(
   if (!process.env.ANTHROPIC_API_KEY) return { sentiment: null, features: [] }
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   const { getModelForUseCase } = await import('@/lib/ai/model-config')
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'ranking_enrich')
   const validDims = new Set(dimensions)
   const tool = {
     name: 'report_analysis',

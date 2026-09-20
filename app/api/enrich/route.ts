@@ -13,6 +13,7 @@ import { ANTI_LLM_STYLE_RULES } from '@/lib/enrich/style-rules'
 import { linkPostContent } from '@/lib/glossary/backfill'
 import { getMatcherTerms, getChartProductNames, buildReservedNames } from '@/lib/glossary/terms'
 import type { TiptapDoc, TiptapNode } from '@/lib/email/tiptap-to-html'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 export const runtime = 'nodejs'
 // Sequenziell verarbeitete Abschnitte — seit der Umstellung auf "alle
@@ -336,7 +337,7 @@ async function runSection(
   resolved: { provider: 'anthropic' | 'openai' | 'google'; modelId: string },
 ): Promise<string> {
   if (resolved.provider === 'anthropic') {
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const anthropic = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'enrich')
     // web_search ist ein server-seitiges Anthropic-Tool: die Suche laeuft
     // INNERHALB dieses einen Aufrufs, kein eigener Round-Trip noetig (gleiches
     // Muster wie lib/rankings/research.ts). max_uses begrenzt Kosten/Latenz

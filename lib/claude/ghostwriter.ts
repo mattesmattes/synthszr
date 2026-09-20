@@ -11,6 +11,7 @@ import {
 } from '@/lib/edit-learning/retrieval'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { escapeQuellmaterialTag } from '@/lib/claude/sanitize'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '')
 
@@ -233,9 +234,9 @@ async function* streamClaude(
   userMessage: string,
   modelId: string
 ): AsyncGenerator<string, void, unknown> {
-  const anthropic = new Anthropic({
+  const anthropic = withUsageLogging(new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
-  })
+  }), 'ghostwriter')
 
   const stream = anthropic.messages.stream({
     model: modelId,
@@ -407,9 +408,9 @@ ${originalText}`
       }
     }
   } else {
-    const anthropic = new Anthropic({
+    const anthropic = withUsageLogging(new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
-    })
+    }), 'ghostwriter')
 
     const modelId = model === 'claude-opus-4'
       ? 'claude-opus-4-20250514'

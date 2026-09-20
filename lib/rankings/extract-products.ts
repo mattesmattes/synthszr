@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 export interface ExtractedProduct { name: string; vendor: string; excerpt?: string }
 export type ExtractProductsResult =
@@ -70,7 +71,7 @@ export async function extractProducts(title: string, content: string): Promise<E
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   const { getModelForUseCase } = await import('@/lib/ai/model-config')
   if (!process.env.ANTHROPIC_API_KEY) return { ok: false, error: 'ANTHROPIC_API_KEY missing', retryable: true }
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'ranking_extract')
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
   try {

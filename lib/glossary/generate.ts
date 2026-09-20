@@ -13,6 +13,7 @@
  */
 import { z } from 'zod'
 import { isExcludedGlossaryTerm } from '@/lib/data/glossary-exclusions'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 // ---------------------------------------------------------------------------
 // Slug
@@ -199,7 +200,7 @@ export async function identifyCandidates(articleText: string, knownSlugs: string
   try {
     const Anthropic = (await import('@anthropic-ai/sdk')).default
     const { getModelForUseCase } = await import('@/lib/ai/model-config')
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'glossary_candidate_identification')
     const model = await getModelForUseCase('glossary_candidate_identification')
     const resp = await client.messages.create({
       model, max_tokens: 1024, tools: [CANDIDATES_TOOL],
@@ -428,7 +429,7 @@ export async function generateTermContent(name: string): Promise<GeneratedTerm> 
   }
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   const { getModelForUseCase } = await import('@/lib/ai/model-config')
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'glossary_generation')
 
   const contentModel = await getModelForUseCase('glossary_generation')
   const { getModelCapabilities } = await import('@/lib/claude/model-capabilities')
@@ -525,7 +526,7 @@ export async function generateTermContent(name: string): Promise<GeneratedTerm> 
   let readabilityScore: number | null = null
   try {
     const readabilityModel = await getModelForUseCase('glossary_readability_qa')
-    const judgeResp = await client.messages.create({
+    const judgeResp = await withUsageLogging(client, 'glossary_readability_qa').messages.create({
       model: readabilityModel, max_tokens: 512, tools: [READABILITY_TOOL],
       tool_choice: { type: 'tool', name: READABILITY_TOOL.name },
       messages: [{ role: 'user', content: buildReadabilityPrompt(canonicalName, c.summary, body) }],

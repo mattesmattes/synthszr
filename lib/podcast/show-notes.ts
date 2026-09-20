@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 const MODEL = 'claude-haiku-4-5-20251001'
 
@@ -38,7 +39,7 @@ export async function summarizeShowNotes(text: string, locale: string): Promise<
 
   const langName = locale === 'de' ? 'German' : 'the same language as the input'
   try {
-    const anthropic = new Anthropic({ apiKey })
+    const anthropic = withUsageLogging(new Anthropic({ apiKey }), 'podcast_show_notes')
     const targetWords = Math.max(15, Math.round(trimmed.split(/\s+/).length / 2))
     const res = await anthropic.messages.create({
       model: MODEL,

@@ -6,6 +6,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { SimilarItem, daysBetween } from './search'
 import { getModelForUseCase } from '@/lib/ai/model-config'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 export type SynthesisType =
   | 'contradiction'
@@ -107,9 +108,9 @@ export async function scoreSynthesisCandidates(
 ): Promise<ScoredCandidate[]> {
   const { concurrency = 5, minTotalScore = 10 } = options
 
-  const anthropic = new Anthropic({
+  const anthropic = withUsageLogging(new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
-  })
+  }), 'synthesis_scoring')
 
   const modelId = await getModelForUseCase('synthesis_scoring')
   const currentNews = `${currentItem.title}\n\n${currentItem.content}`
@@ -303,7 +304,7 @@ export async function scoreContentOnly(
 
   if (items.length === 0) return new Map()
 
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const anthropic = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'synthesis_scoring')
   const modelId = await getModelForUseCase('synthesis_scoring')
   const results = new Map<string, ContentScore>()
 

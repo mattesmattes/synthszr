@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getSession } from '@/lib/auth/session'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 export const runtime = 'nodejs'
 
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
   const scriptContext = script ? script.slice(0, 1500) : null
 
   try {
-    const client = new Anthropic()
+    const client = withUsageLogging(new Anthropic(), 'podcast_metadata_translation')
 
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',

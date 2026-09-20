@@ -59,6 +59,7 @@ import { isTrackingRedirectUrl } from '@/lib/utils/url-sanitizer'
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { bundleLabel, type BundleType } from '@/lib/i18n/bundle-labels'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 export interface PipelineItem {
   id: string
@@ -483,7 +484,7 @@ Erstelle folgenden JSON-Plan:
   // thinking:true — die Winkel-Zuweisung mit Anti-Redundanz über den ganzen
   // Digest ist anspruchsvoller als reine Sortierung. temperature entfällt: mit
   // thinking (und bei Sonnet 5 generell) wird es von callModelNonStreaming ohnehin ignoriert.
-  const text = await callModelNonStreaming(planPrompt, planSystemPrompt, model, { thinking: true, maxTokens: 32000 })
+  const text = await callModelNonStreaming(planPrompt, planSystemPrompt, model, { thinking: true, maxTokens: 32000, useCase: 'article_planning' })
 
   // JSON aus möglichen Markdown-Fences extrahieren. Robust auch gegen einen
   // geöffneten, aber nicht geschlossenen ```json-Block (führende Fence strippen,
@@ -676,7 +677,7 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
 // läuft nur für die Takes, die das Prompt-Verbot gerissen haben.
 async function rewriteWerEnding(take: string, model: AIModel): Promise<string> {
   const system = `Du überarbeitest den Schluss eines deutschen Kommentar-Absatzes. Sein letzter oder vorletzter Satz beginnt mit "Wer" — eine verbrauchte Belehr-Formel ("Wer X tut/glaubt/hält, sollte/verliert/gewinnt Y"). Forme NUR diesen einen Satz um: dieselbe Aussage als direkte Feststellung ohne "Wer"-Rahmen. Beispiel: aus "Wer heute noch auf reine Modelle setzt, verliert die Marge." wird "Die Marge liegt ab jetzt neben dem Modell, nicht darin." Alle anderen Sätze bleiben WÖRTLICH unverändert. Die letzten beiden Sätze dürfen danach NICHT mit "Wer" beginnen. Gib NUR den vollständigen überarbeiteten Absatz zurück — ohne Anführungszeichen, ohne "Synthszr Take:"-Präfix, ohne Erklärung.`
-  return callModelNonStreaming(take, system, model, { thinking: false, maxTokens: 2000 })
+  return callModelNonStreaming(take, system, model, { thinking: false, maxTokens: 2000, useCase: 'ghostwriter_take' })
 }
 
 // Kürzt eine überlange Abschnitts-Überschrift auf ≤90 Zeichen, ohne die
@@ -1067,7 +1068,7 @@ async function callModelNonStreaming(
   prompt: string,
   systemPrompt: string,
   model: AIModel,
-  options?: { cacheableUserPrefix?: string; maxTokens?: number; temperature?: number; thinking?: boolean; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' }
+  options?: { cacheableUserPrefix?: string; maxTokens?: number; temperature?: number; thinking?: boolean; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'; useCase?: string }
 ): Promise<string> {
   const tokenLimit = options?.maxTokens ?? 4096
   const resolved = resolveModel(model)
@@ -1100,7 +1101,10 @@ async function callModelNonStreaming(
   }
 
   if (resolved?.provider === 'anthropic') {
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    // useCase je Aufruf statt pauschal 'ghostwriter': Planung, Abschnitte und
+    // Korrektur landen sonst in einem Topf, und genau ihre Aufteilung ist die
+    // offene Frage (Kosten-Befund 2026-09-20).
+    const anthropic = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), options?.useCase ?? 'ghostwriter')
 
     // Prompt caching: system prompt + static user prefix are cached across 30 section calls
     // Cached tokens cost $1.88/M vs $15/M normal — saves ~$1.20 per run with Opus
@@ -1783,7 +1787,7 @@ export async function proofreadText(text: string, model: AIModel): Promise<strin
     // ersetzte den vollständigen Artikel (der Aufrufer prüft zusätzlich via
     // isLikelyTruncated). Streamt (Bedingung > 16384). temperature niedrig,
     // weil Korrektur deterministisch sein soll, nicht kreativ.
-    { maxTokens: 64000, temperature: 0.1 },
+    { maxTokens: 64000, temperature: 0.1, useCase: 'proofreading' },
   )
   return corrected.trim()
 }

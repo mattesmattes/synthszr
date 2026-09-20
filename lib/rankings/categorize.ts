@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 export interface CategorizableProduct {
   id: string
@@ -65,7 +66,7 @@ export async function classifyProducts(
 
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   const { getModelForUseCase } = await import('@/lib/ai/model-config')
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'ranking_categorize')
   const validSlugs = new Set(categories.map((c) => c.slug))
   const tool = {
     name: 'assign_categories',

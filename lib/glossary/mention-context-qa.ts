@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 /**
  * Kontextbasierte Erwähnungs-QS für Lexikon-Verlinkungen.
@@ -79,7 +80,7 @@ async function decideOne(c: MentionContextCandidate): Promise<boolean> {
   try {
     const Anthropic = (await import('@anthropic-ai/sdk')).default
     const { getModelForUseCase } = await import('@/lib/ai/model-config')
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'glossary_mention_context_qa')
     const tool = {
       name: 'judge_relevance',
       description: 'Entscheiden, ob eine Textstelle wirklich das Lexikon-Konzept meint',

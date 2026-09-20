@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import type { LanguageCode } from '@/lib/types'
 import { normalizeQuotesInTipTap, fixQuotes } from '@/lib/utils/typography'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '')
 
@@ -52,7 +53,7 @@ export async function testApiKeys(): Promise<{
   if (anthropicKey) {
     results.anthropic.lastChars = anthropicKey.slice(-4)
     try {
-      const anthropic = new Anthropic()
+      const anthropic = withUsageLogging(new Anthropic(), 'translation')
       await anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 10,
@@ -386,7 +387,7 @@ async function translateWithClaude(
   userPrompt: string,
   model: TranslationModel
 ): Promise<string> {
-  const anthropic = new Anthropic()
+  const anthropic = withUsageLogging(new Anthropic(), 'translation')
 
   const modelId = model === 'claude-haiku-3.5'
     ? 'claude-haiku-4-5-20251001'

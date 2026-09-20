@@ -4,6 +4,7 @@ import { getModelForUseCase } from '@/lib/ai/model-config'
 import { buildRerankerPrompt } from './few-shot'
 import { parseRerankerResponse } from './reranker-parse'
 import type { RankingCandidate, RankedSuggestion, LabelExample } from './ranking-types'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 const TIMEOUT_MS = 45000
 
@@ -42,7 +43,7 @@ export async function runReranker(
   const prompt = buildRerankerPrompt(shuffle(candidates), positives, negatives, targetCount, recentlyCovered)
 
   try {
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'queue_ranking')
     const model = await getModelForUseCase('queue_ranking')
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS)

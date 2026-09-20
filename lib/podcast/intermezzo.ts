@@ -27,6 +27,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 /** TTS language of the podcast (LOCALE_TO_TTS_LANG collapses to 'de' | 'en'). */
 export type IntermezzoLanguage = 'de' | 'en'
@@ -130,7 +131,7 @@ async function generateReflectionBlock(
     .join('\n')
 
   try {
-    const anthropic = new Anthropic({ apiKey })
+    const anthropic = withUsageLogging(new Anthropic({ apiKey }), 'podcast_intermezzo')
     const prompt = buildReflectionPrompt(trailingLines, leadingLines, language)
     const response = await anthropic.messages.create({
       model: REFLECTION_MODEL,

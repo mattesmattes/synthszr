@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 const LANGS: Record<string, string> = {
   en: 'English', cs: 'Czech', nds: 'Low German (Plattdeutsch)', fr: 'French',
@@ -60,7 +61,7 @@ export async function translateStalePromos(): Promise<{ tips: number; ads: numbe
   const supabase = createAdminClient()
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const client: any = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const client: any = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'promo_translation')
 
   let tips = 0
   const { data: tipRows } = await supabase.from('tip_promos').select('id, headline, body, cta_label, translations_hash, type').eq('active', true).neq('type', 'podcast')

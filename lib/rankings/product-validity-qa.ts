@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 /**
  * Kontextbasierte Produkt-Validitäts-QS: Der Extraktor (Haiku) legt gelegentlich
@@ -65,7 +66,7 @@ async function decideValidity(c: ValidityCandidate): Promise<ValidityDecision | 
   if (!process.env.ANTHROPIC_API_KEY) return null
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   const { getModelForUseCase } = await import('@/lib/ai/model-config')
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'ranking_validity_qa')
   const tool = {
     name: 'judge_validity',
     description: 'Entscheiden, ob ein Chart-Eintrag ein echtes Produkt oder ein Alltagswort ist',

@@ -29,6 +29,7 @@ import { getPersonalityState, buildPersonalityBrief, advanceState } from '@/lib/
 import { retrieveMemory, buildMemoryBrief, shouldAnnounceMemoryAwakening } from '@/lib/podcast/memory'
 import { ensureIntermezzoMarker } from '@/lib/podcast/intermezzo'
 import Anthropic from '@anthropic-ai/sdk'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 // TTS language mapping
 const LOCALE_TO_TTS_LANG: Record<string, 'de' | 'en'> = {
@@ -354,7 +355,7 @@ async function generatePodcastForPost(
 
     console.log(`[Podcast] Generating script for post ${postId} in ${locale} (episode #${personalityState.episode_count + 1}, phase: ${personalityState.relationship_phase})`)
 
-    const anthropic = new Anthropic()
+    const anthropic = withUsageLogging(new Anthropic(), 'podcast_episode')
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 8000,

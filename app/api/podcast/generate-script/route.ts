@@ -34,6 +34,7 @@ import { retrieveMemory, buildMemoryBrief, shouldAnnounceMemoryAwakening } from 
 import { ensureIntermezzoMarker } from '@/lib/podcast/intermezzo'
 import Anthropic from '@anthropic-ai/sdk'
 import { getModelForUseCase } from '@/lib/ai/model-config'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 // TTS language mapping for podcast generation
 const LOCALE_TO_TTS_LANG: Record<string, 'de' | 'en'> = {
@@ -620,7 +621,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate script with Claude
-    const anthropic = new Anthropic()
+    const anthropic = withUsageLogging(new Anthropic(), 'podcast_script')
     const podcastModel = await getModelForUseCase('podcast_script')
 
     console.log(`[Podcast Script] Generating ${durationMinutes}min script for post ${body.postId} in ${locale} (episode #${personalityState.episode_count + 1}, phase: ${personalityState.relationship_phase}, flirt: ${personalityState.flirtation_tendency.toFixed(2)}, comfort: ${personalityState.mutual_comfort.toFixed(2)})`)

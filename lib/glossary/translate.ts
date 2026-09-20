@@ -25,6 +25,7 @@ import { getMatcherTerms, getChartProductNames, buildReservedNames } from '@/lib
 import { injectGlossaryMarks } from '@/lib/glossary/inject-marks'
 import type { LanguageCode } from '@/lib/types'
 import type { GlossaryMatcherTerm } from '@/lib/glossary/types'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 // ---------------------------------------------------------------------------
 // translateTerm
@@ -152,7 +153,7 @@ export async function translateTerm(termId: string, targetLang: string): Promise
 
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   const { getModelForUseCase } = await import('@/lib/ai/model-config')
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'glossary_translation')
   const model = await getModelForUseCase('glossary_translation')
 
   const resp = await client.messages.create({

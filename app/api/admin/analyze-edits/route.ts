@@ -10,10 +10,11 @@ import {
 import { generateEmbedding } from '@/lib/embeddings/generator'
 import { parseIntParam } from '@/lib/validation/query-params'
 import { getModelForUseCase } from '@/lib/ai/model-config'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
-const anthropic = new Anthropic({
+const anthropic = withUsageLogging(new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
-})
+}), 'edit_analysis')
 
 interface EditClassification {
   type: 'stylistic' | 'structural' | 'factual' | 'vocabulary' | 'grammar' | 'deletion' | 'addition' | 'formatting'

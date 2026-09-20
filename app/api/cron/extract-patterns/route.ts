@@ -5,6 +5,7 @@ import { generateEmbedding, cosineSimilarity } from '@/lib/embeddings/generator'
 import { parseIntParam, parseFloatParam } from '@/lib/validation/query-params'
 import { requireCronOrAdmin } from '@/lib/auth/session'
 import { getModelForUseCase } from '@/lib/ai/model-config'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 // Lazy initialization to avoid build-time errors
 let supabase: SupabaseClient | null = null
@@ -22,9 +23,9 @@ function getSupabase(): SupabaseClient {
 
 function getAnthropic(): Anthropic {
   if (!anthropic) {
-    anthropic = new Anthropic({
+    anthropic = withUsageLogging(new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
-    })
+    }), 'pattern_extraction')
   }
   return anthropic
 }

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { Interval, UnsubscribeType, DetectionResult, DetectedSubscription, EvidenceMessage } from '@/lib/subscriptions/types'
 import type { EmailMessage } from '@/lib/gmail/client'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 const BILLING_PORTAL_DOMAINS = [
   'stripe.com', 'paypal.com', 'apple.com', 'itunes.com',
@@ -127,7 +128,7 @@ async function classifyBatch(emails: { from: string; subject: string; snippet: s
   if (!process.env.ANTHROPIC_API_KEY) return new Map()
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   const { getModelForUseCase } = await import('@/lib/ai/model-config')
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'subscription_detect')
   const tool = {
     name: 'classify_subscriptions',
     description: 'Klassifiziere jede Mail als bezahltes Abo (mit Betrag/Intervall) oder nicht',

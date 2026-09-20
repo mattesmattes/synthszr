@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mergeProductsInto } from '@/lib/rankings/consolidate'
+import { withUsageLogging } from '@/lib/ai/usage-log'
 
 /** Pseudo-Dimension als Verarbeitungs-Marker (analog __researched_at). */
 export const ATTRIBUTION_QA_AT_DIM = '__attribution_qa_at'
@@ -59,7 +60,7 @@ async function decideAttribution(c: QaCandidate): Promise<AttributionDecision | 
   if (!process.env.ANTHROPIC_API_KEY) return null
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   const { getModelForUseCase } = await import('@/lib/ai/model-config')
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'ranking_attribution_qa')
   const tool = {
     name: 'attribute_product',
     description: 'Company-Zuordnung eines Produkts verifizieren',
