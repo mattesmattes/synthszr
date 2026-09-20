@@ -63,19 +63,25 @@ const RELEVANT = /["„“”‟«»']/
  * Zieht alle Zitatzeichen auf das gerade `"` zurück, damit die Paarbildung eine
  * einheitliche Ausgangslage hat.
  *
- * Bei den Guillemets wird das INNERE Leerzeichen mitgenommen (schmal, geschützt
- * oder normal), sonst verdoppelt es sich beim Neusetzen: aus « Bonjour » würde
- * sonst «  Bonjour  ». Das Leerzeichen VOR einem öffnenden « bleibt dagegen
- * stehen, es gehört zum vorangehenden Wort.
+ * Nur im FRANZÖSISCHEN wird das Leerzeichen am Guillemet mitgenommen — dort
+ * gehört es zum Zitatzeichen und wird beim Neusetzen ergänzt. Und zwar ALLE
+ * davon: die Übersetzung liefert teils NBSP UND normales Leerzeichen
+ * (PROD-BEFUND 2026-09-20, FR-Newsletter), ein einzelnes Weg-Nehmen hinterließ
+ * die doppelt breite Lücke «\u202F mot.
+ *
+ * In den anderen Sprachen ist «…» oder »…« ein Zitatzeichen mit normalem
+ * Wortabstand davor. Dort darf nichts gestrippt werden, sonst verschwindet das
+ * Leerzeichen VOR dem Zitat („Autor des Buchs»CODE CRASH«" → „Buchs„CODE
+ * CRASH\u201C").
  *
  * Einfache Anführungszeichen bleiben unangetastet: `’` ist in der Regel ein
  * Apostroph (don’t, Nvidia’s), kein Zitatende.
  */
-function normalizeQuoteChars(text: string): string {
-  return text
-    .replace(/«[   ]?/g, '"')
-    .replace(/[   ]?»/g, '"')
-    .replace(/[„“”‟]/g, '"')
+function normalizeQuoteChars(text: string, lang: string): string {
+  const guillemets = lang === 'fr'
+    ? text.replace(/«[   ]*/g, '"').replace(/[   ]*»/g, '"')
+    : text.replace(/[«»]/g, '"')
+  return guillemets.replace(/[„“”‟]/g, '"')
 }
 
 /**
@@ -95,7 +101,7 @@ function distributeQuotes(texts: string[], lang: string): string[] {
   if (!texts.some((t) => RELEVANT.test(t))) return texts
 
   const p = pairFor(lang)
-  const normalized = texts.map(normalizeQuoteChars)
+  const normalized = texts.map((t) => normalizeQuoteChars(t, lang))
 
   // Erst entscheiden: was wird aus dem 1., 2., 3. … Vorkommen im ganzen Block?
   const replacements: string[] = []

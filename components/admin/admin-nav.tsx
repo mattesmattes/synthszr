@@ -229,11 +229,6 @@ const navGroups: NavGroup[] = [
         label: 'Statistics',
         href: '/admin/statistics',
         icon: TrendingUp
-      },
-      {
-        label: 'KI-Kosten',
-        href: '/admin/llm-costs',
-        icon: Coins
       }
     ]
   },
@@ -250,6 +245,11 @@ const navGroups: NavGroup[] = [
         href: '/docs/architecture',
         icon: FileCode,
         external: true
+      },
+      {
+        label: 'KI-Kosten',
+        href: '/admin/llm-costs',
+        icon: Coins
       }
     ]
   }

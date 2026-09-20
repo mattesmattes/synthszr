@@ -6,6 +6,7 @@ import { translateContent, type TranslationModel } from '@/lib/i18n/translation-
 import type { LanguageCode, TranslationQueueItem } from '@/lib/types'
 import { parseTipTapContent } from '@/lib/utils/safe-json'
 import { reinjectGlossaryMarksForTranslation } from '@/lib/glossary/translate'
+import { typographicQuotes } from '@/lib/typography/quotes'
 
 export const maxDuration = 300 // 5 minutes per single translation (Pro plan allows up to 300s)
 
@@ -239,9 +240,14 @@ async function processGeneratedPost(
   const translationData = {
     generated_post_id: item.content_id,
     language_code: item.target_language,
-    title: translationResult.title,
+    // Titel und Teaser laufen an keinem Renderpfad vorbei, der die
+    // Typografie setzt (die arbeiten auf TipTap-JSON) — deshalb hier, beim
+    // Speichern. Im Franzoesischen zog die Uebersetzung sonst das doppelte
+    // Leerzeichen im Guillemet bis in die Newsletter-Betreffzeile
+    // (PROD-BEFUND 2026-09-20).
+    title: translationResult.title ? typographicQuotes(translationResult.title, item.target_language) : translationResult.title,
     slug: translationResult.slug,
-    excerpt: translationResult.excerpt,
+    excerpt: translationResult.excerpt ? typographicQuotes(translationResult.excerpt, item.target_language) : translationResult.excerpt,
     content,
     translation_status: 'completed',
     source_updated_at: post.updated_at,
@@ -326,7 +332,7 @@ async function processStaticPage(
   const translationData = {
     static_page_id: item.content_id,
     language_code: item.target_language,
-    title: translationResult.title,
+    title: translationResult.title ? typographicQuotes(translationResult.title, item.target_language) : translationResult.title,
     slug: translationResult.slug,
     content: translationResult.content,
     translation_status: 'completed',

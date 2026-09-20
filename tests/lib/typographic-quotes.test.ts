@@ -12,6 +12,30 @@ describe('typographicQuotes', () => {
     expect(q('Er nannte es "Fortschritt".', 'de')).toBe('Er nannte es „Fortschritt“.')
   })
 
+  it('macht aus einem doppelten Leerzeichen der Übersetzung genau eines', () => {
+    // PROD-BEFUND 2026-09-20 (Newsletter FR): die Übersetzung liefert bereits
+    // «\u00A0 mot\u00A0 » — also NBSP UND normales Leerzeichen. Der Normalisierer
+    // nahm nur EINES davon weg, das Guillemet bekam sein eigenes dazu, und im
+    // Ergebnis stand eine doppelt breite Lücke: «\u202F mot.
+    expect(q('Trump crée une «\u00A0 AI Force\u00A0 ».', 'fr')).toBe('Trump crée une «\u202fAI Force\u202f».')
+  })
+
+  it('räumt auch mehrere normale Leerzeichen innen auf', () => {
+    expect(q('Il a dit «   oui   ».', 'fr')).toBe('Il a dit «\u202foui\u202f».')
+  })
+
+  it('lässt das Leerzeichen VOR dem öffnenden Guillemet stehen', () => {
+    // Es gehört zum vorangehenden Wort, nicht zum Zitat.
+    expect(q('Il a dit "oui".', 'fr')).toBe('Il a dit «\u202foui\u202f».')
+  })
+
+  it('frisst im Deutschen NICHT das Leerzeichen vor »…«', () => {
+    // PROD-BEFUND 2026-09-20: die alte, sprachunabhängige Guillemet-Regel nahm
+    // das Leerzeichen davor mit — aus „Buchs »CODE CRASH«" wurde „Buchs„CODE
+    // CRASH\u201C". Nur im Französischen gehört das Leerzeichen zum Zitatzeichen.
+    expect(q('Autor des Buchs »CODE CRASH«.', 'de')).toBe('Autor des Buchs „CODE CRASH“.')
+  })
+
   it('setzt im Englischen “…”', () => {
     expect(q('He called it "progress".', 'en')).toBe('He called it “progress”.')
   })
