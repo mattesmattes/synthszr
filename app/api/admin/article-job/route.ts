@@ -8,9 +8,13 @@ import {
 } from '@/lib/article-jobs/service'
 
 // Each call advances the job by exactly ONE phase; writeSectionsBatch caps itself
-// at 210s, so a single phase stays well under the 300s Vercel-Pro function limit.
+// at 210s. Die PLANUNG hat kein solches Budget: sie ist EIN Modellaufruf ueber
+// alle Items (claude-sonnet-5, Thinking, 32k Token) und lief am 2026-09-21
+// reihenweise in den 300s-Timeout — der Job zaehlte dann nur `attempts` hoch und
+// fing von vorne an, jeder Fehlversuch voll bezahlt. Fluid Compute laesst auf
+// Pro bis 800s zu.
 // The browser drives the job by polling ?advance until status === 'done'.
-export const maxDuration = 300
+export const maxDuration = 800
 
 /**
  * GET ?jobId=… → lightweight status poll (status, phase, cursor, total, …).

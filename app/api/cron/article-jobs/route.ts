@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyCronAuth } from '@/lib/security/cron-auth'
 
-export const maxDuration = 300
+// 800 statt 300: die Planungsphase ist ein einzelner langer Modellaufruf und
+// lief in den Timeout (s. app/api/admin/article-job/route.ts).
+export const maxDuration = 800
 
 /**
  * Treibt den Tagesartikel-Job im MINUTENTAKT (vercel.json).
