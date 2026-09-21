@@ -1286,7 +1286,11 @@ export default function NewsQueuePage() {
                                 <span className="text-[9px] font-semibold uppercase tracking-wider text-rose-700 dark:text-rose-400 shrink-0">
                                   Gebündelt
                                 </span>
-                                <span className="text-[11px] text-rose-900/80 dark:text-rose-200/80 truncate">
+                                {/* Groesser und fett als die Quellzeilen darunter
+                                    (Betreiber-Vorgabe 2026-09-21): die Bündel-
+                                    Überschrift ist das, was im Artikel EIN
+                                    Abschnitt wird — sie führt den Block an. */}
+                                <span className="text-sm font-bold text-rose-900/80 dark:text-rose-200/80 truncate">
                                   {headline}
                                 </span>
                                 <span className="text-[10px] text-rose-600 dark:text-rose-400 shrink-0 ml-auto">
