@@ -1,3 +1,4 @@
+import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { computeCostUsd, extractUsage } from '@/lib/ai/usage-cost'
 
@@ -39,6 +40,32 @@ export async function logLlmUsage(
   }
 }
 
+/**
+ * Stoesst logLlmUsage an, ohne die Antwort zu verzoegern.
+ *
+ * `void logLlmUsage(...)` allein reicht auf Vercel NICHT: sobald der
+ * umgebende Request-Handler zurueckkehrt, kann die Function-Instanz
+ * einfrieren, bevor der Supabase-Insert (Netzwerk-Roundtrip) fertig ist —
+ * die Anthropic-Kosten sind angefallen, die Buchungszeile fehlt trotzdem
+ * (Befund 2026-09-22: Log-Summe lag ~33% unter der Anthropic-Rechnung,
+ * am staerksten bei den Job-Kinds mit minimaler Nacharbeit nach dem letzten
+ * Modellaufruf wie glossary_readability_qa/glossary_product_assignment).
+ * `after()` haelt die Instanz bis zum Abschluss am Leben, ohne die an den
+ * Aufrufer zurueckgegebene Antwort zu blockieren.
+ *
+ * `after()` wirft synchron, wenn es ausserhalb eines Request-Scopes laeuft
+ * (z.B. ein Skript unter scripts/, das lib-Code direkt importiert) — dann
+ * bleibt das alte Fire-and-forget als Fallback, statt den Aufruf scheitern
+ * zu lassen.
+ */
+function scheduleUsageLog(useCase: string, model: string, rawUsage: unknown, meta?: Record<string, unknown>): void {
+  try {
+    after(() => logLlmUsage(useCase, model, rawUsage, meta))
+  } catch {
+    void logLlmUsage(useCase, model, rawUsage, meta)
+  }
+}
+
 /** Minimalform des Anthropic-Clients, die hier gebraucht wird. */
 interface MessagesClient {
   messages: {
@@ -68,7 +95,7 @@ export function withUsageLogging<T extends MessagesClient>(
       if (prop === 'create' && typeof value === 'function') {
         return async (params: unknown, ...rest: never[]) => {
           const response = await (value as (...a: unknown[]) => Promise<unknown>).call(target, params, ...rest)
-          void logLlmUsage(useCase, modelOf(params, response), (response as { usage?: unknown })?.usage, meta)
+          scheduleUsageLog(useCase, modelOf(params, response), (response as { usage?: unknown })?.usage, meta)
           return response
         }
       }
@@ -81,7 +108,7 @@ export function withUsageLogging<T extends MessagesClient>(
           if (typeof on === 'function') {
             try {
               on.call(stream, 'finalMessage', (message: unknown) => {
-                void logLlmUsage(useCase, modelOf(params, message), (message as { usage?: unknown })?.usage, meta)
+                scheduleUsageLog(useCase, modelOf(params, message), (message as { usage?: unknown })?.usage, meta)
               })
             } catch { /* s.o. — fail-open */ }
           }
