@@ -16,7 +16,13 @@ export async function GET(request: NextRequest) {
 
   const raw = parseInt(request.nextUrl.searchParams.get('days') ?? '7', 10)
   const days = Number.isFinite(raw) ? Math.min(Math.max(raw, 1), 90) : 7
-  const since = new Date(Date.now() - days * 864e5).toISOString()
+  // UTC-Kalendertage statt rollierendem Fenster: "Heute" (days=1) muss den
+  // vollen laufenden UTC-Tag ab 00:00 zeigen, sonst weicht die Summe abhängig
+  // von der Uhrzeit des Seitenaufrufs von der Anthropic-Konsole (die strikt
+  // nach UTC-Kalendertag abrechnet) UND von der eigenen byDay-Grafik ab, die
+  // schon nach created_at.slice(0,10) (UTC-Datum) bucketet (Befund 2026-09-22).
+  const now = new Date()
+  const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - (days - 1))).toISOString()
 
   const supabase = createAdminClient()
   const rows: UsageRow[] = []
