@@ -27,6 +27,21 @@ const EXPECTED_USE_CASES: UseCase[] = [
   'glossary_product_assignment',
   'glossary_review',
   'glossary_translation',
+  'ghostwriter_take',
+  'wrapup',
+  'comment_moderation',
+  'search_rerank',
+  'techmeme_relevance',
+  'ranking_categorize',
+  'ranking_enrich',
+  'ranking_research',
+  'ranking_distill',
+  'podcast_modes',
+  'podcast_show_notes',
+  'podcast_intermezzo',
+  'podcast_memory',
+  'podcast_episode',
+  'podcast_metadata_translation',
 ]
 
 describe('USE_CASE_DEFINITIONS (lib/ai/use-cases.ts)', () => {

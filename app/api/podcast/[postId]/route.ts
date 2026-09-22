@@ -355,9 +355,11 @@ async function generatePodcastForPost(
 
     console.log(`[Podcast] Generating script for post ${postId} in ${locale} (episode #${personalityState.episode_count + 1}, phase: ${personalityState.relationship_phase})`)
 
+    const { getModelForUseCase } = await import('@/lib/ai/model-config')
     const anthropic = withUsageLogging(new Anthropic(), 'podcast_episode')
+    const model = await getModelForUseCase('podcast_episode')
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model,
       max_tokens: 8000,
       system: systemPrompt,
       messages: [{ role: 'user', content: prompt }],

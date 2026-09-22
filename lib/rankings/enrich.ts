@@ -102,7 +102,7 @@ export async function enrichProduct(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
   try {
-    const model = await getModelForUseCase('ranking_extract')
+    const model = await getModelForUseCase('ranking_enrich')
     const resp = await client.messages.create({
       model, max_tokens: 1536, tools: [tool],
       tool_choice: { type: 'tool', name: 'report_analysis' },

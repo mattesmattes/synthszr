@@ -1,8 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { withUsageLogging } from '@/lib/ai/usage-log'
 
-const MODEL = 'claude-haiku-4-5-20251001'
-
 /**
  * Deterministic fallback: keep whole sentences until ~50% of the word count
  * is reached, append an ellipsis. Used when the LLM summary is unavailable.
@@ -39,10 +37,12 @@ export async function summarizeShowNotes(text: string, locale: string): Promise<
 
   const langName = locale === 'de' ? 'German' : 'the same language as the input'
   try {
+    const { getModelForUseCase } = await import('@/lib/ai/model-config')
     const anthropic = withUsageLogging(new Anthropic({ apiKey }), 'podcast_show_notes')
+    const model = await getModelForUseCase('podcast_show_notes')
     const targetWords = Math.max(15, Math.round(trimmed.split(/\s+/).length / 2))
     const res = await anthropic.messages.create({
-      model: MODEL,
+      model,
       max_tokens: 400,
       messages: [{
         role: 'user',

@@ -130,7 +130,9 @@ export async function researchProduct(
   if (!process.env.ANTHROPIC_API_KEY) return EMPTY_RESULT
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { getModelForUseCase } = await import('@/lib/ai/model-config')
   const client: any = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'ranking_research')
+  const model = await getModelForUseCase('ranking_research')
   const dims = dimensions.map((d) => `- ${d}`).join('\n')
   const prompt = `Recherchiere per WEB-SUCHE die offiziellen, aktuellen Specs des AI-Produkts "${name}" von ${vendor} (Kategorie: ${categoryName}).
 ${evidence ? `\nKontext aus AI-News (nur als Suchhilfe, KEIN Beleg):\n${evidence}\n` : ''}
@@ -153,7 +155,7 @@ STRIKT — KEIN SPEKULIEREN:
       // Sonnet 5: stärkeres Instruction-Following (hilft Citation-/Produkt-Domain-Prompt);
       // thinking explizit AUS (auf Sonnet 5 sonst adaptiv default an) — reine Web-Extraktion
       // braucht kein Reasoning, so bleiben Kosten/Latenz vorhersehbar.
-      model: 'claude-sonnet-5', max_tokens: 4000,
+      model, max_tokens: 4000,
       thinking: { type: 'disabled' },
       tools: [REPORT_TOOL, { type: 'web_search_20250305', name: 'web_search', max_uses: 6 }],
       messages: [{ role: 'user', content: prompt }],

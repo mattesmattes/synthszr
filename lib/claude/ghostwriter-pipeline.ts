@@ -667,15 +667,18 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   // "Wer …"-Schlussfigur deterministisch durchsetzen: Das FATAL-Verbot im
   // Prompt allein ließ die Figur in 2 von 4 Test-Takes durch (2026-07-13).
   // Analog zu enforceHeadingLength: nur angestoßen, wenn der Regex anschlägt.
-  trimmed = await enforceTakeEnding(trimmed, (take) => rewriteWerEnding(take, model))
+  trimmed = await enforceTakeEnding(trimmed, (take) => rewriteWerEnding(take))
 
   return trimmed
 }
 
 // Formt den Schluss eines Takes um, dessen letzter/vorletzter Satz mit der
 // verbrauchten "Wer X, Y"-Belehrung beginnt. Kleiner Call ohne Thinking —
-// läuft nur für die Takes, die das Prompt-Verbot gerissen haben.
-async function rewriteWerEnding(take: string, model: AIModel): Promise<string> {
+// läuft nur für die Takes, die das Prompt-Verbot gerissen haben. Eigenes
+// Modell statt des Sektions-Modells: eigener Use Case, eigener Schalter
+// (Betreiber-Wunsch 2026-09-22, s. use-cases.ts).
+async function rewriteWerEnding(take: string): Promise<string> {
+  const model = await getModelForUseCase('ghostwriter_take') as AIModel
   const system = `Du überarbeitest den Schluss eines deutschen Kommentar-Absatzes. Sein letzter oder vorletzter Satz beginnt mit "Wer" — eine verbrauchte Belehr-Formel ("Wer X tut/glaubt/hält, sollte/verliert/gewinnt Y"). Forme NUR diesen einen Satz um: dieselbe Aussage als direkte Feststellung ohne "Wer"-Rahmen. Beispiel: aus "Wer heute noch auf reine Modelle setzt, verliert die Marge." wird "Die Marge liegt ab jetzt neben dem Modell, nicht darin." Alle anderen Sätze bleiben WÖRTLICH unverändert. Die letzten beiden Sätze dürfen danach NICHT mit "Wer" beginnen. Gib NUR den vollständigen überarbeiteten Absatz zurück — ohne Anführungszeichen, ohne "Synthszr Take:"-Präfix, ohne Erklärung.`
   return callModelNonStreaming(take, system, model, { thinking: false, maxTokens: 2000, useCase: 'ghostwriter_take' })
 }
@@ -999,7 +1002,7 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   let withSources = insertBeforeTake(capped, sourceBlock)
 
   // "Wer …"-Schlussfigur deterministisch durchsetzen (wie writeSection).
-  withSources = await enforceTakeEnding(withSources, (take) => rewriteWerEnding(take, model))
+  withSources = await enforceTakeEnding(withSources, (take) => rewriteWerEnding(take))
 
   // Take hart auf fünf Sätze — NACH dem Umschreiben der Schlussfigur, sonst
   // arbeitete diese an einem Satz, der gleich wegfällt. Gerade hier nötig: Über

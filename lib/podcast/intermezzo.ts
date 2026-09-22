@@ -32,10 +32,6 @@ import { withUsageLogging } from '@/lib/ai/usage-log'
 /** TTS language of the podcast (LOCALE_TO_TTS_LANG collapses to 'de' | 'en'). */
 export type IntermezzoLanguage = 'de' | 'en'
 
-// Sonnet 5 (not Haiku): the reflection block is short but needs genuine
-// creative/emotional nuance and reliable instruction-following (esp. the
-// language pin) — Haiku produced flatter, drift-prone dialog.
-const REFLECTION_MODEL = 'claude-sonnet-5'
 const ARTICLE_LINE_REGEX = /^\[\s*ARTICLE\s+(\d+)\s*\]\s*$/gim
 // How many lines before [ARTICLE 5] to feed the model as context.
 const CONTEXT_LINES_BEFORE = 16
@@ -131,10 +127,15 @@ async function generateReflectionBlock(
     .join('\n')
 
   try {
+    const { getModelForUseCase } = await import('@/lib/ai/model-config')
     const anthropic = withUsageLogging(new Anthropic({ apiKey }), 'podcast_intermezzo')
+    // Default Sonnet 5 (nicht Haiku): der Reflexionsblock ist kurz, braucht aber
+    // echte kreative/emotionale Nuance und verlaessliches Instruction-Following
+    // (v.a. den Sprach-Pin) — Haiku produzierte flacheren, driftenden Dialog.
+    const model = await getModelForUseCase('podcast_intermezzo')
     const prompt = buildReflectionPrompt(trailingLines, leadingLines, language)
     const response = await anthropic.messages.create({
-      model: REFLECTION_MODEL,
+      model,
       max_tokens: 1200,
       messages: [{ role: 'user', content: prompt }],
     })

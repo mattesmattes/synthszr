@@ -29,10 +29,12 @@ export async function POST(request: NextRequest) {
   const scriptContext = script ? script.slice(0, 1500) : null
 
   try {
+    const { getModelForUseCase } = await import('@/lib/ai/model-config')
     const client = withUsageLogging(new Anthropic(), 'podcast_metadata_translation')
+    const model = await getModelForUseCase('podcast_metadata_translation')
 
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model,
       max_tokens: 1024,
       messages: [
         {

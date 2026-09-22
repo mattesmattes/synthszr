@@ -101,19 +101,23 @@ function isFavoriteModel(id: string): boolean {
 const USE_CASE_GROUPS: Array<{ title: string; useCases: string[] }> = [
   {
     title: 'Content-Erstellung',
-    useCases: ['ghostwriter', 'article_planning', 'proofreading', 'enrich', 'podcast_script'],
+    useCases: ['ghostwriter', 'ghostwriter_take', 'article_planning', 'proofreading', 'enrich', 'wrapup'],
   },
   {
     title: 'Analyse & Verarbeitung',
-    useCases: ['synthesis_scoring', 'edit_analysis', 'pattern_extraction', 'queue_ranking', 'subscription_detect'],
+    useCases: ['synthesis_scoring', 'edit_analysis', 'pattern_extraction', 'queue_ranking', 'subscription_detect', 'comment_moderation', 'search_rerank', 'techmeme_relevance'],
   },
   {
     title: 'Rankings (Synthszr Charts)',
-    useCases: ['ranking_extract', 'ranking_attribution_qa', 'ranking_validity_qa'],
+    useCases: ['ranking_extract', 'ranking_attribution_qa', 'ranking_validity_qa', 'ranking_categorize', 'ranking_enrich', 'ranking_research', 'ranking_distill'],
   },
   {
     title: 'Fachbegriff-Lexikon',
-    useCases: ['glossary_candidate_identification', 'glossary_generation', 'glossary_readability_qa', 'glossary_news_context', 'glossary_product_assignment', 'glossary_review', 'glossary_translation'],
+    useCases: ['glossary_candidate_identification', 'glossary_generation', 'glossary_readability_qa', 'glossary_news_context', 'glossary_mention_context_qa', 'glossary_product_assignment', 'glossary_review', 'glossary_translation'],
+  },
+  {
+    title: 'Podcast',
+    useCases: ['podcast_script', 'podcast_modes', 'podcast_show_notes', 'podcast_intermezzo', 'podcast_memory', 'podcast_episode', 'podcast_metadata_translation'],
   },
   {
     title: 'Bildgenerierung',

@@ -51,8 +51,6 @@ interface ExtractionResult {
   tone_summary: string
 }
 
-const EXTRACTION_MODEL = 'claude-haiku-4-5-20251001'
-
 /**
  * Distil a finished podcast script into a memory row.
  * Async + idempotent — re-running for the same job_id overwrites.
@@ -77,11 +75,13 @@ export async function extractEpisodeMemory(params: {
       console.warn('[PodcastMemory] No ANTHROPIC_API_KEY, skipping extraction')
       return
     }
+    const { getModelForUseCase } = await import('@/lib/ai/model-config')
     const anthropic = withUsageLogging(new Anthropic({ apiKey }), 'podcast_memory')
+    const model = await getModelForUseCase('podcast_memory')
 
     const prompt = buildExtractionPrompt(script)
     const response = await anthropic.messages.create({
-      model: EXTRACTION_MODEL,
+      model,
       max_tokens: 1500,
       messages: [{ role: 'user', content: prompt }],
     })

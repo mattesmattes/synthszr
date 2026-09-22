@@ -166,7 +166,7 @@ export async function refreshModes(
     const Anthropic = (await import('@anthropic-ai/sdk')).default
     const { getModelForUseCase } = await import('@/lib/ai/model-config')
     const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'podcast_modes')
-    const model = await getModelForUseCase('ghostwriter')
+    const model = await getModelForUseCase('podcast_modes')
 
     const resp = await client.messages.create({
       model,

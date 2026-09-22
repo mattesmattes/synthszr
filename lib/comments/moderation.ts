@@ -59,9 +59,11 @@ export async function moderateComment(body: string, articleTitle: string): Promi
     return { verdict: 'review', reason: 'Moderation nicht verfügbar (kein API-Key)' }
   }
   try {
+    const { getModelForUseCase } = await import('@/lib/ai/model-config')
     const anthropic = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'comment_moderation')
+    const model = await getModelForUseCase('comment_moderation')
     const res = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model,
       max_tokens: 300,
       tools: [MODERATION_TOOL],
       tool_choice: { type: 'tool', name: MODERATION_TOOL.name },

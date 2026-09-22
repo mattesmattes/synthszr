@@ -70,7 +70,7 @@ export async function buildWeekWrapup(
   const topics = await collectWeekTopics(supabase, week.mondayIso, week.saturdayEndIso)
   if (topics.length === 0) return { status: 'no_topics', weekLabel: week.label, topicCount: 0 }
 
-  const model = opts.model || (await getModelForUseCase('ghostwriter'))
+  const model = opts.model || (await getModelForUseCase('wrapup'))
   const { title, parts } = await generateWrapupParts(topics, week.label, model)
   let tiptap = assembleWrapupDoc(topics, parts) as Record<string, unknown>
 

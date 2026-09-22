@@ -82,7 +82,7 @@ export async function filterRelevantStories(headlines: string[]): Promise<Releva
     const Anthropic = (await import('@anthropic-ai/sdk')).default
     const { getModelForUseCase } = await import('@/lib/ai/model-config')
     const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'techmeme_relevance')
-    const model = await getModelForUseCase('glossary_candidate_identification')
+    const model = await getModelForUseCase('techmeme_relevance')
 
     const resp = await client.messages.create({
       model,

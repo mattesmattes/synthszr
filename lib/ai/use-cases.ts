@@ -32,6 +32,21 @@ export type UseCase =
   | 'glossary_product_assignment'
   | 'glossary_review'
   | 'glossary_translation'
+  | 'ghostwriter_take'
+  | 'wrapup'
+  | 'comment_moderation'
+  | 'search_rerank'
+  | 'techmeme_relevance'
+  | 'ranking_categorize'
+  | 'ranking_enrich'
+  | 'ranking_research'
+  | 'ranking_distill'
+  | 'podcast_modes'
+  | 'podcast_show_notes'
+  | 'podcast_intermezzo'
+  | 'podcast_memory'
+  | 'podcast_episode'
+  | 'podcast_metadata_translation'
 
 export interface UseCaseInfo {
   label: string
@@ -175,6 +190,102 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
     label: 'Glossar — Übersetzung',
     description: 'Lexikoneintrag (Name, Aliasse, Summary, Erklärungstext) in eine Zielsprache übersetzen',
     defaultModel: 'claude-sonnet-5',
+    allowedProviders: ['anthropic'],
+  },
+  // Ab hier: Use Cases, die bis 2026-09-22 keinen eigenen Modell-Schalter hatten
+  // — entweder fest verdrahtet (Konstante/Literal im Code) oder heimlich an
+  // das Modell eines fachlich anderen Use Case gekoppelt (z.B. techmeme_relevance
+  // an glossary_candidate_identification). defaultModel entspricht bewusst dem
+  // bisherigen tatsaechlichen Verhalten — kein Modellwechsel, nur ein eigener
+  // Schalter dafuer (Betreiber-Wunsch 2026-09-22: "granularer auf Basis der Jobs").
+  ghostwriter_take: {
+    label: 'Ghostwriter — Synthszr Take',
+    description: 'Abschliessender Meinungsabsatz eines Artikels (bisher am Ghostwriter-Modell mitgehangen)',
+    defaultModel: 'claude-opus-5',
+    allowedProviders: ['anthropic'],
+  },
+  wrapup: {
+    label: 'Wochenrückblick',
+    description: 'Wochenrückblick-Artikel aus den Wochenthemen generieren',
+    defaultModel: 'claude-opus-5',
+    allowedProviders: ['anthropic'],
+  },
+  comment_moderation: {
+    label: 'Kommentare — Moderation',
+    description: 'Nutzer-Kommentare auf problematische Inhalte pruefen',
+    defaultModel: 'claude-haiku-4-5-20251001',
+    allowedProviders: ['anthropic'],
+  },
+  search_rerank: {
+    label: 'Suche — Neu-Sortierung',
+    description: 'Suchergebnisse nach inhaltlicher Relevanz neu ordnen',
+    defaultModel: 'claude-haiku-4-5-20251001',
+    allowedProviders: ['anthropic'],
+  },
+  techmeme_relevance: {
+    label: 'Techmeme — Relevanz-Filter',
+    description: 'Themen von der Techmeme-Startseite auf KI-/Tech-Relevanz pruefen',
+    defaultModel: 'claude-sonnet-4-5-20250929',
+    allowedProviders: ['anthropic'],
+  },
+  ranking_categorize: {
+    label: 'Rankings — Kategorisierung',
+    description: 'Chart-Produkte einer der 50 Produktkategorien zuordnen',
+    defaultModel: 'claude-haiku-4-5-20251001',
+    allowedProviders: ['anthropic'],
+  },
+  ranking_enrich: {
+    label: 'Rankings — Merkmal-Anreicherung',
+    description: 'Sentiment und Vergleichsmerkmale aus Belegstellen eines Produkts extrahieren',
+    defaultModel: 'claude-haiku-4-5-20251001',
+    allowedProviders: ['anthropic'],
+  },
+  ranking_research: {
+    label: 'Rankings — Produkt-Recherche',
+    description: 'Produktbeschreibung und Hintergrund fuer die Produktseite recherchieren',
+    defaultModel: 'claude-sonnet-5',
+    allowedProviders: ['anthropic'],
+  },
+  ranking_distill: {
+    label: 'Rankings — Dimensionen-Destillation',
+    description: 'Die 5-8 wichtigsten Vergleichsdimensionen einer Kategorie aus den Produktbelegen destillieren',
+    defaultModel: 'claude-haiku-4-5-20251001',
+    allowedProviders: ['anthropic'],
+  },
+  podcast_modes: {
+    label: 'Podcast — Intro/Outro-Modi',
+    description: 'Woechentlich neue Einstiegs- und Schlussarten fuer den Podcast generieren',
+    defaultModel: 'claude-opus-5',
+    allowedProviders: ['anthropic'],
+  },
+  podcast_show_notes: {
+    label: 'Podcast — Shownotes',
+    description: 'Shownotes zu einer Podcast-Folge schreiben',
+    defaultModel: 'claude-haiku-4-5-20251001',
+    allowedProviders: ['anthropic'],
+  },
+  podcast_intermezzo: {
+    label: 'Podcast — Intermezzo',
+    description: 'Reflektierendes Zwischenstueck der Podcast-Persona schreiben',
+    defaultModel: 'claude-sonnet-5',
+    allowedProviders: ['anthropic'],
+  },
+  podcast_memory: {
+    label: 'Podcast — Gedaechtnis-Extraktion',
+    description: 'Erinnerungswuerdige Details aus einer Folge fuer kuenftige Episoden extrahieren',
+    defaultModel: 'claude-haiku-4-5-20251001',
+    allowedProviders: ['anthropic'],
+  },
+  podcast_episode: {
+    label: 'Podcast — Episoden-Text (Persona)',
+    description: 'Persona-basiertes Skript mit Gedaechtnis- und Beziehungskontext generieren',
+    defaultModel: 'claude-sonnet-4-20250514',
+    allowedProviders: ['anthropic'],
+  },
+  podcast_metadata_translation: {
+    label: 'Podcast — Metadaten-Übersetzung',
+    description: 'Podcast-Titel und -Beschreibung in eine Zielsprache uebersetzen',
+    defaultModel: 'claude-haiku-4-5-20251001',
     allowedProviders: ['anthropic'],
   },
 }

@@ -25,7 +25,6 @@ interface RerankableHit {
   snippet: string | null
 }
 
-const RERANK_MODEL = 'claude-haiku-4-5-20251001'
 const MAX_CANDIDATES = 20
 const TIMEOUT_MS = 6000
 
@@ -65,13 +64,15 @@ TREFFER:
 ${numbered}`
 
   try {
+    const { getModelForUseCase } = await import('@/lib/ai/model-config')
     const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'search_rerank')
+    const model = await getModelForUseCase('search_rerank')
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
     const response = await client.messages.create(
       {
-        model: RERANK_MODEL,
+        model,
         max_tokens: 256,
         messages: [{ role: 'user', content: prompt }],
       },

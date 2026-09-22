@@ -36,7 +36,9 @@ export async function distillCategoryDimensions(categorySlug: string, categoryNa
 
   const Anthropic = (await import('@anthropic-ai/sdk')).default
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { getModelForUseCase } = await import('@/lib/ai/model-config')
   const client: any = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'ranking_distill')
+  const model = await getModelForUseCase('ranking_distill')
   const tool = {
     name: 'report_dimensions',
     description: 'Melde die Vergleichs-Dimensionen der Kategorie',
@@ -55,7 +57,7 @@ KEINE generischen oder redundanten Dimensionen wie "Anbieter", "Hersteller", "Mo
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
   try {
     const resp = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001', max_tokens: 500,
+      model, max_tokens: 500,
       tools: [tool], tool_choice: { type: 'tool', name: 'report_dimensions' },
       messages: [{ role: 'user', content: prompt }],
     }, { signal: controller.signal })
