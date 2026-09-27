@@ -111,4 +111,14 @@ export interface GlossaryCandidate {
    *  „nicht als veröffentlicht bekannt" — solche Kandidaten werden weiterhin
    *  angezeigt, das Panel verliert also nichts, was es früher zeigte. */
   alreadyPublished?: boolean
+  /** true, wenn der Freigabe-Lauf ('pending'-Job) die Erzeugung aus INHALTLICHEN
+   *  Gründen aufgegeben hat — weder Überlast noch Request-Fehler, sondern z. B.
+   *  eine ungültige Tool-Antwort. Solche Kandidaten werden nicht erneut erzeugt
+   *  und zählen nicht mehr als offen.
+   *
+   *  PROD-BEFUND 2026-09-26: "Voxel" scheiterte elfmal in Folge, der Job hielt
+   *  ihn für offen und gab nach zehn Durchgängen auf — die übrigen ~100
+   *  bestätigten Begriffe des Artikels wurden nie verlinkt. Gleiche Regel wie im
+   *  Lexikon-Crawl (crawl.ts: inhaltlich gescheitert → aus der Liste). */
+  generationFailed?: boolean
 }

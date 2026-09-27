@@ -14,6 +14,7 @@
  */
 import { z } from 'zod'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { createToolCall } from '@/lib/claude/tool-call'
 
 const VerdictSchema = z.object({
   keep: z.array(z.number().int()),
@@ -84,7 +85,7 @@ export async function filterRelevantStories(headlines: string[]): Promise<Releva
     const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'techmeme_relevance')
     const model = await getModelForUseCase('techmeme_relevance')
 
-    const resp = await client.messages.create({
+    const resp = await createToolCall(client, {
       model,
       max_tokens: 1024,
       tools: [RELEVANCE_TOOL],

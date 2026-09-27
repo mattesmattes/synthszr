@@ -382,7 +382,7 @@ describe('advanceJob (pending)', () => {
     const clock = workClock(1000)
     mocks.pendingUnit.mockImplementation(async () => {
       clock.advance()
-      return { generated: ['Slop'], failed: [], remaining: 1, linked: 0 }
+      return { generated: ['Slop'], failed: [], skipped: [], remaining: 1, linked: 0 }
     })
 
     await advanceJob(client, { ...PENDING_JOB }, { now: clock.now, budgetMs: 240_000 })
@@ -397,8 +397,8 @@ describe('advanceJob (pending)', () => {
     // sonst leakt der zweite Rueckgabewert in den naechsten Test (vi.clearAllMocks
     // in beforeEach loescht nur Aufrufdaten, nicht die Once-Warteschlange).
     mocks.pendingUnit
-      .mockImplementationOnce(async () => { clock.advance(); return { generated: ['Slop'], failed: [], remaining: 1, linked: 0 } })
-      .mockImplementationOnce(async () => { clock.advance(); return { generated: [], failed: ['Reward Hacking'], remaining: 1, linked: 0 } })
+      .mockImplementationOnce(async () => { clock.advance(); return { generated: ['Slop'], failed: [], skipped: [], remaining: 1, linked: 0 } })
+      .mockImplementationOnce(async () => { clock.advance(); return { generated: [], failed: ['Reward Hacking'], skipped: [], remaining: 1, linked: 0 } })
 
     const res = await advanceJob(client, { ...PENDING_JOB, attempts: 0 }, { now: clock.now, budgetMs: 240_000 })
 
@@ -418,12 +418,34 @@ describe('advanceJob (pending)', () => {
     expect(res.finished).toBe(false)
   })
 
+  // PROD-BEFUND 2026-09-26: ein inhaltlich gescheiterter Begriff ("Voxel")
+  // blockierte den Lauf zehn Durchgaenge lang. Ueberspringen ist Fortschritt:
+  // der Tick macht mit dem naechsten Kandidaten weiter, statt abzubrechen.
+  it('protokolliert einen uebersprungenen Begriff und macht im selben Tick weiter', async () => {
+    const { advanceJob } = await import('@/lib/glossary/jobs/advance')
+    const clock = workClock(1000)
+    mocks.pendingUnit
+      .mockImplementationOnce(async () => { clock.advance(); return { generated: [], failed: [], skipped: ['Voxel'], remaining: 1, linked: 0 } })
+      .mockImplementationOnce(async () => { clock.advance(); return { generated: ['Slop'], failed: [], skipped: [], remaining: 0, linked: 1 } })
+
+    const res = await advanceJob(client, { ...PENDING_JOB }, { now: clock.now, budgetMs: 240_000 })
+
+    expect(mocks.appendLog).toHaveBeenCalledWith(
+      client, expect.anything(),
+      [{ at: expect.any(String), text: 'Voxel — inhaltlich gescheitert, übersprungen (siehe Server-Log)', ok: false }],
+      0,
+    )
+    expect(mocks.pendingUnit).toHaveBeenCalledTimes(2)
+    expect(res.finished).toBe(true)
+    expect(mocks.finishJob).toHaveBeenCalledWith(client, 'j1', 'done')
+  })
+
   it('endet den Job (exhausted), wenn nach der Einheit nichts mehr offen ist', async () => {
     const { advanceJob } = await import('@/lib/glossary/jobs/advance')
     const clock = workClock(1000)
     mocks.pendingUnit.mockImplementation(async () => {
       clock.advance()
-      return { generated: ['Reward Hacking'], failed: [], remaining: 0, linked: 2 }
+      return { generated: ['Reward Hacking'], failed: [], skipped: [], remaining: 0, linked: 2 }
     })
 
     const res = await advanceJob(client, { ...PENDING_JOB }, { now: clock.now, budgetMs: 240_000 })
@@ -440,7 +462,7 @@ describe('advanceJob (pending)', () => {
     const clock = workClock(1000)
     mocks.pendingUnit.mockImplementation(async () => {
       clock.advance()
-      return { generated: [], failed: ['Kaputt'], remaining: 3, linked: 0 }
+      return { generated: [], failed: ['Kaputt'], skipped: [], remaining: 3, linked: 0 }
     })
 
     const res = await advanceJob(client, { ...PENDING_JOB }, { now: clock.now, budgetMs: 240_000 })
@@ -456,7 +478,7 @@ describe('advanceJob (pending)', () => {
     const clock = workClock(1000)
     mocks.pendingUnit.mockImplementation(async () => {
       clock.advance()
-      return { generated: [], failed: ['Kaputt'], remaining: 3, linked: 0 }
+      return { generated: [], failed: ['Kaputt'], skipped: [], remaining: 3, linked: 0 }
     })
 
     const res = await advanceJob(client, { ...PENDING_JOB, attempts: 9 }, { now: clock.now, budgetMs: 240_000 })
@@ -475,7 +497,7 @@ describe('advanceJob (pending)', () => {
     const clock = workClock(1000)
     mocks.pendingUnit.mockImplementation(async () => {
       clock.advance()
-      return { generated: [], failed: [], remaining: 0, linked: 1, publishFailed: ['Reward Hacking'] }
+      return { generated: [], failed: [], skipped: [], remaining: 0, linked: 1, publishFailed: ['Reward Hacking'] }
     })
 
     const res = await advanceJob(client, { ...PENDING_JOB, attempts: 0 }, { now: clock.now, budgetMs: 240_000 })
@@ -513,7 +535,7 @@ describe('advanceJob (pending)', () => {
     const clock = workClock(1000)
     mocks.pendingUnit.mockImplementation(async () => {
       clock.advance()
-      return { generated: ['Slop'], failed: [], remaining: 0, linked: 1 }
+      return { generated: ['Slop'], failed: [], skipped: [], remaining: 0, linked: 1 }
     })
 
     await advanceJob(client, { ...PENDING_JOB }, { now: clock.now, budgetMs: 240_000 })

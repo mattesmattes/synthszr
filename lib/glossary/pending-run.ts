@@ -32,6 +32,9 @@ export interface PendingRunResult {
   generated: string[]
   /** Name des Kandidaten, dessen Erzeugung in dieser Einheit fehlgeschlagen ist. */
   failed: string[]
+  /** Namen der in dieser Einheit INHALTLICH gescheiterten Kandidaten — sie
+   *  werden als generationFailed markiert und blockieren den Lauf nicht mehr. */
+  skipped: string[]
   /** Noch offene bestätigte Kandidaten NACH dieser Einheit. */
   remaining: number
   /** Anzahl bei Abschluss tatsächlich veröffentlichter Begriffe (0, solange remaining > 0). */
@@ -65,11 +68,23 @@ export async function runPendingUnit(
     (beforeRow as { pending_glossary_terms?: unknown } | null)?.pending_glossary_terms ?? []
   ) as GlossaryCandidate[]
   const nameBySlug = new Map(before.map((c) => [c.slug, c.name]))
-  // Vorab bestätigte + generierungsbedürftige Kandidaten — die Menge, aus der
-  // ensureConfirmedTermsExist mit limit=1 seinen "missing"-Batch bildet.
-  const beforeEligible = before.filter((c) => confirmed.has(c.slug) && c.needsGeneration)
+  // Offen = bestätigt, noch zu erzeugen und nicht aufgegeben. Dieselbe Menge,
+  // aus der ensureConfirmedTermsExist mit limit=1 seinen "missing"-Batch bildet.
+  const isOpen = (c: GlossaryCandidate) => confirmed.has(c.slug) && !!c.needsGeneration && !c.generationFailed
+  const beforeEligible = before.filter(isOpen)
 
   const ensured = await ensureConfirmedTermsExist(supabase, postId, confirmedSlugs, 1)
+
+  // Inhaltlich gescheitert (s. GlossaryCandidate.generationFailed): markieren
+  // statt offen lassen. Überlast und Request-Fehler zählen hier nicht dazu —
+  // die bleiben offen, und nach zehn Durchgängen ohne Fortschritt gibt der Job
+  // sichtbar auf.
+  const contentFailed = new Set(ensured.contentFailedSlugs ?? [])
+  if (ensured.pendingRemainder !== null && contentFailed.size > 0) {
+    ensured.pendingRemainder = ensured.pendingRemainder.map((c) =>
+      contentFailed.has(c.slug) ? { ...c, generationFailed: true } : c,
+    )
+  }
 
   // Vormerkliste fortschreiben. `pendingRemainder === null` heißt "nichts mehr
   // offen"; geleert wird sie trotzdem erst unten — und nur bei erfolgreicher
@@ -84,9 +99,7 @@ export async function runPendingUnit(
   }
 
   const remainder: GlossaryCandidate[] = ensured.pendingRemainder ?? []
-  const stillOpenSlugs = new Set(
-    remainder.filter((c) => confirmed.has(c.slug) && c.needsGeneration).map((c) => c.slug),
-  )
+  const stillOpenSlugs = new Set(remainder.filter(isOpen).map((c) => c.slug))
   const remaining = stillOpenSlugs.size
 
   const generatedSlugSet = new Set(ensured.generatedSlugs)
@@ -103,6 +116,7 @@ export async function runPendingUnit(
     (c) => !generatedSlugSet.has(c.slug) && stillOpenSlugs.has(c.slug),
   ) ?? null
   const failed = generated.length === 0 && attempted ? [attempted.name] : []
+  const skipped = [...contentFailed].map((slug) => nameBySlug.get(slug) ?? slug)
 
   // Nichts mehr offen → jetzt verlinken und veröffentlichen. Erst hier, nicht
   // nach jedem Begriff: die Injektion läuft über den ganzen Artikeltext und
@@ -110,6 +124,13 @@ export async function runPendingUnit(
   let linked = 0
   let publishFailed: string[] | undefined
   if (remaining === 0) {
+    // Aufgegebene Kandidaten gibt es nicht als Begriff — sie aus der Menge
+    // nehmen, sonst zählten sie unten als "nicht veröffentlicht" und der Job
+    // endete mit Fehler, obwohl alles Machbare verlinkt ist.
+    const abandoned = new Set(
+      [...before, ...remainder].filter((c) => c.generationFailed).map((c) => c.slug),
+    )
+    const publishable = confirmedSlugs.filter((s) => !abandoned.has(s))
     // Content AUS DER DATENBANK laden und übergeben: ohne ihn veröffentlicht
     // applyGlossaryConfirmation nur die Begriffe und injiziert keine Marks —
     // die Verlinkung bliebe dann still aus.
@@ -119,7 +140,7 @@ export async function runPendingUnit(
     const result = await applyGlossaryConfirmation(
       supabase,
       postId,
-      confirmedSlugs,
+      publishable,
       typeof currentContent === 'string' ? currentContent : JSON.stringify(currentContent ?? null),
     )
     linked = result.publishedSlugs.length
@@ -128,7 +149,7 @@ export async function runPendingUnit(
     // ist der Review-Fund: transienter Lesefehler im Status-Check
     // (confirm.ts:56-65), ein fehlgeschlagenes Publish-Update (confirm.ts:
     // 52-54), oder ein bestätigter Slug ist inzwischen hidden/gelöscht.
-    const notPublished = confirmedSlugs.filter((s) => !result.publishedSlugs.includes(s))
+    const notPublished = publishable.filter((s) => !result.publishedSlugs.includes(s))
     if (notPublished.length > 0) {
       publishFailed = notPublished.map((s) => nameBySlug.get(s) ?? s)
     }
@@ -149,5 +170,5 @@ export async function runPendingUnit(
     }
   }
 
-  return { generated, failed, remaining, linked, publishFailed }
+  return { generated, failed, skipped, remaining, linked, publishFailed }
 }

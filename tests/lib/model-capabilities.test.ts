@@ -18,35 +18,38 @@
 import { describe, expect, it } from 'vitest'
 import { getModelCapabilities } from '@/lib/claude/model-capabilities'
 
-// [modelId, adaptiveThinking, supportsEffort, rejectsSampling, supportsDisabledThinking]
-// Die letzte Spalte kam am 2026-08-07 dazu: Fable 5 lehnt thinking.type.disabled
-// mit HTTP 400 ab, alle anderen bekannten Modelle vertragen es.
-const KNOWN: Array<[string, boolean, boolean, boolean, boolean]> = [
+// [modelId, adaptiveThinking, supportsEffort, rejectsSampling, supportsDisabledThinking, supportsForcedToolChoice]
+// Spalte 5 kam am 2026-08-07 dazu: Fable 5 lehnt thinking.type.disabled mit
+// HTTP 400 ab. Spalte 6 am 2026-09-27: Opus 5.5 lehnt zusaetzlich erzwungenes
+// tool_choice ab (Wochenrueckblick, req_011CfTTffHvD8P7KgUDnMb2m).
+const KNOWN: Array<[string, boolean, boolean, boolean, boolean, boolean]> = [
   // 2026er Frontier: adaptives Thinking, effort, lehnen temperature ab
-  ['claude-opus-5', true, true, true, true],
-  ['claude-sonnet-5', true, true, true, true],
-  ['claude-fable-5', true, true, true, false],
-  ['claude-mythos-5', true, true, true, true],
+  ['claude-opus-5', true, true, true, true, true],
+  ['claude-opus-5-5', true, true, true, false, false],
+  ['claude-sonnet-5', true, true, true, true, true],
+  ['claude-fable-5', true, true, true, false, true],
+  ['claude-fable-5-1', true, true, true, false, false],
+  ['claude-mythos-5', true, true, true, true, true],
   // Opus 4.7/4.8: adaptiv + effort, lehnen sampling ab
-  ['claude-opus-4-8', true, true, true, true],
-  ['claude-opus-4-7', true, true, true, true],
+  ['claude-opus-4-8', true, true, true, true, true],
+  ['claude-opus-4-7', true, true, true, true, true],
   // Opus 4.6: adaptiv + effort, akzeptiert temperature
-  ['claude-opus-4-6', true, true, false, true],
+  ['claude-opus-4-6', true, true, false, true, true],
   // Opus 4.5: NOCH budget_tokens, aber schon effort
-  ['claude-opus-4-5', false, true, false, true],
+  ['claude-opus-4-5', false, true, false, true, true],
   // Sonnet 4.6: adaptiv + effort, akzeptiert temperature
-  ['claude-sonnet-4-6', true, true, false, true],
+  ['claude-sonnet-4-6', true, true, false, true, true],
   // Sonnet 4.5 / Haiku 4.5: alte Form, kein effort
-  ['claude-sonnet-4-5', false, false, false, true],
-  ['claude-haiku-4-5-20251001', false, false, false, true],
+  ['claude-sonnet-4-5', false, false, false, true, true],
+  ['claude-haiku-4-5-20251001', false, false, false, true, true],
 ]
 
 describe('getModelCapabilities', () => {
   it.each(KNOWN)(
     '%s behält die Flags der bisherigen Allowlist-Logik',
-    (id, adaptiveThinking, supportsEffort, rejectsSampling, supportsDisabledThinking) => {
+    (id, adaptiveThinking, supportsEffort, rejectsSampling, supportsDisabledThinking, supportsForcedToolChoice) => {
       expect(getModelCapabilities(id)).toEqual({
-        adaptiveThinking, supportsEffort, rejectsSampling, supportsDisabledThinking,
+        adaptiveThinking, supportsEffort, rejectsSampling, supportsDisabledThinking, supportsForcedToolChoice,
       })
     },
   )
@@ -69,7 +72,7 @@ describe('getModelCapabilities', () => {
     // Thinking angeboten bekommen, das es nicht kennt.
     expect(getModelCapabilities('claude-3-5-sonnet-20241022')).toEqual({
       adaptiveThinking: false, supportsEffort: false, rejectsSampling: false,
-      supportsDisabledThinking: true,
+      supportsDisabledThinking: true, supportsForcedToolChoice: true,
     })
   })
 
@@ -93,4 +96,24 @@ describe('supportsDisabledThinking', () => {
     expect(caps.supportsDisabledThinking).toBe(false)
   })
 })
+
+  it('Opus 5.5 vertraegt kein disabled (Prod 2026-09-27, Wochenrueckblick)', () => {
+    expect(getModelCapabilities('claude-opus-5-5').supportsDisabledThinking).toBe(false)
+  })
+})
+
+// PROD-BEFUND 2026-09-27: claude-opus-5-5 lehnt tool_choice {type:'tool'|'any'}
+// mit HTTP 400 ab — der Wochenrueckblick und der Lesbarkeits-Check des Lexikons
+// scheiterten daran (letzterer still, readability_score blieb null).
+describe('supportsForcedToolChoice', () => {
+  it('Opus 5.5 und Fable 5.1 vertragen kein erzwungenes tool_choice', () => {
+    expect(getModelCapabilities('claude-opus-5-5').supportsForcedToolChoice).toBe(false)
+    expect(getModelCapabilities('claude-fable-5-1').supportsForcedToolChoice).toBe(false)
+  })
+
+  it('Opus 5 und Fable 5 vertragen es weiter — das Muster darf nicht zu breit greifen', () => {
+    expect(getModelCapabilities('claude-opus-5').supportsForcedToolChoice).toBe(true)
+    expect(getModelCapabilities('claude-fable-5').supportsForcedToolChoice).toBe(true)
+    expect(getModelCapabilities('claude-opus-5-50').supportsForcedToolChoice).toBe(true)
+  })
 })

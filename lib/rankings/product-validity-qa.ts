@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { createToolCall } from '@/lib/claude/tool-call'
 
 /**
  * Kontextbasierte Produkt-Validitäts-QS: Der Extraktor (Haiku) legt gelegentlich
@@ -84,7 +85,7 @@ async function decideValidity(c: ValidityCandidate): Promise<ValidityDecision | 
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
   try {
     const model = await getModelForUseCase('ranking_validity_qa')
-    const resp = await client.messages.create({
+    const resp = await createToolCall(client, {
       model, max_tokens: 512, tools: [tool],
       tool_choice: { type: 'tool', name: 'judge_validity' },
       messages: [{ role: 'user', content: buildValidityPrompt(c) }],

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { createToolCall } from '@/lib/claude/tool-call'
 
 export interface ExtractedProduct { name: string; vendor: string; excerpt?: string }
 export type ExtractProductsResult =
@@ -90,7 +91,7 @@ export async function extractProducts(title: string, content: string): Promise<E
         required: ['products'],
       },
     }
-    const resp = await client.messages.create({
+    const resp = await createToolCall(client, {
       model, max_tokens: 1536, tools: [tool],
       tool_choice: { type: 'tool', name: 'report_products' },
       // System-Prompt (stabil) mit Prompt-Caching: spart ~90% auf dem wiederkehrenden

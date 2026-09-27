@@ -14,10 +14,14 @@ import type { GlossaryCandidate } from '@/lib/glossary/types'
 
 const mocks = vi.hoisted(() => ({
   generateAndInsertDraft: vi.fn(),
+  retryable: vi.fn(() => false),
+  configError: vi.fn(() => false),
 }))
 
 vi.mock('@/lib/glossary/draft-writer', () => ({
   generateAndInsertDraft: mocks.generateAndInsertDraft,
+  lastGenerationFailureWasRetryable: mocks.retryable,
+  lastGenerationFailureWasConfigError: mocks.configError,
 }))
 
 /** Kandidat, wie ihn buildCandidateList seit der Entkopplung vormerkt. */
@@ -53,6 +57,8 @@ function fakeSupabase() {
 }
 
 beforeEach(() => {
+  mocks.retryable.mockReturnValue(false)
+  mocks.configError.mockReturnValue(false)
   mocks.generateAndInsertDraft.mockReset()
   mocks.generateAndInsertDraft.mockImplementation(async (_sb: unknown, name: string, slug: string) => ({
     slug, canonicalName: name, aliases: [], summary: `Kurzfassung von ${name}.`,
@@ -153,6 +159,50 @@ describe('ensureConfirmedTermsExist', () => {
     expect(result.generatedSlugs).toEqual(['geht'])
     // … und bleibt vorgemerkt, damit ein zweiter Versuch möglich ist.
     expect(result.pendingRemainder?.map((c) => c.slug)).toEqual(['kaputt'])
+  })
+
+  // PROD-BEFUND 2026-09-26: "Voxel" scheiterte elfmal inhaltlich (ungültige
+  // Tool-Antwort), der pending-Job hielt ihn für offen und gab nach zehn
+  // Durchgängen auf — der ganze Artikel blieb unverlinkt. Der Aufrufer braucht
+  // die Unterscheidung, um so einen Kandidaten überspringen zu können.
+  it('meldet einen inhaltlich gescheiterten Kandidaten als contentFailed', async () => {
+    state.candidates = [pending('voxel', 'Voxel')]
+    mocks.generateAndInsertDraft.mockResolvedValue(null)
+    const { ensureConfirmedTermsExist } = await import('@/lib/glossary/ensure-terms')
+    const result = await ensureConfirmedTermsExist(fakeSupabase() as never, 'p1', ['voxel'], 1)
+    expect(result.contentFailedSlugs).toEqual(['voxel'])
+  })
+
+  it('meldet Überlast und Request-Fehler NICHT als contentFailed — die bleiben regulär offen', async () => {
+    state.candidates = [pending('a', 'A')]
+    mocks.generateAndInsertDraft.mockResolvedValue(null)
+    const { ensureConfirmedTermsExist } = await import('@/lib/glossary/ensure-terms')
+
+    mocks.retryable.mockReturnValue(true)
+    expect((await ensureConfirmedTermsExist(fakeSupabase() as never, 'p1', ['a'], 1)).contentFailedSlugs).toEqual([])
+
+    mocks.retryable.mockReturnValue(false)
+    mocks.configError.mockReturnValue(true)
+    expect((await ensureConfirmedTermsExist(fakeSupabase() as never, 'p1', ['a'], 1)).contentFailedSlugs).toEqual([])
+  })
+
+  it('erzeugt einen als generationFailed markierten Kandidaten nicht erneut, verliert ihn aber nicht', async () => {
+    state.candidates = [{ ...pending('voxel', 'Voxel'), generationFailed: true }, pending('geht', 'Geht')]
+    const { ensureConfirmedTermsExist } = await import('@/lib/glossary/ensure-terms')
+    const result = await ensureConfirmedTermsExist(fakeSupabase() as never, 'p1', ['voxel', 'geht'], 1)
+    expect(mocks.generateAndInsertDraft).toHaveBeenCalledTimes(1)
+    expect(mocks.generateAndInsertDraft.mock.calls[0][2]).toBe('geht')
+    expect(result.generatedSlugs).toEqual(['geht'])
+  })
+
+  it('behält einen markierten Kandidaten in der Liste, wenn noch anderes offen ist', async () => {
+    const voxel = { ...pending('voxel', 'Voxel'), generationFailed: true }
+    state.candidates = [voxel, pending('a', 'A'), pending('b', 'B')]
+    const { ensureConfirmedTermsExist } = await import('@/lib/glossary/ensure-terms')
+    const result = await ensureConfirmedTermsExist(fakeSupabase() as never, 'p1', ['voxel', 'a', 'b'], 1)
+    // 'b' liegt über dem Deckel und bleibt offen — die Liste wird also
+    // geschrieben, und die Markierung an 'voxel' darf dabei nicht verloren gehen.
+    expect(result.pendingRemainder).toContainEqual(voxel)
   })
 })
 

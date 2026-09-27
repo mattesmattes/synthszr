@@ -87,6 +87,27 @@ const ACCEPTS_SAMPLING = [
 // nicht: ein falscher Eintrag nimmt einem Modell grundlos das Abschalten.
 const NO_DISABLED_THINKING = [
   /^claude-fable-5/,
+  // PROD-BEFUND 2026-09-27 (Wochenrueckblick, req_011CfTTffHvD8P7KgUDnMb2m):
+  // "thinking.type.disabled is not supported for this model. Use
+  //  thinking.type.adaptive and output_config.effort ..." — bei Opus 5.5 ist
+  // effort die einzige Stellschraube.
+  /^claude-opus-5-5(?!\d)/,
+]
+
+/**
+ * Modelle, die `tool_choice: { type: 'tool' | 'any' }` mit HTTP 400 ablehnen
+ * ("tool_choice: type \"tool\" and \"any\" are not supported for this model").
+ * Fuer sie gibt es nur `auto` — createToolCall (tool-call.ts) steuert das Tool
+ * dann ueber den Systemprompt an und prueft, ob es aufgerufen wurde.
+ *
+ * Opus 5.5 ist in Prod belegt (2026-09-27, s. oben); Fable 5.1 und Mythos 5.1
+ * laut Anthropic-Migrationsleitfaden mit derselben Aenderung. Fable 5 (ohne .1)
+ * vertraegt erzwungenes tool_choice weiterhin.
+ */
+const NO_FORCED_TOOL_CHOICE = [
+  /^claude-opus-5-5(?!\d)/,
+  /^claude-fable-5-1(?!\d)/,
+  /^claude-mythos-5-1(?!\d)/,
 ]
 
 const matches = (patterns: RegExp[], id: string) => patterns.some((p) => p.test(id))
@@ -101,6 +122,8 @@ export interface ModelCapabilities {
   /** `thinking: { type: 'disabled' }` wird akzeptiert. Wenn nicht, muss das
    *  Feld weggelassen werden — s. NO_DISABLED_THINKING. */
   supportsDisabledThinking: boolean
+  /** `tool_choice: { type: 'tool' | 'any' }` wird akzeptiert — s. NO_FORCED_TOOL_CHOICE. */
+  supportsForcedToolChoice: boolean
 }
 
 export function getModelCapabilities(modelId: string): ModelCapabilities {
@@ -109,5 +132,6 @@ export function getModelCapabilities(modelId: string): ModelCapabilities {
     supportsEffort: !matches(NO_EFFORT_SUPPORT, modelId),
     rejectsSampling: !matches(ACCEPTS_SAMPLING, modelId),
     supportsDisabledThinking: !matches(NO_DISABLED_THINKING, modelId),
+    supportsForcedToolChoice: !matches(NO_FORCED_TOOL_CHOICE, modelId),
   }
 }

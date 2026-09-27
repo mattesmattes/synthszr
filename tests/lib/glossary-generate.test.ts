@@ -235,6 +235,25 @@ describe('generateTermContent', () => {
     expect(heading?.attrs?.level).toBe(2)
   })
 
+  // PROD-BEFUND 2026-09-26: Sonnet 4.6 lieferte blocks für "Voxel" elfmal in
+  // Folge als JSON-String statt als Array ("Expected array, received string").
+  // Der pending-Job gab danach auf, der ganze Artikel blieb unverlinkt.
+  it('akzeptiert blocks, die das Modell als JSON-String liefert', async () => {
+    mocks.create
+      .mockResolvedValueOnce(toolUse({ ...contentInput, blocks: JSON.stringify(contentInput.blocks) }))
+      .mockResolvedValueOnce(toolUse(readabilityInput))
+    const { generateTermContent } = await import('@/lib/glossary/generate')
+    const t = await generateTermContent('Mixture of Experts')
+    expect(t.body.content).toHaveLength(contentInput.blocks.length)
+    expect(t.body.content[1].type).toBe('heading')
+  })
+
+  it('wirft weiter, wenn blocks ein String ohne gültiges JSON-Array ist', async () => {
+    mocks.create.mockResolvedValueOnce(toolUse({ ...contentInput, blocks: 'Absatz eins. Absatz zwei.' }))
+    const { generateTermContent } = await import('@/lib/glossary/generate')
+    await expect(generateTermContent('Mixture of Experts')).rejects.toThrow(/ungültige Tool-Antwort/)
+  })
+
   it('übernimmt den readability_score aus dem zweiten Call', async () => {
     mocks.create
       .mockResolvedValueOnce(toolUse(contentInput))

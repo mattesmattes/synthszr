@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { createToolCall } from '@/lib/claude/tool-call'
 
 /**
  * Kontextbasierte Erwähnungs-QS für Lexikon-Verlinkungen.
@@ -95,7 +96,7 @@ async function decideOne(c: MentionContextCandidate): Promise<boolean> {
       },
     }
     const model = await getModelForUseCase('glossary_mention_context_qa')
-    const resp = await client.messages.create({
+    const resp = await createToolCall(client, {
       model, max_tokens: 300, tools: [tool],
       tool_choice: { type: 'tool', name: 'judge_relevance' },
       messages: [{ role: 'user', content: buildMentionContextPrompt(c) }],

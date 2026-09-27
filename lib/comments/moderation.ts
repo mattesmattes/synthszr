@@ -15,6 +15,7 @@
  */
 import Anthropic from '@anthropic-ai/sdk'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { createToolCall } from '@/lib/claude/tool-call'
 
 export type ModerationVerdict = 'publish' | 'review' | 'reject'
 
@@ -62,7 +63,7 @@ export async function moderateComment(body: string, articleTitle: string): Promi
     const { getModelForUseCase } = await import('@/lib/ai/model-config')
     const anthropic = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'comment_moderation')
     const model = await getModelForUseCase('comment_moderation')
-    const res = await anthropic.messages.create({
+    const res = await createToolCall(anthropic, {
       model,
       max_tokens: 300,
       tools: [MODERATION_TOOL],

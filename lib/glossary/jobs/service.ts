@@ -142,7 +142,7 @@ async function estimateTotal(
     if (!Array.isArray(raw)) return null
     const confirmed = new Set(confirmedSlugs)
     const toGenerate = (raw as GlossaryCandidate[])
-      .filter((c) => confirmed.has(c.slug) && c.needsGeneration)
+      .filter((c) => confirmed.has(c.slug) && c.needsGeneration && !c.generationFailed)
     if (toGenerate.length === 0) return 0
     // FRISCH gegen glossary_terms prüfen statt dem needsGeneration-Flag allein
     // zu vertrauen: er wird beim Vormerken EINMAL gesetzt und nie

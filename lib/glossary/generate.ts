@@ -14,6 +14,7 @@
 import { z } from 'zod'
 import { isExcludedGlossaryTerm } from '@/lib/data/glossary-exclusions'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { createToolCall } from '@/lib/claude/tool-call'
 
 // ---------------------------------------------------------------------------
 // Slug
@@ -202,7 +203,7 @@ export async function identifyCandidates(articleText: string, knownSlugs: string
     const { getModelForUseCase } = await import('@/lib/ai/model-config')
     const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'glossary_candidate_identification')
     const model = await getModelForUseCase('glossary_candidate_identification')
-    const resp = await client.messages.create({
+    const resp = await createToolCall(client, {
       model, max_tokens: 1024, tools: [CANDIDATES_TOOL],
       tool_choice: { type: 'tool', name: CANDIDATES_TOOL.name },
       messages: [{ role: 'user', content: buildCandidatesPrompt(articleText, knownSlugs) }],
@@ -260,11 +261,28 @@ export interface GeneratedTerm {
 // min(4) auf blocks: Regel 3 im Systemprompt verlangt mindestens die vier
 // Struktureinheiten (Intro-Absatz + drei Überschriften); das ist die
 // Zod-seitige Grobgrenze, nicht die vollständige Struktur-Prüfung.
+// blocks als JSON-String: PROD-BEFUND 2026-09-26 — Sonnet 4.6 lieferte das
+// verschachtelte Array für "Voxel" elfmal in Folge serialisiert statt als Array.
+// Nur ein parsebares Array wird übernommen; alles andere lässt die Prüfung
+// unten wie bisher scheitern.
+const parseStringifiedArray = (v: unknown): unknown => {
+  if (typeof v !== 'string') return v
+  try {
+    const parsed: unknown = JSON.parse(v)
+    return Array.isArray(parsed) ? parsed : v
+  } catch {
+    return v
+  }
+}
+
 const ContentSchema = z.object({
   canonical_name: z.string().min(1),
   aliases: z.array(z.string()),
   summary: z.string().min(1),
-  blocks: z.array(z.object({ type: z.enum(['paragraph', 'heading']), text: z.string() })).min(4),
+  blocks: z.preprocess(
+    parseStringifiedArray,
+    z.array(z.object({ type: z.enum(['paragraph', 'heading']), text: z.string() })).min(4),
+  ),
   needs_illustration: z.boolean(),
   illustration_alt: z.string().nullable().optional(),
 })
@@ -449,7 +467,7 @@ export async function generateTermContent(name: string): Promise<GeneratedTerm> 
    * Modellen, die die adaptive Form kennen — die alte Form würde `disabled`
    * nicht akzeptieren).
    */
-  const callContent = (extraInstruction?: string) => client.messages.create({
+  const callContent = (extraInstruction?: string) => createToolCall(client, {
     model: contentModel, max_tokens: 8192, tools: [CONTENT_TOOL],
     tool_choice: { type: 'tool', name: CONTENT_TOOL.name },
     // supportsDisabledThinking statt adaptiveThinking: die beiden fielen bis zum
@@ -526,7 +544,7 @@ export async function generateTermContent(name: string): Promise<GeneratedTerm> 
   let readabilityScore: number | null = null
   try {
     const readabilityModel = await getModelForUseCase('glossary_readability_qa')
-    const judgeResp = await withUsageLogging(client, 'glossary_readability_qa').messages.create({
+    const judgeResp = await createToolCall(withUsageLogging(client, 'glossary_readability_qa'), {
       model: readabilityModel, max_tokens: 512, tools: [READABILITY_TOOL],
       tool_choice: { type: 'tool', name: READABILITY_TOOL.name },
       messages: [{ role: 'user', content: buildReadabilityPrompt(canonicalName, c.summary, body) }],

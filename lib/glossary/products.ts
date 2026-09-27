@@ -21,6 +21,7 @@
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { createToolCall } from '@/lib/claude/tool-call'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -129,7 +130,7 @@ export async function assignProducts(termId: string, termName: string, summary: 
   const { getModelForUseCase } = await import('@/lib/ai/model-config')
   const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'glossary_product_assignment')
   const model = await getModelForUseCase('glossary_product_assignment')
-  const resp = await client.messages.create({
+  const resp = await createToolCall(client, {
     model, max_tokens: 2048, tools: [ASSIGN_TOOL],
     tool_choice: { type: 'tool', name: ASSIGN_TOOL.name },
     messages: [{ role: 'user', content: buildAssignPrompt(termName, summary, candidates) }],

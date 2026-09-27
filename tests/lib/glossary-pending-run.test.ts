@@ -201,6 +201,59 @@ describe('runPendingUnit', () => {
     expect(result.remaining).toBe(1)
   })
 
+  // PROD-BEFUND 2026-09-26: "Voxel" scheiterte inhaltlich, blieb "offen", der
+  // Job gab nach zehn Durchgängen auf — und verlinkte die übrigen bestätigten
+  // Begriffe des Artikels nie.
+  it('überspringt einen inhaltlich gescheiterten Kandidaten, statt den Lauf zu blockieren', async () => {
+    const voxel = candidate('voxel', 'Voxel')
+    const agent = { ...candidate('ki-agent', 'KI-Agent'), needsGeneration: false }
+    state.queues['generated_posts'] = [
+      { data: { pending_glossary_terms: [voxel, agent] }, error: null }, // Namen-Lookup
+      { data: null, error: null }, // Vormerkliste mit Markierung schreiben
+      { data: { content: '{"type":"doc"}' }, error: null }, // Content-Lookup
+      { data: null, error: null }, // Content zurueckschreiben
+      { data: null, error: null }, // Vormerkliste leeren
+    ]
+    mocks.ensure.mockResolvedValue({ generatedSlugs: [], pendingRemainder: [voxel], contentFailedSlugs: ['voxel'] })
+    mocks.confirm.mockResolvedValue({ publishedSlugs: ['ki-agent'], content: '{"type":"doc","injected":true}' })
+
+    const { runPendingUnit } = await import('@/lib/glossary/pending-run')
+    const result = await runPendingUnit(client, 'p1', ['voxel', 'ki-agent'])
+
+    expect(result.skipped).toEqual(['Voxel'])
+    expect(result.failed).toEqual([])
+    expect(result.remaining).toBe(0)
+    expect(state.chains['generated_posts'][1].update).toHaveBeenCalledWith({
+      pending_glossary_terms: [{ ...voxel, generationFailed: true }],
+    })
+    // Veröffentlicht wird ohne den aufgegebenen Begriff — sonst meldete der
+    // Abschluss ihn als "nicht veröffentlicht" und der Job endete als Fehler.
+    expect(mocks.confirm).toHaveBeenCalledWith(client, 'p1', ['ki-agent'], '{"type":"doc"}')
+    expect(result.linked).toBe(1)
+    expect(result.publishFailed).toBeUndefined()
+  })
+
+  it('zählt einen in einem früheren Durchgang markierten Kandidaten weder als offen noch beim Abschluss', async () => {
+    const voxel = { ...candidate('voxel', 'Voxel'), generationFailed: true }
+    const agent = { ...candidate('ki-agent', 'KI-Agent'), needsGeneration: false }
+    state.queues['generated_posts'] = [
+      { data: { pending_glossary_terms: [voxel, agent] }, error: null },
+      { data: { content: '{"type":"doc"}' }, error: null },
+      { data: null, error: null },
+      { data: null, error: null },
+    ]
+    mocks.ensure.mockResolvedValue({ generatedSlugs: [], pendingRemainder: null })
+    mocks.confirm.mockResolvedValue({ publishedSlugs: ['ki-agent'], content: '{"type":"doc","injected":true}' })
+
+    const { runPendingUnit } = await import('@/lib/glossary/pending-run')
+    const result = await runPendingUnit(client, 'p1', ['voxel', 'ki-agent'])
+
+    expect(result.remaining).toBe(0)
+    expect(result.skipped).toEqual([])
+    expect(mocks.confirm).toHaveBeenCalledWith(client, 'p1', ['ki-agent'], '{"type":"doc"}')
+    expect(result.publishFailed).toBeUndefined()
+  })
+
   it('reicht limit=1 an ensureConfirmedTermsExist durch', async () => {
     state.queues['generated_posts'] = [
       { data: { pending_glossary_terms: [] }, error: null },

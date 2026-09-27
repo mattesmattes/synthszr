@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { Interval, UnsubscribeType, DetectionResult, DetectedSubscription, EvidenceMessage } from '@/lib/subscriptions/types'
 import type { EmailMessage } from '@/lib/gmail/client'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { createToolCall } from '@/lib/claude/tool-call'
 
 const BILLING_PORTAL_DOMAINS = [
   'stripe.com', 'paypal.com', 'apple.com', 'itunes.com',
@@ -156,7 +157,7 @@ async function classifyBatch(emails: { from: string; subject: string; snippet: s
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
   try {
     const model = await getModelForUseCase('subscription_detect')
-    const resp = await client.messages.create({
+    const resp = await createToolCall(client, {
       model, max_tokens: 2048, tools: [tool],
       tool_choice: { type: 'tool', name: 'classify_subscriptions' },
       messages: [{ role: 'user', content: buildDetectPrompt(emails) }],

@@ -17,6 +17,7 @@
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { OPENERS, CLOSERS, type Mode } from '@/lib/podcast/openers'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { createToolCall } from '@/lib/claude/tool-call'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -168,7 +169,7 @@ export async function refreshModes(
     const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'podcast_modes')
     const model = await getModelForUseCase('podcast_modes')
 
-    const resp = await client.messages.create({
+    const resp = await createToolCall(client, {
       model,
       max_tokens: 4000,
       tools: [TOOL],

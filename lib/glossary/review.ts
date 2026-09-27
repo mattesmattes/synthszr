@@ -45,6 +45,7 @@ import { buildTipTapBody, extractPlainText, isValidTipTapDoc } from '@/lib/gloss
 import { assignProducts } from '@/lib/glossary/products'
 import { z } from 'zod'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { createToolCall } from '@/lib/claude/tool-call'
 
 type SupabaseAdminClient = ReturnType<typeof createAdminClient>
 
@@ -236,7 +237,7 @@ export async function reviewGlossaryTerms(supabase: SupabaseAdminClient): Promis
       }
 
       const bodyText = extractPlainText(term.body)
-      const resp = await client.messages.create({
+      const resp = await createToolCall(client, {
         model, max_tokens: 4096, tools: [REVIEW_TOOL],
         tool_choice: { type: 'tool', name: REVIEW_TOOL.name },
         messages: [{ role: 'user', content: buildReviewPrompt(term.canonical_name, term.summary, bodyText, news) }],

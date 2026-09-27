@@ -22,6 +22,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateEmbedding } from '@/lib/embeddings/generator'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { createToolCall } from '@/lib/claude/tool-call'
 
 type SupabaseAdminClient = ReturnType<typeof createAdminClient>
 
@@ -208,7 +209,7 @@ async function generateContextSentences(
     const { getModelForUseCase } = await import('@/lib/ai/model-config')
     const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'glossary_news_context')
     const model = await getModelForUseCase('glossary_news_context')
-    const resp = await client.messages.create({
+    const resp = await createToolCall(client, {
       model, max_tokens: 1024, tools: [CONTEXT_TOOL],
       tool_choice: { type: 'tool', name: CONTEXT_TOOL.name },
       messages: [{ role: 'user', content: buildContextPrompt(canonicalName, summary, titles) }],

@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { createToolCall } from '@/lib/claude/tool-call'
 
 const LANGS: Record<string, string> = {
   en: 'English', cs: 'Czech', nds: 'Low German (Plattdeutsch)', fr: 'French',
@@ -38,14 +39,13 @@ Rufe report mit einem Objekt pro Sprache.`
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
   try {
-    const resp = await client.messages.create({
+    const resp = await createToolCall(client, {
       model: 'claude-sonnet-4-6', max_tokens: 3500,
       tools: [tool], tool_choice: { type: 'tool', name: 'report' },
       messages: [{ role: 'user', content: prompt }],
     }, { signal: controller.signal })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = resp.content.find((x: any) => x.type === 'tool_use')
-    return (b?.input ?? {}) as Record<string, Record<string, string>>
+    const b = resp.content.find((x) => x.type === 'tool_use')
+    return ((b && 'input' in b ? b.input : null) ?? {}) as Record<string, Record<string, string>>
   } finally {
     clearTimeout(timer)
   }

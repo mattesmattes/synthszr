@@ -195,6 +195,7 @@ async function runUnit(supabase: AdminClient, job: GlossaryJob): Promise<UnitOut
     const entries: GlossaryJobLogEntry[] = [
       ...r.generated.map((n) => ({ at: stamp(), text: `${n} — erzeugt`, ok: true })),
       ...r.failed.map((n) => ({ at: stamp(), text: `${n} — fehlgeschlagen, siehe Server-Log`, ok: false })),
+      ...r.skipped.map((n) => ({ at: stamp(), text: `${n} — inhaltlich gescheitert, übersprungen (siehe Server-Log)`, ok: false })),
     ]
     // Verlinkung/Veroeffentlichung passiert erst bei remaining===0 (die
     // Injektion laeuft ueber den ganzen Artikeltext, s. pending-run.ts) — eine
@@ -227,7 +228,9 @@ async function runUnit(supabase: AdminClient, job: GlossaryJob): Promise<UnitOut
     // offen" heisst hier ein gescheiterter Erzeugungsversuch (Modell-Fehler
     // oder -Ueberlast) — ohne diese Erkennung wuerde der Tick denselben
     // Kandidaten wiederholt versuchen, bis das ganze Budget verbraucht ist.
-    const noProgress = r.generated.length === 0 && r.remaining > 0
+    // Ein uebersprungener Kandidat ist Fortschritt: er ist erledigt, und die
+    // naechste Einheit nimmt sich den naechsten vor (Prod 2026-09-26, "Voxel").
+    const noProgress = r.generated.length === 0 && r.skipped.length === 0 && r.remaining > 0
     return {
       entries,
       doneDelta: r.generated.length,

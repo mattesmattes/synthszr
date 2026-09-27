@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { DIMENSION_EN } from '@/lib/rankings/dimension-i18n'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { getModelCapabilities } from '@/lib/claude/model-capabilities'
 
 export interface ResearchedFeature { dimension: string; value: string; valueEn?: string }
 export interface ResearchResult {
@@ -154,9 +155,10 @@ STRIKT — KEIN SPEKULIEREN:
     const resp = await client.messages.create({
       // Sonnet 5: stärkeres Instruction-Following (hilft Citation-/Produkt-Domain-Prompt);
       // thinking explizit AUS (auf Sonnet 5 sonst adaptiv default an) — reine Web-Extraktion
-      // braucht kein Reasoning, so bleiben Kosten/Latenz vorhersehbar.
+      // braucht kein Reasoning, so bleiben Kosten/Latenz vorhersehbar. Nur wo das
+      // Modell es vertraegt: Opus 5.5 und Fable 5 lehnen 'disabled' mit 400 ab.
       model, max_tokens: 4000,
-      thinking: { type: 'disabled' },
+      ...(getModelCapabilities(model).supportsDisabledThinking ? { thinking: { type: 'disabled' as const } } : {}),
       tools: [REPORT_TOOL, { type: 'web_search_20250305', name: 'web_search', max_uses: 6 }],
       messages: [{ role: 'user', content: prompt }],
     }, { signal: controller.signal })

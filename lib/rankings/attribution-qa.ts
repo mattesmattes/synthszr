@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mergeProductsInto } from '@/lib/rankings/consolidate'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { createToolCall } from '@/lib/claude/tool-call'
 
 /** Pseudo-Dimension als Verarbeitungs-Marker (analog __researched_at). */
 export const ATTRIBUTION_QA_AT_DIM = '__attribution_qa_at'
@@ -79,7 +80,7 @@ async function decideAttribution(c: QaCandidate): Promise<AttributionDecision | 
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
   try {
     const model = await getModelForUseCase('ranking_attribution_qa')
-    const resp = await client.messages.create({
+    const resp = await createToolCall(client, {
       model, max_tokens: 512, tools: [tool],
       tool_choice: { type: 'tool', name: 'attribute_product' },
       messages: [{ role: 'user', content: buildAttributionPrompt(c) }],

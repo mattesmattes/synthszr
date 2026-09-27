@@ -19,7 +19,11 @@
  * „existiert der Begriff überhaupt", dort „veröffentlichen und verlinken".
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
-import { generateAndInsertDraft } from '@/lib/glossary/draft-writer'
+import {
+  generateAndInsertDraft,
+  lastGenerationFailureWasConfigError,
+  lastGenerationFailureWasRetryable,
+} from '@/lib/glossary/draft-writer'
 import type { GlossaryCandidate } from '@/lib/glossary/types'
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -49,6 +53,11 @@ export const MAX_GENERATE_PER_SAVE = 3
  *   mit fehlgeschlagener Generierung. Der Aufrufer MUSS diese Liste schreiben
  *   statt zu leeren, sonst müsste der Operator sie neu identifizieren lassen —
  *   der Deckel wäre dann eine Falle statt einer Bremse.
+ * @returns `contentFailedSlugs` — die in diesem Aufruf INHALTLICH gescheiterten
+ *   Kandidaten (weder Überlast noch Request-Fehler). Sie stehen weiter in
+ *   `pendingRemainder`; ob sie übersprungen werden, entscheidet der Aufrufer
+ *   (der Freigabe-Lauf tut es, s. pending-run.ts — beim Speichern bleiben sie
+ *   für den nächsten Versuch offen).
  */
 export async function ensureConfirmedTermsExist(
   supabase: AdminClient,
@@ -64,7 +73,7 @@ export async function ensureConfirmedTermsExist(
    * Operator sieht nach jedem Begriff, dass es weitergeht.
    */
   limit: number = MAX_GENERATE_PER_SAVE,
-): Promise<{ generatedSlugs: string[]; pendingRemainder: GlossaryCandidate[] | null }> {
+): Promise<EnsureResult> {
   if (confirmedSlugs.length === 0) return { generatedSlugs: [], pendingRemainder: null }
   try {
     return await generateMissingTerms(supabase, postId, confirmedSlugs, Math.max(1, limit))
@@ -116,12 +125,18 @@ export async function findMissingFromGlossary(
   return candidates.filter((c) => !alreadyThere.has(c.slug))
 }
 
+interface EnsureResult {
+  generatedSlugs: string[]
+  pendingRemainder: GlossaryCandidate[] | null
+  contentFailedSlugs?: string[]
+}
+
 async function generateMissingTerms(
   supabase: AdminClient,
   postId: string,
   confirmedSlugs: string[],
   limit: number,
-): Promise<{ generatedSlugs: string[]; pendingRemainder: GlossaryCandidate[] | null }> {
+): Promise<EnsureResult> {
 
   const { data: postRow, error: postError } = await supabase
     .from('generated_posts')
@@ -145,7 +160,9 @@ async function generateMissingTerms(
   // Nur bestätigte Kandidaten ohne existierenden Begriff. `needsGeneration`
   // fehlt in Listen, die vor dem Umbau geschrieben wurden — dort bedeutet
   // „fehlt" korrekt „Begriff existiert schon", also kein Kandidat für uns.
-  const toGenerate = candidates.filter((c) => confirmed.has(c.slug) && c.needsGeneration)
+  // Vom Freigabe-Lauf aufgegebene Kandidaten (generationFailed) nicht erneut
+  // bezahlen — s. GlossaryCandidate.generationFailed.
+  const toGenerate = candidates.filter((c) => confirmed.has(c.slug) && c.needsGeneration && !c.generationFailed)
   if (toGenerate.length === 0) return { generatedSlugs: [], pendingRemainder: null }
 
   // Zwischenzeitlich entstanden? Der Kandidat kann seit dem Vormerken über einen
@@ -166,19 +183,31 @@ async function generateMissingTerms(
   const batch = missing.slice(0, limit)
   const generatedSlugs: string[] = []
   const failed: GlossaryCandidate[] = []
+  const contentFailedSlugs: string[] = []
   for (const candidate of batch) {
     const created = await generateAndInsertDraft(supabase, candidate.name, candidate.slug)
-    if (created) generatedSlugs.push(created.slug)
-    else failed.push(candidate)
+    if (created) {
+      generatedSlugs.push(created.slug)
+      continue
+    }
+    failed.push(candidate)
+    // Direkt nach dem Aufruf lesen: der Zustand gilt nur für den letzten Versuch.
+    if (!lastGenerationFailureWasRetryable() && !lastGenerationFailureWasConfigError()) {
+      contentFailedSlugs.push(candidate.slug)
+    }
   }
 
   // Übrig bleiben: was der Deckel abgeschnitten hat, plus die Fehlschläge.
   const remainder = [...failed, ...missing.slice(limit)]
-  if (remainder.length === 0) return { generatedSlugs, pendingRemainder: null }
+  if (remainder.length === 0) return { generatedSlugs, pendingRemainder: null, contentFailedSlugs }
 
   // Die noch nicht bestätigten Kandidaten gehören ebenfalls in die Liste, die
-  // erhalten bleibt — sonst verschwinden sie beim ersten Teil-Speichern.
+  // erhalten bleibt — sonst verschwinden sie beim ersten Teil-Speichern. Ebenso
+  // die aufgegebenen: ohne ihre Markierung zählte der Freigabe-Lauf sie beim
+  // Abschluss als unveröffentlicht und bräche mit Fehler ab.
   const remainderSlugs = new Set(remainder.map((c) => c.slug))
-  const untouched = candidates.filter((c) => !confirmed.has(c.slug) && !remainderSlugs.has(c.slug))
-  return { generatedSlugs, pendingRemainder: [...remainder, ...untouched] }
+  const untouched = candidates.filter(
+    (c) => (!confirmed.has(c.slug) || c.generationFailed) && !remainderSlugs.has(c.slug),
+  )
+  return { generatedSlugs, pendingRemainder: [...remainder, ...untouched], contentFailedSlugs }
 }

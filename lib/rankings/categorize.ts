@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { createToolCall } from '@/lib/claude/tool-call'
 
 export interface CategorizableProduct {
   id: string
@@ -86,7 +87,7 @@ export async function classifyProducts(
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
   try {
     const model = await getModelForUseCase('ranking_categorize')
-    const resp = await client.messages.create({
+    const resp = await createToolCall(client, {
       model, max_tokens: 2048, tools: [tool],
       tool_choice: { type: 'tool', name: 'assign_categories' },
       messages: [{ role: 'user', content: buildCategorizePrompt(products, categories) }],

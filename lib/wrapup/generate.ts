@@ -20,6 +20,7 @@
  */
 import Anthropic from '@anthropic-ai/sdk'
 import { getModelCapabilities } from '@/lib/claude/model-capabilities'
+import { createToolCall } from '@/lib/claude/tool-call'
 import type { WrapupTopic } from '@/lib/wrapup/collect'
 import { withUsageLogging } from '@/lib/ai/usage-log'
 
@@ -130,8 +131,10 @@ export async function generateWrapupParts(
   // 'disabled' mit HTTP 400 ab (s. model-capabilities.ts).
   if (adaptiveThinking && supportsDisabledThinking) params.thinking = { type: 'disabled' }
 
+  // createToolCall: Opus 5.5 lehnt das erzwungene tool_choice oben mit HTTP 400
+  // ab (Prod 2026-09-27) — dort wird auf auto umgestellt (s. tool-call.ts).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const res = await anthropic.messages.create(params as any)
+  const res = await createToolCall(anthropic, params as any)
   const block = res.content.find((b: { type: string }) => b.type === 'tool_use')
   if (!block || block.type !== 'tool_use') {
     // Kein Tool-Block heißt: das Modell hat nicht geantwortet oder verweigert.

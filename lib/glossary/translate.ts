@@ -26,6 +26,7 @@ import { injectGlossaryMarks } from '@/lib/glossary/inject-marks'
 import type { LanguageCode } from '@/lib/types'
 import type { GlossaryMatcherTerm } from '@/lib/glossary/types'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { createToolCall } from '@/lib/claude/tool-call'
 
 // ---------------------------------------------------------------------------
 // translateTerm
@@ -156,7 +157,7 @@ export async function translateTerm(termId: string, targetLang: string): Promise
   const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }), 'glossary_translation')
   const model = await getModelForUseCase('glossary_translation')
 
-  const resp = await client.messages.create({
+  const resp = await createToolCall(client, {
     model, max_tokens: 4096, tools: [TRANSLATE_TOOL],
     tool_choice: { type: 'tool', name: TRANSLATE_TOOL.name },
     messages: [{

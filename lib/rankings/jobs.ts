@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { staleBeforeIso } from '@/lib/rankings/jobs-lease'
+import { describeError } from '@/lib/rankings/describe-error'
 
 interface RankingJob {
   id: string; phase: string; cursor: number
@@ -128,7 +129,7 @@ export async function advanceRankingJob(_jobId?: string): Promise<string> {
             }
             processedAny = true
           } catch (itemErr) {
-            const msg = itemErr instanceof Error ? itemErr.message : String(itemErr)
+            const msg = describeError(itemErr)
             // Fatale API-/Billing-Fehler (Credit leer, Auth, ungültiger Request, Quota)
             // sind KEIN News-Problem → Job als 'error' markieren und sofort abbrechen,
             // OHNE die News-attempts zu verbrennen (sonst werden gute News fälschlich

@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { createToolCall } from '@/lib/claude/tool-call'
 
 const LLM_TIMEOUT_MS = 90_000
 
@@ -56,7 +57,7 @@ KEINE generischen oder redundanten Dimensionen wie "Anbieter", "Hersteller", "Mo
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
   try {
-    const resp = await client.messages.create({
+    const resp = await createToolCall(client, {
       model, max_tokens: 500,
       tools: [tool], tool_choice: { type: 'tool', name: 'report_dimensions' },
       messages: [{ role: 'user', content: prompt }],
