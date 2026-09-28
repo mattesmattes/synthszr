@@ -261,18 +261,27 @@ export interface GeneratedTerm {
 // min(4) auf blocks: Regel 3 im Systemprompt verlangt mindestens die vier
 // Struktureinheiten (Intro-Absatz + drei Überschriften); das ist die
 // Zod-seitige Grobgrenze, nicht die vollständige Struktur-Prüfung.
-// blocks als JSON-String: PROD-BEFUND 2026-09-26 — Sonnet 4.6 lieferte das
-// verschachtelte Array für "Voxel" elfmal in Folge serialisiert statt als Array.
-// Nur ein parsebares Array wird übernommen; alles andere lässt die Prüfung
-// unten wie bisher scheitern.
+// blocks als String: PROD-BEFUND 2026-09-26/28 — "Voxel" elfmal in Folge, am
+// 28.09. fünf von sechs Begriffen. Ursache ist KAPUTTES JSON, kein doppelt
+// serialisiertes: das Modell setzt deutsche Anführungszeichen als „…" mit
+// geradem ASCII-Schluss, der den JSON-String vorzeitig beendet (VCSEL:
+// „Vertical-Cavity Surface-Emitting Laser"). Die API reicht den unparsebaren
+// Parameter dann als Rohtext durch. Reparatur nur, wenn das erste Parsen
+// scheitert; alles, was danach kein Array ist, lässt die Prüfung unten wie
+// bisher scheitern.
+const GERMAN_QUOTE_WITH_ASCII_CLOSE = /„([^"“”\n]*)"/g
+
 const parseStringifiedArray = (v: unknown): unknown => {
   if (typeof v !== 'string') return v
-  try {
-    const parsed: unknown = JSON.parse(v)
-    return Array.isArray(parsed) ? parsed : v
-  } catch {
-    return v
+  for (const candidate of [v, v.replace(GERMAN_QUOTE_WITH_ASCII_CLOSE, '„$1“')]) {
+    try {
+      const parsed: unknown = JSON.parse(candidate)
+      if (Array.isArray(parsed)) return parsed
+    } catch {
+      // nächster Kandidat
+    }
   }
+  return v
 }
 
 const ContentSchema = z.object({

@@ -248,6 +248,26 @@ describe('generateTermContent', () => {
     expect(t.body.content[1].type).toBe('heading')
   })
 
+  // PROD-BEFUND 2026-09-28 (VCSEL, LAWS, Effective Altruism, …): der String war
+  // kein doppelt serialisiertes Array, sondern KAPUTTES JSON — das Modell setzt
+  // deutsche Anführungszeichen als „…" mit geradem ASCII-Schluss, der den
+  // JSON-String vorzeitig beendet. Die API reicht den unparsebaren Parameter
+  // dann als Rohtext durch.
+  it('repariert blocks, deren JSON an einem „…"-Anführungszeichen mit ASCII-Schluss zerbricht', async () => {
+    const broken = JSON.stringify(
+      [{ ...contentInput.blocks[0], text: `Der Name steht für QUOTE. ${contentInput.blocks[0].text}` }, ...contentInput.blocks.slice(1)],
+      null, 2,
+    ).replace('QUOTE', '„Mixture of Experts"')
+    expect(() => JSON.parse(broken)).toThrow()
+    mocks.create
+      .mockResolvedValueOnce(toolUse({ ...contentInput, blocks: broken }))
+      .mockResolvedValueOnce(toolUse(readabilityInput))
+    const { generateTermContent } = await import('@/lib/glossary/generate')
+    const t = await generateTermContent('Mixture of Experts')
+    expect(t.body.content).toHaveLength(contentInput.blocks.length)
+    expect(t.body.content[0].content[0].text).toContain('„Mixture of Experts“')
+  })
+
   it('wirft weiter, wenn blocks ein String ohne gültiges JSON-Array ist', async () => {
     mocks.create.mockResolvedValueOnce(toolUse({ ...contentInput, blocks: 'Absatz eins. Absatz zwei.' }))
     const { generateTermContent } = await import('@/lib/glossary/generate')
