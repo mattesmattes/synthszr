@@ -7,6 +7,9 @@ import { isExcludedProduct, isCommonWordNonProduct } from '@/lib/rankings/produc
 
 type Admin = ReturnType<typeof createAdminClient>
 
+/** Wie viele Slug-Varianten (slug, slug-2, …) ein neues Produkt probiert. */
+const MAX_SLUG_SUFFIX = 10
+
 /** INSERT, das eine DB-Unique-Verletzung (23505) als „schon da" toleriert. */
 async function insertIgnoreDup(supabase: Admin, table: string, row: Record<string, unknown>) {
   const { error } = await supabase.from(table).insert(row)
@@ -66,16 +69,32 @@ export async function resolveProduct(opts: {
   let familyEmbedding: number[] | null = null
   try { const e = await generateEmbedding(p.family); if (Array.isArray(e) && e.length === 768) familyEmbedding = e } catch { /* non-fatal */ }
 
-  // 3) Race-safe Upsert (canonical_key NICHT setzen — GENERATED)
-  const { data: inserted, error: insErr } = await supabase
-    .from('products')
-    .upsert({
-      vendor_namespace: p.vendor_namespace, family: p.family, version: p.version, qualifier: p.qualifier,
-      canonical_name: p.canonical_name, slug: p.slug, family_embedding: familyEmbedding,
-      identity_status: 'candidate', visibility_status: visibility, confidence_band: 'low',
-    }, { onConflict: 'canonical_key', ignoreDuplicates: true })
-    .select('id').maybeSingle()
-  if (insErr) throw insErr
+  // 3) Race-safe Upsert (canonical_key NICHT setzen — GENERATED).
+  //
+  // Belegter Slug: PROD-BEFUND 2026-09-28 — "microsoft-copilot" gehörte einem
+  // inzwischen GitHub zugeordneten Produkt (github@copilot@@), der Slug blieb
+  // als permanente URL stehen. Jede Erwähnung von "Microsoft Copilot" scheiterte
+  // daran und nahm die ganze News mit (7 News allein am 28.09.; die 281 seit
+  // Juli mit unlesbarem "[object Object]" vermutlich grossteils ebenso).
+  // Identität ist der canonical_key, der Slug nur die URL: dann eben mit Suffix.
+  let inserted: { id: string } | null = null
+  for (let n = 1; ; n++) {
+    const slug = n === 1 ? p.slug : `${p.slug}-${n}`
+    const { data, error: insErr } = await supabase
+      .from('products')
+      .upsert({
+        vendor_namespace: p.vendor_namespace, family: p.family, version: p.version, qualifier: p.qualifier,
+        canonical_name: p.canonical_name, slug, family_embedding: familyEmbedding,
+        identity_status: 'candidate', visibility_status: visibility, confidence_band: 'low',
+      }, { onConflict: 'canonical_key', ignoreDuplicates: true })
+      .select('id').maybeSingle()
+    if (!insErr) {
+      inserted = data
+      break
+    }
+    const slugTaken = insErr.code === '23505' && insErr.message.includes('products_slug_uq')
+    if (!slugTaken || n >= MAX_SLUG_SUFFIX) throw insErr
+  }
 
   if (!inserted) {
     // Race: parallel angelegt → re-select + Heilung
