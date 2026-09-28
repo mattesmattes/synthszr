@@ -69,15 +69,6 @@ export interface PipelineItem {
   source_url: string | null
   source_identifier: string
   bundle_type?: BundleType | null
-  /**
-   * Gruppierungsschlüssel innerhalb eines Bündel-Typs.
-   *
-   * Ohne ihn bilden alle Items EINES Typs ein einziges Bündel — so war es bis
-   * 2026-08-13, und so bleibt es für händisch markierte News. Techmeme-Items
-   * tragen hier ihre Story, damit aus fünf Stories fünf Abschnitte werden
-   * statt eines.
-   */
-  bundle_key?: string | null
 }
 
 export interface ArticlePlan {
@@ -104,7 +95,7 @@ export interface ArticlePlan {
 /** Eine zusammengehörige Gruppe von Quellen, die EINEN Abschnitt ergibt. */
 export interface BundleUnitIndices {
   bundleType: BundleType
-  /** Was die Gruppe zusammenhält — Story-Schlüssel oder ersatzweise der Typ. */
+  /** Was die Gruppe zusammenhält — das Label (s. computeBundleUnits). */
   key: string
   /** 1-basierte Item-Indizes, in Eingabereihenfolge. */
   indices: number[]
@@ -135,13 +126,15 @@ const BUNDLE_MAX_SENTENCES: Record<BundleType, number> = {
 /**
  * Bündel-Einheiten aus den Items — die zentrale Gruppierung.
  *
- * Gruppiert nach (Typ, Schlüssel). Ohne Schlüssel greift der Typ selbst, dann
- * entsteht wie bisher genau ein Bündel je Typ. Mit Schlüssel — Techmeme setzt
- * dort seine Story — wird aus jeder Story ein eigener Abschnitt.
+ * EIN LABEL, EIN ABSCHNITT (Betreiber-Vorgabe 2026-09-28): Alle Items mit
+ * demselben Label bilden einen Abschnitt, auch über Techmeme-Stories hinweg.
+ * Die Vorgabe vom 2026-08-13 (je Story ein eigener Abschnitt) ist damit
+ * abgelöst — sie liess eine von Hand als „Thema des Tages" markierte Meldung
+ * als zweiten Themen-Abschnitt neben dem Techmeme-Bündel zur selben Sache
+ * laufen.
  *
- * Die REIHENFOLGE folgt dem ersten Vorkommen, nicht dem Alphabet: Bei Techmeme
- * ist die Reihenfolge die redaktionelle Aussage, und die soll den Aufbau des
- * Artikels bestimmen.
+ * Innerhalb des Labels bleibt die Fundreihenfolge erhalten: Bei Techmeme ist
+ * sie die redaktionelle Aussage.
  */
 export function computeBundleUnits(items: PipelineItem[]): BundleUnitIndices[] {
   const units = new Map<string, BundleUnitIndices>()
@@ -149,11 +142,9 @@ export function computeBundleUnits(items: PipelineItem[]): BundleUnitIndices[] {
   items.forEach((item, i) => {
     const typ = item.bundle_type
     if (!typ || !BUNDLE_TYPE_ORDER.includes(typ)) return
-    const key = item.bundle_key || typ
-    const id = `${typ}::${key}`
-    const vorhanden = units.get(id)
+    const vorhanden = units.get(typ)
     if (vorhanden) vorhanden.indices.push(i + 1)
-    else units.set(id, { bundleType: typ, key, indices: [i + 1] })
+    else units.set(typ, { bundleType: typ, key: typ, indices: [i + 1] })
   })
 
   // Nach Typ sortieren, innerhalb eines Typs die Fundreihenfolge behalten.

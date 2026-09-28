@@ -14,10 +14,10 @@ import { describe, expect, it } from 'vitest'
 import { buildBundleWriteUnits } from '@/lib/claude/ghostwriter-pipeline'
 import type { PipelineItem, ArticlePlan } from '@/lib/claude/ghostwriter-pipeline'
 
-const item = (id: string, bundle_type: PipelineItem['bundle_type'], key?: string, content = 'Text'): PipelineItem => ({
+const item = (id: string, bundle_type: PipelineItem['bundle_type'], content = 'Text'): PipelineItem => ({
   id, title: `Titel ${id}`, content,
   source_display_name: 'Quelle', source_url: `https://example.com/${id}`,
-  source_identifier: 'example.com', bundle_type: bundle_type ?? null, bundle_key: key ?? null,
+  source_identifier: 'example.com', bundle_type: bundle_type ?? null,
 })
 
 const plan = (n: number): ArticlePlan => ({
@@ -27,38 +27,48 @@ const plan = (n: number): ArticlePlan => ({
 
 describe('Alternativ-Abschnitt zu Bündeln', () => {
   it('legt zu einem Thema des Tages einen Einzelabschnitt dazu', () => {
-    const items = [item('a', 'topic', 's1', 'Langer Text'), item('b', 'topic', 's1', 'Kurz')]
+    const items = [item('a', 'topic', 'Langer Text'), item('b', 'topic', 'Kurz')]
     const units = buildBundleWriteUnits(items, plan(2))
     expect(units.filter((u) => u.kind === 'bundle')).toHaveLength(1)
     expect(units.filter((u) => u.kind === 'single')).toHaveLength(1)
   })
 
   it('nimmt dafuer die inhaltsstaerkste Quelle', () => {
-    const items = [item('duenn', 'topic', 's1', 'kurz'), item('dick', 'topic', 's1', 'x'.repeat(500))]
+    const items = [item('duenn', 'topic', 'kurz'), item('dick', 'topic', 'x'.repeat(500))]
     const single = buildBundleWriteUnits(items, plan(2)).find((u) => u.kind === 'single')
     expect(single && 'item' in single && single.item.id).toBe('dick')
   })
 
   it('markiert ihn als Alternative', () => {
-    const units = buildBundleWriteUnits([item('a', 'topic', 's1')], plan(1))
+    const units = buildBundleWriteUnits([item('a', 'topic')], plan(1))
     const single = units.find((u) => u.kind === 'single')
-    expect(single && 'alternativeTo' in single && single.alternativeTo).toBe('s1')
+    expect(single && 'alternativeTo' in single && single.alternativeTo).toBe('topic')
   })
 
   it('gilt auch fuer Deep Dives', () => {
-    const units = buildBundleWriteUnits([item('a', 'deep_dive', 'd1'), item('b', 'deep_dive', 'd1')], plan(2))
+    const units = buildBundleWriteUnits([item('a', 'deep_dive'), item('b', 'deep_dive')], plan(2))
     expect(units.filter((u) => u.kind === 'single')).toHaveLength(1)
   })
 
   it('gilt NICHT fuer die Nachlese', () => {
-    const units = buildBundleWriteUnits([item('a', 'recap', 'r1'), item('b', 'recap', 'r1')], plan(2))
+    const units = buildBundleWriteUnits([item('a', 'recap'), item('b', 'recap')], plan(2))
     expect(units.filter((u) => u.kind === 'single')).toHaveLength(0)
   })
 
   it('steht direkt hinter seinem Buendel', () => {
-    const items = [item('a', 'topic', 's1'), item('b', 'topic', 's2'), item('c', null)]
+    const items = [item('a', 'topic'), item('b', 'deep_dive'), item('c', null)]
     const units = buildBundleWriteUnits(items, plan(3))
     expect(units.map((u) => u.kind)).toEqual(['bundle', 'single', 'bundle', 'single', 'single'])
+  })
+
+  it('schreibt alle Items eines Labels in EINEN Abschnitt mit EINER Alternative', () => {
+    // Betreiber-Vorgabe 2026-09-28: Label vor Buendel — auch mehrere
+    // Techmeme-Stories unter "Thema des Tages" ergeben einen Abschnitt.
+    const items = [item('a', 'topic'), item('b', 'topic'), item('c', 'topic')]
+    const units = buildBundleWriteUnits(items, plan(3))
+    expect(units.map((u) => u.kind)).toEqual(['bundle', 'single'])
+    const bundle = units[0]
+    expect(bundle.kind === 'bundle' && bundle.items.map((i) => i.id)).toEqual(['a', 'b', 'c'])
   })
 
   it('laesst gewoehnliche Meldungen unberuehrt', () => {
