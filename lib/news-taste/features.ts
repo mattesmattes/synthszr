@@ -1,6 +1,8 @@
 import type { EvaluateAnswer } from '@/lib/ai/evaluate'
+import { evaluateState, JEV_MODEL } from '@/lib/ai/evaluate'
+import { createAdminClient } from '@/lib/supabase/admin'
 import {
-  TASTE_QUESTIONS, JEV_FEATURE_NAMES, STORY_TYPE_OPTIONS,
+  TASTE_QUESTIONS, JEV_FEATURE_NAMES, STORY_TYPE_OPTIONS, FEATURES_VERSION,
 } from './questions'
 
 /** Eingabe für State-Bau und Zusatzsignale — Felder kommen 1:1 aus news_queue. */
@@ -90,4 +92,68 @@ export function extraFeatures(input: TasteInput): Record<string, number> {
     // WARUM: Log-Skalierung der Länge, da exponentielles Wachstum weniger interpretierbar ist
     log_content_length: Math.log10(Math.max(0, num(input.contentLength)) + 1),
   }
+}
+
+const IN_CHUNK = 200 // Supabase-.in()-Listen klein halten
+
+/**
+ * Liefert Jev-Feature-Vektoren für die Items: erst Lookup in
+ * news_taste_features (NUR aktuelle FEATURES_VERSION — alte Kataloge
+ * erzeugen andere Vektoren), fehlende werden live berechnet und persistiert.
+ * Fehler einzelner Items landen in failedIds; der Aufrufer entscheidet über
+ * Fallback (Runtime) oder Protokoll (Backfill).
+ */
+export async function getOrComputeFeatures(
+  items: TasteInput[],
+  opts: { concurrency?: number } = {},
+): Promise<{ features: Map<string, Record<string, number>>; failedIds: string[] }> {
+  const supabase = createAdminClient()
+  const features = new Map<string, Record<string, number>>()
+  const failedIds: string[] = []
+
+  const ids = items.map((i) => i.queueItemId)
+  for (let i = 0; i < ids.length; i += IN_CHUNK) {
+    const { data, error } = await supabase
+      .from('news_taste_features')
+      .select('queue_item_id, features')
+      .eq('features_version', FEATURES_VERSION)
+      .in('queue_item_id', ids.slice(i, i + IN_CHUNK))
+    if (error) throw new Error(`Feature-Lookup fehlgeschlagen: ${error.message}`)
+    for (const row of data ?? []) {
+      features.set(row.queue_item_id as string, row.features as Record<string, number>)
+    }
+  }
+
+  const missing = items.filter((i) => !features.has(i.queueItemId))
+  if (missing.length === 0) return { features, failedIds }
+
+  // WARUM: Handgerollter Semaphor statt p-limit: eine Abhängigkeit weniger.
+  const concurrency = Math.max(1, opts.concurrency ?? 10)
+  let cursor = 0
+  const worker = async () => {
+    for (;;) {
+      const idx = cursor++
+      if (idx >= missing.length) return
+      const item = missing[idx]
+      try {
+        const res = await evaluateState(buildTasteState(item), TASTE_QUESTIONS)
+        const vector = answersToVector(res.answers)
+        features.set(item.queueItemId, vector)
+        const { error } = await supabase.from('news_taste_features').upsert({
+          queue_item_id: item.queueItemId,
+          features_version: FEATURES_VERSION,
+          features: vector,
+          model: JEV_MODEL,
+          input_tokens: res.usage.inputTokens,
+        }, { onConflict: 'queue_item_id,features_version' })
+        if (error) console.warn('[NewsTaste] Vektor nicht gespeichert:', item.queueItemId, error.message)
+      } catch (err) {
+        console.warn('[NewsTaste] Features fehlgeschlagen:', item.queueItemId,
+          err instanceof Error ? err.message : err)
+        failedIds.push(item.queueItemId)
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, missing.length) }, worker))
+  return { features, failedIds }
 }
