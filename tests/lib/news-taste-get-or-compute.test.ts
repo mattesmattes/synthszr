@@ -33,6 +33,7 @@ import { getOrComputeFeatures, type TasteInput } from '@/lib/news-taste/features
 const input = (id: string): TasteInput => ({
   queueItemId: id, title: `Titel ${id}`, source: 'S', text: 'Text',
   synthesis: 5, relevance: 5, uniqueness: 5, sourceBonus: 0, sourcePubRate: 0, contentLength: 1000,
+  totalScore: 0,
 })
 
 beforeEach(() => { upserted.length = 0; existingRows = []; evaluateMock.mockReset(); eqMock.mockReset(); upsertResult = { error: null } })

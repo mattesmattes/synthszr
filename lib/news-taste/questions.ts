@@ -9,6 +9,13 @@ import type { EvaluateQuestion } from '@/lib/ai/evaluate'
  * Inferenz müssen denselben Katalog sehen (predict.ts verweigert sonst den
  * Start), und gespeicherte Vektoren alter Versionen dürfen nicht einfließen.
  * Fragen auf Englisch — die Quellartikel sind es überwiegend auch.
+ *
+ * WICHTIG: Die Version deckt NUR den Jev-Fragenkatalog ab, dessen Vektoren
+ * in news_taste_features liegen (bezahlte LLM-Calls, daher persistiert und
+ * versioniert). Zusatzsignale (EXTRA_FEATURE_NAMES, z.B. total_score) werden
+ * immer frisch aus news_queue berechnet und NIE persistiert — ein neues
+ * Zusatzsignal braucht daher KEINE Versionserhöhung. Eine Erhöhung hier
+ * würde alle 58.602 bereits bezahlten Jev-Vektoren verwaisen lassen.
  */
 export const FEATURES_VERSION = 1
 
@@ -149,6 +156,7 @@ export const JEV_FEATURE_NAMES: string[] = [
 export const EXTRA_FEATURE_NAMES: string[] = [
   'synthesis_score', 'relevance_score', 'uniqueness_score',
   'source_bonus', 'source_pub_rate', 'log_content_length',
+  'total_score',
 ]
 
 export const FEATURE_NAMES: string[] = [...JEV_FEATURE_NAMES, ...EXTRA_FEATURE_NAMES]

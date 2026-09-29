@@ -69,6 +69,10 @@ describe('Katalog-Konsistenz', () => {
     expect(new Set(FEATURE_NAMES).size).toBe(FEATURE_NAMES.length)
     expect(FEATURE_NAMES.length).toBeGreaterThanOrEqual(35)
   })
+  it('FEATURE_NAMES hat 39 Eintraege und endet auf total_score (Task 8b)', () => {
+    expect(FEATURE_NAMES.length).toBe(39)
+    expect(FEATURE_NAMES[FEATURE_NAMES.length - 1]).toBe('total_score')
+  })
   it('jede Boolean-Frage hat criteria (kalibrierte Ja/Nein-Definition)', () => {
     for (const [name, q] of Object.entries(TASTE_QUESTIONS)) {
       if (q.type === 'boolean') expect(q.criteria, name).toBeDefined()
@@ -89,6 +93,7 @@ describe('extraFeatures', () => {
       sourceBonus: 1,
       sourcePubRate: 0.3,
       contentLength: 3000,
+      totalScore: 12.5,
     })
     expect(v.synthesis_score).toBe(7)
     expect(v.relevance_score).toBe(8)
@@ -96,5 +101,6 @@ describe('extraFeatures', () => {
     expect(v.source_bonus).toBe(1)
     expect(v.source_pub_rate).toBe(0.3)
     expect(v.log_content_length).toBeCloseTo(Math.log10(3001))
+    expect(v.total_score).toBe(12.5)
   })
 })

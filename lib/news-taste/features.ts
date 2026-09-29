@@ -16,6 +16,7 @@ export interface TasteInput {
   sourceBonus: number
   sourcePubRate: number
   contentLength: number
+  totalScore: number
 }
 
 const MAX_TEXT_CHARS = 1500
@@ -90,6 +91,9 @@ export function extraFeatures(input: TasteInput): Record<string, number> {
     source_pub_rate: num(input.sourcePubRate),
     // WARUM: Log-Skalierung der Länge, da exponentielles Wachstum weniger interpretierbar ist
     log_content_length: Math.log10(Math.max(0, num(input.contentLength)) + 1),
+    // WARUM: echter DB-Wert der GENERATED STORED Spalte (Produktionsformel),
+    // keine Rekonstruktion — siehe Migration 20260328_optimized_scoring.sql
+    total_score: num(input.totalScore),
   }
 }
 

@@ -39,6 +39,7 @@ interface DayRow {
   uniqueness_score: number | null
   source_bonus: number | null
   source_pub_rate: number | null
+  total_score: number | null
 }
 
 interface DatasetItem { id: string; label: boolean; x: number[] }
@@ -74,7 +75,7 @@ async function main() {
       // Egress (siehe Memory: Supabase-Egress-Diagnose).
       const { rows, truncated, error } = await loadDayCandidates<DayRow>(
         supabase, day,
-        'id, title, content_length, synthesis_score, relevance_score, uniqueness_score, source_bonus, source_pub_rate',
+        'id, title, content_length, synthesis_score, relevance_score, uniqueness_score, source_bonus, source_pub_rate, total_score',
       )
       if (error) throw new Error(`news_queue: ${error}`)
       if (truncated) {
@@ -110,6 +111,7 @@ async function main() {
           sourceBonus: Number(r.source_bonus) || 0,
           sourcePubRate: Number(r.source_pub_rate) || 0,
           contentLength: Number(r.content_length) || 0,
+          totalScore: Number(r.total_score) || 0,
         })
         const merged: Record<string, number> = { ...jev, ...extra }
         items.push({

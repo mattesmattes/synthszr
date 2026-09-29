@@ -34,6 +34,7 @@ interface DayRow {
   source_bonus: number | null
   source_pub_rate: number | null
   content_length: number | null
+  total_score: number | null
 }
 
 /**
@@ -79,7 +80,7 @@ async function main() {
   for (const day of days) {
     const { rows, truncated, error } = await loadDayCandidates<DayRow>(
       supabase, day,
-      'id, title, excerpt, source_display_name, synthesis_score, relevance_score, uniqueness_score, source_bonus, source_pub_rate, content_length',
+      'id, title, excerpt, source_display_name, synthesis_score, relevance_score, uniqueness_score, source_bonus, source_pub_rate, content_length, total_score',
     )
     if (error) { console.error(day, 'Laden fehlgeschlagen:', error); failedDays++; continue }
     if (truncated) {
@@ -97,6 +98,7 @@ async function main() {
       sourceBonus: Number(r.source_bonus) || 0,
       sourcePubRate: Number(r.source_pub_rate) || 0,
       contentLength: Number(r.content_length) || 0,
+      totalScore: Number(r.total_score) || 0,
     }))
     try {
       // WARUM try/catch: getOrComputeFeatures wirft, wenn schon der
