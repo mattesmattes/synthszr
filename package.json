@@ -20,7 +20,8 @@
     "test:api": "vitest run tests/api",
     "taste:backfill": "tsx scripts/backfill-taste-features.ts",
     "taste:baseline": "tsx scripts/measure-reranker-baseline.ts",
-    "taste:export": "tsx scripts/export-taste-dataset.ts"
+    "taste:export": "tsx scripts/export-taste-dataset.ts",
+    "taste:train": "uv run scripts/train_news_taste.py"
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.46",
