@@ -2013,3 +2013,45 @@ Expected: `runId` gesetzt, ≤ 15 Vorschläge mit `Taste-Score`-Reasons, Lauf < 
 - [ ] Umsetzen, `npm run taste:train`, Parität grün
 - [ ] Commit (Skript, `model.json`, Report)
 - [ ] Controller wendet die Entscheidungsregel an
+
+---
+
+## Ergebnis der Iteration und Option 2 (2026-09-29)
+
+**Task 8c (Volldaten, Gewinner auf Validierung gewählt):** Gewinner `lightgbm_ranker` (Val-NDCG@15 0,340; logreg 0,304; lightgbm 0,298; total_score 0,331). **Gate-Vergleich (36 Läufe, R@15 / NDCG@15):** ranker 0,118 / 0,089 · logreg 0,104 / 0,116 · lightgbm 0,099 / 0,075 · **total_score 0,142 / 0,138** · Reranker 0,095 / 0,089 · Zufall 0,018 / 0,015. Kein Kandidat schlägt `total_score` → laut vorab freigegebener Regel **Option 2**.
+
+**Folgen für den Plan:** Task 9 (TS-Inferenz) entfällt — zur Laufzeit läuft kein Modell. Tasks 10 und 11 werden durch 10' und 11' ersetzt. Die Jev-/Trainings-Pipeline (`lib/ai/evaluate.ts`, `lib/news-taste/*`, `scripts/*taste*`, `news_taste_features`) bleibt als Offline-Werkzeug für spätere Neuversuche erhalten; `lib/news-taste/model.json` + `scripts/taste-train-report.json` dokumentieren den Gate-Befund.
+
+### Task 10': Ranking-Service auf `total_score` + Dedup
+
+**Files:**
+- Modify: `lib/news-queue/ranking-service.ts`
+- Test: `tests/lib/ranking-service-total-score.test.ts`
+
+**Interfaces:**
+- Consumes: `dedupeByTopic(items, { recentCoverageDays })` aus `./semantic-dedup` (best-effort: bei Embedding-Fehler kommt die Eingabe unverändert zurück), `createRun`/`recordSuggestions` aus `./suggestions` (unverändert).
+- Produces: `generateRankingSuggestions(): Promise<RankingResult>` — Signatur und Rückgabeform EXAKT wie bisher (Route `app/api/admin/ranking/route.ts` und Cron `app/api/cron/scheduled-tasks/route.ts` bleiben unangetastet).
+
+**Verhalten:**
+1. Stufe 1 bleibt wörtlich (pending, nicht abgelaufen, `queued_at` ≥ jetzt − 24 h, `order total_score desc`, `limit 300`, `isJunkTitle`-Filter, `content_length ≥ 500`, max. 200 Kandidaten).
+2. Die obersten 40 Kandidaten (nach `total_score`) gehen durch `dedupeByTopic(..., { recentCoverageDays: 7 })` (DedupItem: `id`, `title`, `content: excerpt`, `total_score`); `kept` bleibt nach `total_score` absteigend sortiert.
+3. Top 15 (`TARGET`) werden Vorschläge: `rank` 1..n, `reason` = `total_score 7.4` (eine Nachkommastelle), `confidence` = `total_score / höchster total_score der Vorschläge` (0..1; 0, falls der höchste Wert ≤ 0 ist).
+4. `createRun({ candidateCount, suggestedCount, stage1Method: 'recency+junk+total_score+dedup', model: 'total_score' })`, danach `recordSuggestions`.
+5. Leerer Pool → `{ runId: '', suggestions: [] }` ohne Run-Zeile (wie bisher).
+6. Kein LLM-Aufruf, kein `getModelForUseCase`, keine Jev-Aufrufe. Imports von `./reranker`, `getRankingContext`, `getModelForUseCase` entfallen.
+7. Kopfkommentar der Datei: WARUM `total_score` (Gate-Befund mit Zahlen, Verweis auf `scripts/taste-train-report.json`).
+
+- [ ] **Test zuerst** (`tests/lib/ranking-service-total-score.test.ts`, Supabase-Kette `.from().select().eq().gt().gte().order().limit()` gemockt, `isJunkTitle` → false, `dedupeByTopic` und `./suggestions` gemockt): (a) Vorschläge in `total_score`-Reihenfolge, `rank` ab 1, `reason` enthält den Score, `confidence` des ersten = 1; (b) ein von `dedupeByTopic` verworfenes Item erscheint nicht, das nächste rückt nach; (c) höchstens 15 Vorschläge bei 40 Kandidaten; (d) `createRun` mit `model: 'total_score'` und `stage1Method: 'recency+junk+total_score+dedup'`; (e) leerer Pool → `runId ''`, `createRun` nicht aufgerufen; (f) Items mit `content_length < 500` fehlen.
+- [ ] RED, Implementierung, GREEN; `npm run typecheck`; `pnpm test` (Alt-Tests des Rerankers dürfen hier noch laufen — sie werden in 11' entfernt; keine anderen Regressionen)
+- [ ] Commit
+
+### Task 11': Aufräumen und Doku (kein Push, kein Deploy)
+
+**Files:**
+- Delete: `lib/news-queue/reranker.ts`, `lib/news-queue/few-shot.ts`, `lib/news-queue/reranker-parse.ts`, `lib/news-queue/winner-similarity.ts`, `tests/lib/ranking-fewshot.test.ts`, `tests/lib/ranking-parse.test.ts`, `tests/lib/ranking-modelconfig.test.ts`, sowie weitere Tests, die ausschließlich gelöschte Module testen
+- Modify: `lib/ai/use-cases.ts` (Use Case `queue_ranking` entfernen), `tests/lib/use-cases.test.ts`, `app/admin/settings/page.tsx` (`queue_ranking` aus der Gruppe), `lib/news-queue/index.ts` (Re-Exports prüfen), `lib/news-queue/suggestions.ts` (`getRankingContext`/`extractHeadingTexts` entfernen, falls danach unbenutzt), `CLAUDE.md`
+
+- [ ] Verwaiste Referenzen suchen (`grep -rn "reranker\|few-shot\|reranker-parse\|winner-similarity\|getRankingContext\|queue_ranking" lib app tests`), dann löschen/anpassen; `search/rerank` ist ein anderes Modul und bleibt
+- [ ] `CLAUDE.md`: Abschnitt „News Queue & Article Selection" — der Vorschlags-Button sortiert nach `total_score` + semantischer Dedup (kein LLM); Taste-Pipeline als Offline-Werkzeug mit Runbook `npm run taste:backfill && npm run taste:export && npm run taste:train` und Gate-Befund (Zahlen, Verweis auf Report); Env `AI_GATEWAY_API_KEY` (nur Offline-Skripte)
+- [ ] `pnpm test`, `npm run typecheck` grün
+- [ ] Commit auf `feat/news-taste-model` — **kein Push, kein Deploy** (Merge/Push erst in finishing-a-development-branch mit Betreiber-Zustimmung)
