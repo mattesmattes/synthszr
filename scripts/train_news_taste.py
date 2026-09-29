@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["scikit-learn>=1.4", "lightgbm>=4.3", "numpy>=1.26"]
+# dependencies = ["scikit-learn>=1.4", "lightgbm>=4.3,<5", "numpy>=1.26"]
 # ///
 """News-Taste-Training: LR vs. LightGBM-Klassifikator vs. LightGBM-Ranker.
 
@@ -56,7 +56,7 @@ from sklearn.linear_model import LogisticRegression
 ROOT = Path(__file__).resolve().parent
 DATASET = ROOT / "taste-dataset.json"
 BASELINE = ROOT / "reranker-baseline.json"
-ARTIFACT = ROOT.parent / "lib" / "news-taste" / "model.json"
+ARTIFACT = ROOT / "taste-model.json"
 REPORT = ROOT / "taste-train-report.json"
 FEATURES_VERSION = 1  # muss lib/news-taste/questions.ts entsprechen
 

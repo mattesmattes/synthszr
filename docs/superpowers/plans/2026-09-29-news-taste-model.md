@@ -2020,7 +2020,7 @@ Expected: `runId` gesetzt, ≤ 15 Vorschläge mit `Taste-Score`-Reasons, Lauf < 
 
 **Task 8c (Volldaten, Gewinner auf Validierung gewählt):** Gewinner `lightgbm_ranker` (Val-NDCG@15 0,340; logreg 0,304; lightgbm 0,298; total_score 0,331). **Gate-Vergleich (36 Läufe, R@15 / NDCG@15):** ranker 0,118 / 0,089 · logreg 0,104 / 0,116 · lightgbm 0,099 / 0,075 · **total_score 0,142 / 0,138** · Reranker 0,095 / 0,089 · Zufall 0,018 / 0,015. Kein Kandidat schlägt `total_score` → laut vorab freigegebener Regel **Option 2**.
 
-**Folgen für den Plan:** Task 9 (TS-Inferenz) entfällt — zur Laufzeit läuft kein Modell. Tasks 10 und 11 werden durch 10' und 11' ersetzt. Die Jev-/Trainings-Pipeline (`lib/ai/evaluate.ts`, `lib/news-taste/*`, `scripts/*taste*`, `news_taste_features`) bleibt als Offline-Werkzeug für spätere Neuversuche erhalten; `lib/news-taste/model.json` + `scripts/taste-train-report.json` dokumentieren den Gate-Befund.
+**Folgen für den Plan:** Task 9 (TS-Inferenz) entfällt — zur Laufzeit läuft kein Modell. Tasks 10 und 11 werden durch 10' und 11' ersetzt. Die Jev-/Trainings-Pipeline (`lib/ai/evaluate.ts`, `lib/news-taste/*`, `scripts/*taste*`, `news_taste_features`) bleibt als Offline-Werkzeug für spätere Neuversuche erhalten; `scripts/taste-model.json` (verschoben aus `lib/news-taste/model.json`, kein Runtime-Consumer) + `scripts/taste-train-report.json` dokumentieren den Gate-Befund.
 
 ### Task 10': Ranking-Service auf `total_score` + Dedup
 

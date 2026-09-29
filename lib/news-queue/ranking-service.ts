@@ -29,10 +29,42 @@ const DEDUP_POOL = 40
 // Also drop candidates that repeat news already covered in newsletters
 // published within this window (see semantic-dedup.getRecentCoverageEmbeddings).
 const RECENT_COVERAGE_DAYS = 7
+// Supabase .in() lists small — larger lists hit HeadersOverflowError against
+// production (see lib/news-taste/features.ts IN_CHUNK).
+const REJECTED_LOOKUP_CHUNK = 200
 
 export interface RankingResult {
   runId: string
   suggestions: Array<RankedSuggestion & { title: string; source: string | null; date: string | null }>
+}
+
+/**
+ * Ids among `ids` that have ANY ranking_suggestions row with
+ * user_action='rejected' — i.e. a human already said no to this item in a
+ * previous run. Best-effort: with the deterministic total_score ranking, a
+ * rejected item would otherwise resurface on top of every new run forever
+ * (news_queue.status stays 'pending' on reject). Never throws — an error
+ * here must not block suggestion generation.
+ */
+async function getRejectedIds(
+  supabase: ReturnType<typeof createAdminClient>,
+  ids: string[]
+): Promise<Set<string>> {
+  const rejected = new Set<string>()
+  for (let i = 0; i < ids.length; i += REJECTED_LOOKUP_CHUNK) {
+    const chunk = ids.slice(i, i + REJECTED_LOOKUP_CHUNK)
+    const { data, error } = await supabase
+      .from('ranking_suggestions')
+      .select('queue_item_id')
+      .in('queue_item_id', chunk)
+      .eq('user_action', 'rejected')
+    if (error) {
+      console.warn('[RankingService] rejected-lookup failed, continuing without exclusion:', error.message)
+      continue
+    }
+    for (const row of data ?? []) rejected.add(row.queue_item_id as string)
+  }
+  return rejected
 }
 
 export async function generateRankingSuggestions(): Promise<RankingResult> {
@@ -56,9 +88,18 @@ export async function generateRankingSuggestions(): Promise<RankingResult> {
   // No candidates today → nothing to rank.
   if (cleaned.length === 0) return { runId: '', suggestions: [] }
 
+  // Drop candidates a human already rejected in an earlier run — otherwise
+  // the deterministic total_score ranking puts them right back on top of
+  // every new "Vorschläge generieren". Best-effort: never blocks suggestions.
+  const rejectedIds = await getRejectedIds(supabase, cleaned.map((r) => r.id))
+  if (rejectedIds.size > 0) {
+    console.log(`[RankingService] excluded ${rejectedIds.size} previously-rejected candidates`)
+  }
+  const eligible = cleaned.filter((r) => !rejectedIds.has(r.id))
+
   const byId = new Map<string, { title: string; source: string | null }>()
   const dateById = new Map<string, string | null>()
-  for (const r of cleaned) {
+  for (const r of eligible) {
     byId.set(r.id, { title: r.title, source: r.source_display_name })
     // Newsletter date the article came from (email received), fallback queued.
     dateById.set(r.id, r.email_received_at ?? r.queued_at ?? null)
@@ -67,13 +108,21 @@ export async function generateRankingSuggestions(): Promise<RankingResult> {
   // Top candidates by total_score (already the query's sort order) go through
   // semantic dedup so near-duplicate coverage of the same event doesn't crowd
   // out the suggestion list.
-  const dedupCandidates: DedupItem[] = cleaned.slice(0, DEDUP_POOL).map((r) => ({
+  const dedupCandidates: DedupItem[] = eligible.slice(0, DEDUP_POOL).map((r) => ({
     id: r.id,
     title: r.title,
     content: r.excerpt ?? null,
     total_score: Number(r.total_score) || 0,
   }))
-  const { kept } = await dedupeByTopic(dedupCandidates, { recentCoverageDays: RECENT_COVERAGE_DAYS })
+  const { kept, dropped } = await dedupeByTopic(dedupCandidates, { recentCoverageDays: RECENT_COVERAGE_DAYS })
+  if (dropped.length > 0) {
+    const batchN = dropped.filter((d) => d.reason === 'batch').length
+    const coverN = dropped.filter((d) => d.reason === 'recent_coverage').length
+    console.log(`[RankingService] Semantic dedup: dropped ${dropped.length} items (${batchN} batch-dupe, ${coverN} already-covered), ${kept.length} unique remain`)
+    for (const d of dropped) {
+      console.log(`[RankingService]   drop[${d.reason}] "${d.title.slice(0, 50)}" (sim=${d.similarity.toFixed(2)} → ${d.similarTo})`)
+    }
+  }
 
   const finalists = kept.slice(0, TARGET)
   const topScore = finalists.length > 0 ? finalists[0].total_score ?? 0 : 0

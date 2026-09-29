@@ -76,6 +76,30 @@ describe('evaluateState', () => {
     expect((fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBe(3) // 1 + 2 Retries
   })
 
+  it('behandelt 200 mit ungültigem JSON als retrybar und liefert nach Wiederholung die Antwort', async () => {
+    const waits: number[] = []
+    ;(fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(new Response('not json{', { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(okBody), { status: 200 }))
+    const res = await evaluateState('x', { is_event: { type: 'boolean', instructions: 'q' } }, {
+      sleep: async (ms) => { waits.push(ms) },
+    })
+    expect(res.answers.is_event.type).toBe('boolean')
+    expect(waits).toEqual([1000])
+  })
+
+  it('behandelt 200 ohne "answers"-Feld als retrybar und liefert nach Wiederholung die Antwort', async () => {
+    const waits: number[] = []
+    ;(fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ usage: { inputTokens: 1, outputTokens: 1 } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(okBody), { status: 200 }))
+    const res = await evaluateState('x', { is_event: { type: 'boolean', instructions: 'q' } }, {
+      sleep: async (ms) => { waits.push(ms) },
+    })
+    expect(res.answers.is_event.type).toBe('boolean')
+    expect(waits).toEqual([1000])
+  })
+
   it('wiederholt nach einem Netzwerkfehler (fetch wirft) und liefert danach die Antwort', async () => {
     const waits: number[] = []
     ;(fetch as ReturnType<typeof vi.fn>)

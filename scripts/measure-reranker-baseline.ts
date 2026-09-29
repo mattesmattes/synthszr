@@ -55,8 +55,10 @@ async function main() {
     if (data.length < PAGE) break // letzte Seite war nicht voll
   }
 
+  // Runs created by the new total_score+dedup ranking (no reranker call) aren't
+  // reranker runs and would water down this baseline — exclude them.
   const { data: runs, error: runsError } = await supabase.from('ranking_runs')
-    .select('id, created_at').order('created_at', { ascending: true })
+    .select('id, created_at').neq('model', 'total_score').order('created_at', { ascending: true })
   if (runsError) throw new Error(`ranking_runs: ${runsError.message}`)
 
   const perRun: Array<{

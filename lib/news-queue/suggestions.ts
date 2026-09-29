@@ -24,7 +24,7 @@ export async function createRun(meta: {
   return data!.id as string
 }
 
-/** Persist the LLM suggestions for a run. */
+/** Persist the ranking suggestions for a run. */
 export async function recordSuggestions(runId: string, suggestions: RankedSuggestion[]): Promise<void> {
   if (suggestions.length === 0) return
   const supabase = createAdminClient()

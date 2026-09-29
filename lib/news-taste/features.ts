@@ -103,8 +103,8 @@ const IN_CHUNK = 200 // Supabase-.in()-Listen klein halten
  * Liefert Jev-Feature-Vektoren für die Items: erst Lookup in
  * news_taste_features (NUR aktuelle FEATURES_VERSION — alte Kataloge
  * erzeugen andere Vektoren), fehlende werden live berechnet und persistiert.
- * Fehler einzelner Items landen in failedIds; der Aufrufer entscheidet über
- * Fallback (Runtime) oder Protokoll (Backfill).
+ * Fehler einzelner Items landen in failedIds; der Aufrufer (Offline-Skripte:
+ * Backfill, Dataset-Export) entscheidet, ob er sie überspringt oder protokolliert.
  */
 export async function getOrComputeFeatures(
   items: TasteInput[],

@@ -6,8 +6,10 @@ import type { EvaluateQuestion } from '@/lib/ai/evaluate'
  * Eingabe-Features des trainierten Klassifikators.
  *
  * FEATURES_VERSION bei JEDER inhaltlichen Änderung erhöhen: Training und
- * Inferenz müssen denselben Katalog sehen (predict.ts verweigert sonst den
- * Start), und gespeicherte Vektoren alter Versionen dürfen nicht einfließen.
+ * Inferenz müssen denselben Katalog sehen (scripts/train_news_taste.py bricht
+ * bei abweichender features_version ab; eine künftige TS-Inferenz müsste das
+ * ebenso prüfen), und gespeicherte Vektoren alter Versionen dürfen nicht
+ * einfließen.
  * Fragen auf Englisch — die Quellartikel sind es überwiegend auch.
  *
  * WICHTIG: Die Version deckt NUR den Jev-Fragenkatalog ab, dessen Vektoren

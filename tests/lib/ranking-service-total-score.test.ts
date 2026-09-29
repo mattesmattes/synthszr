@@ -18,6 +18,10 @@ interface Row {
 
 const state = vi.hoisted(() => ({
   rows: [] as Row[],
+  // ranking_suggestions rows with user_action='rejected' (queue_item_id only,
+  // as the real lookup selects) — see getRejectedIds in ranking-service.ts.
+  rejectedIds: [] as string[],
+  rejectedError: null as string | null,
 }))
 
 const mocks = vi.hoisted(() => ({
@@ -27,15 +31,30 @@ const mocks = vi.hoisted(() => ({
 }))
 const { dedupeByTopicMock, createRunMock, recordSuggestionsMock } = mocks
 
-function makeChain() {
+function makeQueueChain() {
   const chain: any = {}
   for (const m of ['select', 'eq', 'gt', 'gte', 'order', 'limit']) chain[m] = vi.fn(() => chain)
   chain.then = (res: (v: unknown) => void) => res({ data: state.rows, error: null })
   return chain
 }
 
+/** ranking_suggestions rejected-lookup chain: .select().in().eq() */
+function makeRejectedChain() {
+  const chain: any = {}
+  for (const m of ['select', 'in', 'eq']) chain[m] = vi.fn(() => chain)
+  chain.then = (res: (v: unknown) => void) =>
+    res(
+      state.rejectedError
+        ? { data: null, error: { message: state.rejectedError } }
+        : { data: state.rejectedIds.map((id) => ({ queue_item_id: id })), error: null }
+    )
+  return chain
+}
+
 vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: () => ({ from: vi.fn(() => makeChain()) }),
+  createAdminClient: () => ({
+    from: vi.fn((table: string) => (table === 'ranking_suggestions' ? makeRejectedChain() : makeQueueChain())),
+  }),
 }))
 
 vi.mock('@/lib/news-queue/service', () => ({
@@ -74,6 +93,8 @@ function passThroughDedup(items: Array<{ total_score?: number }>) {
 
 beforeEach(() => {
   state.rows = []
+  state.rejectedIds = []
+  state.rejectedError = null
   dedupeByTopicMock.mockReset()
   createRunMock.mockClear()
   recordSuggestionsMock.mockClear()
@@ -102,8 +123,10 @@ describe('generateRankingSuggestions (total_score + dedup)', () => {
     expect(result.suggestions[1].rank).toBe(2)
   })
 
-  it('c) höchstens 15 Vorschläge bei 40 Kandidaten', async () => {
-    state.rows = Array.from({ length: 40 }, (_, i) => row(`id${i}`, 40 - i))
+  it('c) höchstens 15 Vorschläge bei 50 Kandidaten, Dedup bekommt nur die obersten 40 (DEDUP_POOL)', async () => {
+    // 50 statt 40 Zeilen: bei genau 40 kann der Test Slicing-auf-DEDUP_POOL
+    // nicht von "kein Slicing" unterscheiden (beides ergäbe items.length===40).
+    state.rows = Array.from({ length: 50 }, (_, i) => row(`id${i}`, 50 - i))
     const result = await generateRankingSuggestions()
     expect(result.suggestions.length).toBe(15)
     expect(dedupeByTopicMock).toHaveBeenCalledTimes(1)
@@ -120,6 +143,15 @@ describe('generateRankingSuggestions (total_score + dedup)', () => {
     )
   })
 
+  it('d2) recordSuggestions wird mit runId und den Vorschlagsobjekten (queueItemId/rank/reason/confidence) aufgerufen', async () => {
+    state.rows = [row('a', 9.2), row('b', 5.5)]
+    await generateRankingSuggestions()
+    expect(recordSuggestionsMock).toHaveBeenCalledWith('run-1', [
+      { queueItemId: 'a', rank: 1, reason: 'total_score 9.2', confidence: 1 },
+      { queueItemId: 'b', rank: 2, reason: 'total_score 5.5', confidence: 5.5 / 9.2 },
+    ])
+  })
+
   it('e) leerer Pool -> runId "", createRun nicht aufgerufen', async () => {
     state.rows = []
     const result = await generateRankingSuggestions()
@@ -132,5 +164,20 @@ describe('generateRankingSuggestions (total_score + dedup)', () => {
     state.rows = [row('a', 9.0, { content_length: 499 }), row('b', 8.0, { content_length: 500 })]
     const result = await generateRankingSuggestions()
     expect(result.suggestions.map((s) => s.queueItemId)).toEqual(['b'])
+  })
+
+  it('g) ein zuvor abgelehntes Item (ranking_suggestions.user_action=rejected) fehlt, das nächste rückt nach', async () => {
+    state.rows = [row('a', 9.0), row('b', 8.0), row('c', 5.0)]
+    state.rejectedIds = ['a']
+    const result = await generateRankingSuggestions()
+    expect(result.suggestions.map((s) => s.queueItemId)).toEqual(['b', 'c'])
+    expect(result.suggestions[0].rank).toBe(1)
+  })
+
+  it('h) Fehler beim Rejected-Lookup blockiert die Vorschläge nicht (best effort)', async () => {
+    state.rows = [row('a', 9.0), row('b', 8.0)]
+    state.rejectedError = 'boom'
+    const result = await generateRankingSuggestions()
+    expect(result.suggestions.map((s) => s.queueItemId)).toEqual(['a', 'b'])
   })
 })

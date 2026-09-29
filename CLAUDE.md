@@ -102,7 +102,9 @@ The news queue system manages article selection for Ghostwriter blog post genera
 **Database:**
 - `news_queue` table with status: pending → selected → used
 - `get_balanced_queue_selection()` PostgreSQL function for fair source distribution
-- Score formula: `total_score = 0.4×synthesis + 0.3×relevance + 0.3×uniqueness`
+- Score formula (production, GENERATED STORED column, since migration
+  `20260328_optimized_scoring.sql` — this is now the only ranking basis):
+  `total_score = source_pub_rate×17.5 + relevance_score×0.82 + synthesis_score×0.31 + min(content_length/10000, 1)×0.31`
 
 **Ranking-Vorschlag (Admin-Button):**
 - `lib/news-queue/ranking-service.ts` (`generateRankingSuggestions`) sortiert Kandidaten
@@ -122,9 +124,22 @@ The news queue system manages article selection for Ghostwriter blog post genera
   Feature-Vektoren in `lib/news-taste/questions.ts` / `features.ts`, gespeichert
   in `news_taste_features` (58.602 Vektoren, `FEATURES_VERSION` 1).
 - Runbook: `npm run taste:backfill && npm run taste:export && npm run taste:train`
-  (Training läuft über `uv`). Ein Backfill-Lauf kostet ca. $4,53.
+  (Training läuft über `uv`). Der erste vollständige Backfill-Lauf kostete
+  ca. $4,53; Reruns sind idempotent (Lookup vor Berechnung, s. o.) und zahlen
+  nur für neue Items. Trainiertes Artefakt: `scripts/taste-model.json`.
 - Ergebnis siehe Gate-Befund oben — deshalb bleibt der Admin-Vorschlags-Button
   bei `total_score` statt einem trainierten Modell.
+- Nach der Umstellung entstehen keine neuen Reranker-Runs mehr
+  (`scripts/measure-reranker-baseline.ts` filtert `ranking_runs` mit
+  `model = 'total_score'` heraus); künftige Gates vergleichen daher gegen
+  `total_score_baseline`, und `gate_comparison` kann für spätere Testzeiträume
+  0 Reranker-Runs ausweisen.
+- **Methodik-Vorbehalt:** Die Labels stammen aus einer Queue-UI, die selbst
+  nach `total_score` sortiert war, und `total_score` wurde (Migration
+  `20260328_optimized_scoring.sql`) auf derselben Art von Labels gefittet —
+  ein Offline-Gate ist damit strukturell zugunsten von `total_score`
+  verzerrt (Positionsbias). Ein fairer künftiger Test ist online: Modell-
+  Vorschläge in das Panel mischen und die Annahmequote messen.
 
 ## Recent Changes (2026-01-14)
 

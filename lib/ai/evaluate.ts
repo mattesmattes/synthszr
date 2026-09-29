@@ -46,19 +46,28 @@ const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
  * fetch() mit Timeout — ohne AbortController haengt ein Aufruf, dessen TCP-
  * Verbindung offen bleibt, aber nie antwortet, den Request-Handler auf
  * unbestimmte Zeit auf (Vercel-Function-Timeout statt kontrolliertem Retry).
+ *
+ * Der Timer bleibt bewusst aktiv, bis der Aufrufer den Body gelesen hat
+ * (clearTimer() liegt bei ihm): fetch() aufgeloest heisst nur "Header da" —
+ * ein Response mit haengendem Body (Verbindung offen, aber kein weiteres
+ * Byte) waere sonst vor res.json()/res.text() ungeschuetzt und haengt genauso
+ * unbegrenzt wie ein haengender Verbindungsaufbau.
  */
-async function fetchEvaluate(apiKey: string, state: string, questions: Record<string, EvaluateQuestion>, timeoutMs: number): Promise<Response> {
+async function fetchEvaluate(apiKey: string, state: string, questions: Record<string, EvaluateQuestion>, timeoutMs: number): Promise<{ res: Response; clearTimer: () => void }> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  const clearTimer = () => clearTimeout(timeoutId)
   try {
-    return await fetch(EVALUATE_URL, {
+    const res = await fetch(EVALUATE_URL, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: JEV_MODEL, state, questions }),
       signal: controller.signal,
     })
-  } finally {
-    clearTimeout(timeoutId)
+    return { res, clearTimer }
+  } catch (err) {
+    clearTimer()
+    throw err
   }
 }
 
@@ -76,8 +85,9 @@ export async function evaluateState(
   let lastError = ''
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     let res: Response
+    let clearTimer: () => void
     try {
-      res = await fetchEvaluate(apiKey, state, questions, timeoutMs)
+      ;({ res, clearTimer } = await fetchEvaluate(apiKey, state, questions, timeoutMs))
     } catch (err) {
       // fetch() selbst wirft bei DNS-Fehlern, ECONNRESET, "fetch failed" UND
       // beim eigenen Timeout-Abort oben — es gibt dann keine Response mit
@@ -91,21 +101,44 @@ export async function evaluateState(
       continue
     }
     if (res.ok) {
-      const body = (await res.json()) as {
-        answers: Record<string, EvaluateAnswer>
+      let body: {
+        answers?: Record<string, EvaluateAnswer>
         usage?: { inputTokens?: number; outputTokens?: number }
         providerMetadata?: { gateway?: { cost?: string } }
+      } | undefined
+      let parseError: unknown
+      try {
+        body = await res.json()
+      } catch (err) {
+        parseError = err
+      } finally {
+        clearTimer()
       }
-      const usage = {
-        inputTokens: body.usage?.inputTokens ?? 0,
-        outputTokens: body.usage?.outputTokens ?? 0,
+      // Ein 200 mit kaputtem JSON oder ohne "answers" ist genauso ein
+      // unbrauchbarer Response wie ein Netzwerkfehler — Retry statt Absturz.
+      if (!parseError && body?.answers) {
+        const usage = {
+          inputTokens: body.usage?.inputTokens ?? 0,
+          outputTokens: body.usage?.outputTokens ?? 0,
+        }
+        const rawCost = body.providerMetadata?.gateway?.cost
+        const costUsd = rawCost !== undefined && Number.isFinite(Number(rawCost)) ? Number(rawCost) : null
+        scheduleUsageLog(opts.useCase ?? 'news_taste_features', usage, costUsd)
+        return { answers: body.answers, usage, costUsd }
       }
-      const rawCost = body.providerMetadata?.gateway?.cost
-      const costUsd = rawCost !== undefined && Number.isFinite(Number(rawCost)) ? Number(rawCost) : null
-      scheduleUsageLog(opts.useCase ?? 'news_taste_features', usage, costUsd)
-      return { answers: body.answers, usage, costUsd }
+      lastError = parseError
+        ? `Gateway 200 mit ungültigem JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`
+        : 'Gateway 200 ohne "answers"-Feld'
+      if (attempt === maxRetries) throw new Error(lastError)
+      await sleep(1000 * 2 ** attempt)
+      continue
     }
-    const text = (await res.text()).slice(0, 300)
+    let text: string
+    try {
+      text = (await res.text()).slice(0, 300)
+    } finally {
+      clearTimer()
+    }
     lastError = `Gateway ${res.status}: ${text}`
     // Nur Überlast/Serverfehler sind retrybar; 4xx (außer 429) ist ein
     // Request-Problem und wird durch Wiederholen nicht besser.
