@@ -44,6 +44,13 @@ Fix Round 1 (Controller-Review):
   Zeile 25-30); die alte Formel (0.4*syn + 0.3*rel + 0.3*unq + source_bonus)
   bleibt als legacy_formula_baseline zum Vergleich erhalten.
 
+Controller-Ruling R26:
+- Die Produktions-total_score-Formel rankt im GATE-Vergleich (compute_gate_
+  comparison) jetzt als dritte Reihe mit — denselben Pools, denselben
+  relevanten Items wie Modell und Reranker. Zeigt, ob das trainierte Modell
+  auch die Ordnung schlaegt, die die Queue schon heute verwendet (nicht nur
+  den LLM-Reranker).
+
 Lauf: npm run taste:train   (uv run scripts/train_news_taste.py)
 """
 import datetime
@@ -190,12 +197,13 @@ def score_pool_ids(pool_items: list[dict], score_fn) -> list[str]:
     return [ids[i] for i in np.argsort(-scores)]
 
 
-def compute_gate_comparison(test_days, day_index: dict, per_run: list[dict], winner_score_fn) -> dict:
+def compute_gate_comparison(test_days, day_index: dict, per_run: list[dict], winner_score_fn, total_score_fn) -> dict:
     """R25: apples-to-apples Gate-Vergleich. Fuer jeden Reranker-Lauf im
     Testzeitraum: Pool = Datensatz-Items von Lauftag + Vortag, relevant =
     binnen 48h veroeffentlichte Items (aus der Baseline-Messung) geschnitten
-    mit dem Pool. Modell und Reranker ranken denselben Pool/dieselben
-    relevanten Items; Random ist der exakte Erwartungswert auf demselben Pool."""
+    mit dem Pool. Modell, Reranker und die Produktions-total_score-Formel
+    (R26) ranken denselben Pool/dieselben relevanten Items; Random ist der
+    exakte Erwartungswert auf demselben Pool."""
     test_day_set = {d["day"] for d in test_days}
     rows = []
     for run in per_run:
@@ -213,6 +221,7 @@ def compute_gate_comparison(test_days, day_index: dict, per_run: list[dict], win
 
         suggested_ids = run.get("suggested_ids") or []
         model_order = score_pool_ids(pool_items, winner_score_fn)
+        total_score_order = score_pool_ids(pool_items, total_score_fn)
         n_pool, n_rel = len(pool_items), len(relevant)
 
         rows.append({
@@ -227,6 +236,11 @@ def compute_gate_comparison(test_days, day_index: dict, per_run: list[dict], win
                 "r15": recall_at_k(suggested_ids, relevant, 15),
                 "ndcg15": ndcg_at_k(suggested_ids, relevant, 15),
             },
+            "total_score": {
+                "r10": recall_at_k(total_score_order, relevant, 10),
+                "r15": recall_at_k(total_score_order, relevant, 15),
+                "ndcg15": ndcg_at_k(total_score_order, relevant, 15),
+            },
             "random": {
                 "r10": expected_recall_at_k(n_pool, n_rel, 10),
                 "r15": expected_recall_at_k(n_pool, n_rel, 15),
@@ -235,7 +249,7 @@ def compute_gate_comparison(test_days, day_index: dict, per_run: list[dict], win
         })
 
     if not rows:
-        return {"runs_used": 0, "model": None, "reranker": None, "random": None, "rows": []}
+        return {"runs_used": 0, "model": None, "reranker": None, "total_score": None, "random": None, "rows": []}
 
     def avg(group: str, metric: str) -> float:
         return float(np.mean([r[group][metric] for r in rows]))
@@ -251,6 +265,7 @@ def compute_gate_comparison(test_days, day_index: dict, per_run: list[dict], win
         "runs_used": len(rows),
         "model": summarize("model"),
         "reranker": summarize("reranker"),
+        "total_score": summarize("total_score"),
         "random": summarize("random"),
         "rows": rows,
     }
@@ -470,8 +485,8 @@ def main() -> None:
     else:
         reranker_test_period = {"runs_used": 0, "mean_recall_at_10": None, "mean_recall_at_15": None, "mean_ndcg_at_15": None}
 
-    # --- R25: Gate-Vergleich apples-to-apples (Pool = Lauftag + Vortag, gleiche relevante Items) ---
-    gate_comparison = compute_gate_comparison(test_days, day_index, per_run, winner_score_fn)
+    # --- R25/R26: Gate-Vergleich apples-to-apples (Pool = Lauftag + Vortag, gleiche relevante Items) ---
+    gate_comparison = compute_gate_comparison(test_days, day_index, per_run, winner_score_fn, total_score_prod)
 
     report = {
         "winner": winner,
@@ -526,9 +541,10 @@ def main() -> None:
         ("random_baseline", random_m),
     ])
     print()
-    print_comparison_table(f"GATE-VERGLEICH (R25, apples-to-apples, n={gate_comparison['runs_used']} Laeufe):", [
+    print_comparison_table(f"GATE-VERGLEICH (R25/R26, apples-to-apples, n={gate_comparison['runs_used']} Laeufe):", [
         (f"model ({winner})", gate_comparison["model"]),
         ("reranker (suggested_ids)", gate_comparison["reranker"]),
+        ("total_score (Produktionsformel)", gate_comparison["total_score"]),
         ("random (erwartet, gleicher Pool)", gate_comparison["random"]),
     ])
     print()
