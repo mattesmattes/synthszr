@@ -1972,3 +1972,44 @@ Expected: `runId` gesetzt, ≤ 15 Vorschläge mit `Taste-Score`-Reasons, Lauf < 
 
 - Feedback-Schleife: `recordFeedback` schreibt weiter Labels; nach ~4 Wochen Retrain und Metrik-Vergleich.
 - Optional BYOK (TypeSafe-Key im Vercel-Dashboard), optional Cron-Retrain.
+
+---
+
+## Iteration nach dem Gate (Betreiber-Entscheidung 2026-09-29)
+
+**Befund am Gate (Task 8, Volldaten):** Gate-Vergleich über 36 Läufe (gleiche Pools/Relevanzmengen): Modell (LR) R@15 0,104 / NDCG@15 0,116 · alter LLM-Reranker 0,095 / 0,089 · produktive `total_score`-Sortierung **0,142 / 0,141** · Zufall 0,018 / 0,015. Das Modell schlägt den Reranker, nicht aber `total_score`.
+
+**Betreiber-Entscheidung:** zweiter Trainingsversuch ohne neue Jev-Kosten (Tasks 8b, 8c). **Entscheidungsregel (vom Betreiber vorab freigegeben):** Schlägt der neue Gewinner `total_score` im Gate-Vergleich bei R@15 UND NDCG@15, werden Tasks 9–11 wie geplant umgesetzt (Umschalten auf das Modell). Sonst wird Option 2 umgesetzt: der Button sortiert nach `total_score` + semantischer Dedup, ohne LLM und ohne Modell zur Laufzeit (Tasks 9–11 werden dafür angepasst).
+
+### Task 8b: `total_score` als Zusatzsignal
+
+**Files:**
+- Modify: `lib/news-taste/questions.ts`, `lib/news-taste/features.ts`, `scripts/backfill-taste-features.ts`, `scripts/export-taste-dataset.ts` (ggf. `scripts/lib/taste-ground-truth.ts`, falls dort die Spaltenliste steht)
+- Test: `tests/lib/news-taste-features.test.ts`, `tests/lib/news-taste-get-or-compute.test.ts`
+
+**Interfaces:**
+- Produces: `EXTRA_FEATURE_NAMES` endet mit `'total_score'` (an das ENDE angehängt, bestehende Reihenfolge bleibt) → `FEATURE_NAMES.length === 39`; `TasteInput.totalScore: number`; `extraFeatures()` liefert `total_score: num(input.totalScore)`.
+- `FEATURES_VERSION` bleibt **1**: Die Version beschreibt den Jev-Fragenkatalog, dessen Vektoren in `news_taste_features` liegen; Zusatzsignale werden immer frisch berechnet. Eine Erhöhung würde die 58.602 bezahlten Vektoren verwaisen lassen. Kommentar entsprechend ergänzen.
+
+`news_queue.total_score` ist eine GENERATED STORED Spalte mit exakt der Produktionsformel (Migration `20260328_optimized_scoring.sql`) — der echte DB-Wert wird verwendet, keine Rekonstruktion. Backfill und Export selektieren `total_score` zusätzlich und füllen `totalScore`.
+
+- [ ] Tests zuerst anpassen/erweitern (extraFeatures liefert `total_score`; FEATURE_NAMES hat 39 Einträge und endet auf `total_score`), RED, dann Implementierung, GREEN
+- [ ] `npm run typecheck`, `pnpm test`
+- [ ] `npm run taste:export` erneut (read-only) → `taste-dataset.json` mit 39 Features; prüfen: jede `x`-Länge 39, kein NaN
+- [ ] Commit
+
+### Task 8c: Ranking-Objective und Gewinnerwahl auf Validierung
+
+**Files:**
+- Modify: `scripts/train_news_taste.py`; regeneriert: `lib/news-taste/model.json`, `scripts/taste-train-report.json`
+
+**Anforderungen:**
+- Innere Validierung: die jüngsten 20 % der TRAININGS-Tage (chronologisch) sind Validierung. Alle Kandidaten werden auf „Train ohne Validierung" gefittet und auf Validierung per Tages-NDCG@15 verglichen. **Der Gewinner wird auf der Validierung gewählt, nie auf dem Testzeitraum.** Danach wird der Gewinner auf allen Trainingstagen neu gefittet (Ranker mit der auf Validierung gefundenen Iterationszahl) und auf dem Testzeitraum berichtet. Testmetriken ALLER Kandidaten werden berichtet, fließen aber nicht in die Wahl ein. (Ersetzt die bisherige Regel „NDCG@15 auf Test, LR-Tiebreak".)
+- Kandidaten: `logreg` (wie bisher), `lightgbm` (Klassifikator wie bisher), neu `lightgbm_ranker` (`LGBMRanker`, `objective='lambdarank'`, Gruppen = Tage, `eval_at=[15]`, Early Stopping auf der Validierung, `deterministic=True`, `force_row_wise=True`, fester Seed).
+- `total_score_baseline` nutzt jetzt das echte Feature `total_score`; die Rekonstruktion entfällt, `legacy_formula_baseline` bleibt.
+- Artefakt: Gewinnt der Ranker, ist `model_type` `'lightgbm'` mit denselben `tree_structure`-Bäumen (die TS-Inferenz wendet sigmoid auf die Baumsumme an — monoton, ranking-neutral). Parität für den Ranker: Artefakt-Walk vs. `booster_.predict(X, raw_score=True)` (roher Score, beide ohne sigmoid oder beide mit), Toleranz 1e-6, für alle Kandidaten.
+- `gate_comparison` wie bisher (Modell = Gewinner, Reranker, total_score, Zufall) plus zusätzlich die Zeilen aller Kandidaten, damit der Betreiber sieht, ob irgendein Kandidat `total_score` schlägt.
+- Report: `validation_metrics` je Kandidat, `test_metrics` je Kandidat, `winner` + Begründung, Gate-Tabelle.
+- [ ] Umsetzen, `npm run taste:train`, Parität grün
+- [ ] Commit (Skript, `model.json`, Report)
+- [ ] Controller wendet die Entscheidungsregel an
