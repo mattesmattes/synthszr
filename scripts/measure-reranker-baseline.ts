@@ -56,7 +56,7 @@ async function main() {
   }
 
   const { data: runs, error: runsError } = await supabase.from('ranking_runs')
-    .select('id, created_at, model').order('created_at', { ascending: true })
+    .select('id, created_at').order('created_at', { ascending: true })
   if (runsError) throw new Error(`ranking_runs: ${runsError.message}`)
 
   const perRun: Array<{ runId: string; day: string; n: number; r10: number; r15: number; ndcg15: number }> = []
@@ -68,8 +68,16 @@ async function main() {
   let skippedNoPostWithin48h = 0
 
   for (const run of runs ?? []) {
+    // WARUM .not(...'is', null): suggested_rank ist NULL bei vom Operator
+    // manuell hinzugefügten Items (kein Reranker-Vorschlag, s. Migration
+    // 20260601000000_assisted_ranking.sql + recordFeedback in
+    // lib/news-queue/suggestions.ts). Ohne den Filter würden solche Items ans
+    // Ranking-Ende rutschen (NULLS LAST) und bei Runs mit < 15 echten
+    // Vorschlägen menschliche Treffer fälschlich dem Reranker gutgeschrieben
+    // — das würde die Baseline (=Messlatte fürs Gate) künstlich anheben.
     const { data: sugg, error: suggError } = await supabase.from('ranking_suggestions')
       .select('queue_item_id, suggested_rank').eq('run_id', run.id)
+      .not('suggested_rank', 'is', null)
       .order('suggested_rank', { ascending: true })
     if (suggError) throw new Error(`ranking_suggestions (run ${run.id}): ${suggError.message}`)
     const ranked = (sugg ?? []).map((s) => s.queue_item_id as string)
