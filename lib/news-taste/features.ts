@@ -1,5 +1,4 @@
-import type { EvaluateAnswer } from '@/lib/ai/evaluate'
-import { evaluateState, JEV_MODEL } from '@/lib/ai/evaluate'
+import { evaluateState, JEV_MODEL, type EvaluateAnswer } from '@/lib/ai/evaluate'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   TASTE_QUESTIONS, JEV_FEATURE_NAMES, STORY_TYPE_OPTIONS, FEATURES_VERSION,
