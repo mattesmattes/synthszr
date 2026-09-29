@@ -59,7 +59,10 @@ async function main() {
     .select('id, created_at').order('created_at', { ascending: true })
   if (runsError) throw new Error(`ranking_runs: ${runsError.message}`)
 
-  const perRun: Array<{ runId: string; day: string; n: number; r10: number; r15: number; ndcg15: number }> = []
+  const perRun: Array<{
+    runId: string; day: string; n: number; r10: number; r15: number; ndcg15: number
+    suggested_ids: string[]; relevant_ids: string[]
+  }> = []
   // WARUM getrennt zählen: der Controller muss beurteilen können, ob das
   // 48h-Attributionsfenster plausibel ist — "kein Vorschlag" (Datenlücke im
   // Run selbst) ist ein anderes Problem als "kein Post binnen 48h" (Fenster
@@ -103,6 +106,10 @@ async function main() {
       r10: recallAtK(ranked, relevant, 10),
       r15: recallAtK(ranked, relevant, 15),
       ndcg15: ndcgAtK(ranked, relevant, 15),
+      // R25: fuer den apples-to-apples Gate-Vergleich im News-Taste-Training
+      // (gleicher Item-Pool, gleiche relevante Items fuer Modell + Reranker).
+      suggested_ids: ranked,
+      relevant_ids: Array.from(relevant),
     })
   }
 
