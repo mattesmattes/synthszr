@@ -38,3 +38,6 @@ premarket-api-integration.json
 .superpowers/
 db-backups/
 backups/
+
+# Git-Worktrees fuer isolierte Feature-Arbeit
+.worktrees/
