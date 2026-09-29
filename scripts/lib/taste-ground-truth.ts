@@ -66,3 +66,19 @@ export async function collectGroundTruthDays(supabase: AdminClient, labeledIds: 
   }
   return [...days].sort()
 }
+
+/**
+ * UTC-Tagesfenster [from, to) für einen Tag (YYYY-MM-DD). `to` ist der
+ * NÄCHSTE UTC-Tag um 00:00:00.000Z, nicht `${day}T23:59:59.999Z`:
+ * timestamptz hat Mikrosekunden-Auflösung, ".999Z" verliert Zeilen ab
+ * xx:xx:59.9995 — sowohl aus diesem als auch (durch die Lücke) potenziell
+ * aus dem nächsten Tag. Date.UTC() normalisiert Tagesüberlauf automatisch,
+ * darum korrekt über Monats-/Jahresgrenzen hinweg (Backfill und ein
+ * späterer Export nutzen exakt dasselbe Fenster).
+ */
+export function dayWindow(day: string): { from: string; to: string } {
+  const [y, m, d] = day.split('-').map(Number)
+  const from = new Date(Date.UTC(y, m - 1, d))
+  const to = new Date(Date.UTC(y, m - 1, d + 1))
+  return { from: from.toISOString(), to: to.toISOString() }
+}

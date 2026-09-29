@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractQueueItemIds } from '@/scripts/lib/taste-ground-truth'
+import { extractQueueItemIds, dayWindow } from '@/scripts/lib/taste-ground-truth'
 
 describe('extractQueueItemIds', () => {
   it('liest queueItemId aus Objekt-Content', () => {
@@ -72,5 +72,28 @@ describe('extractQueueItemIds', () => {
     expect(extractQueueItemIds(null)).toEqual([])
     expect(extractQueueItemIds(undefined)).toEqual([])
     expect(extractQueueItemIds({})).toEqual([])
+  })
+})
+
+describe('dayWindow', () => {
+  it('normaler Tag: from ist Tagesanfang UTC, to der naechste Tag um 00:00Z', () => {
+    expect(dayWindow('2026-06-15')).toEqual({
+      from: '2026-06-15T00:00:00.000Z',
+      to: '2026-06-16T00:00:00.000Z',
+    })
+  })
+
+  it('Monatsende: 2026-02-28 -> to ist 2026-03-01 (kein Schaltjahr)', () => {
+    expect(dayWindow('2026-02-28')).toEqual({
+      from: '2026-02-28T00:00:00.000Z',
+      to: '2026-03-01T00:00:00.000Z',
+    })
+  })
+
+  it('Jahresende: 2026-12-31 -> to ist 2027-01-01', () => {
+    expect(dayWindow('2026-12-31')).toEqual({
+      from: '2026-12-31T00:00:00.000Z',
+      to: '2027-01-01T00:00:00.000Z',
+    })
   })
 })
