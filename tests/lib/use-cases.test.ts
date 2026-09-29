@@ -13,7 +13,6 @@ const EXPECTED_USE_CASES: UseCase[] = [
   'podcast_script',
   'edit_analysis',
   'pattern_extraction',
-  'queue_ranking',
   'image_generation',
   'ranking_extract',
   'ranking_attribution_qa',

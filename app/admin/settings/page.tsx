@@ -79,7 +79,7 @@ interface ScheduleConfig {
 // USE_CASE_DEFINITIONS is imported from lib/ai/use-cases.ts — the same
 // source lib/ai/model-config.ts reads from server-side. Do not redefine a
 // second copy here; that duplication is what previously caused newer use
-// cases (queue_ranking, ranking_*, subscription_detect, glossary_*) to be
+// cases (ranking_*, subscription_detect, glossary_*) to be
 // configurable in the database but invisible in this UI.
 
 // Use-cases that pick from image-generation models instead of text models.
@@ -105,7 +105,7 @@ const USE_CASE_GROUPS: Array<{ title: string; useCases: string[] }> = [
   },
   {
     title: 'Analyse & Verarbeitung',
-    useCases: ['synthesis_scoring', 'edit_analysis', 'pattern_extraction', 'queue_ranking', 'subscription_detect', 'comment_moderation', 'search_rerank', 'techmeme_relevance'],
+    useCases: ['synthesis_scoring', 'edit_analysis', 'pattern_extraction', 'subscription_detect', 'comment_moderation', 'search_rerank', 'techmeme_relevance'],
   },
   {
     title: 'Rankings (Synthszr Charts)',

@@ -104,6 +104,28 @@ The news queue system manages article selection for Ghostwriter blog post genera
 - `get_balanced_queue_selection()` PostgreSQL function for fair source distribution
 - Score formula: `total_score = 0.4×synthesis + 0.3×relevance + 0.3×uniqueness`
 
+**Ranking-Vorschlag (Admin-Button):**
+- `lib/news-queue/ranking-service.ts` (`generateRankingSuggestions`) sortiert Kandidaten
+  rein nach `total_score` und entfernt Themen-Duplikate über semantischen Dedup
+  (`lib/news-queue/semantic-dedup.ts`) — kein LLM-Call, kein Modell zur Laufzeit.
+- Grund: Gate-Vergleich über 36 Reranker-Runs (2026-08-25..2026-09-29, gleiche
+  Pools/Relevanzmengen; Recall@15 / NDCG@15) — `total_score` 0.142 / 0.138 schlägt
+  das beste trainierte Modell (LambdaRank, 0.118 / 0.089), logistische Regression
+  (0.104 / 0.116), den früheren LLM-Reranker (0.095 / 0.089) und Random
+  (0.018 / 0.015). Details: `scripts/taste-train-report.json`.
+- Der frühere LLM-Reranker (`lib/news-queue/reranker.ts` + Umfeld, Use Case
+  `queue_ranking`) wurde entfernt (Task 11', News-Taste-Modell).
+
+**News-Taste-Pipeline (Offline-Werkzeug, nicht Teil des Laufzeitpfads):**
+- Bewertet Artikel entlang mehrerer Geschmacksfragen via Vercel AI Gateway
+  (`lib/ai/evaluate.ts`, Modell `typesafe-ai/jev`); Fragenkatalog und
+  Feature-Vektoren in `lib/news-taste/questions.ts` / `features.ts`, gespeichert
+  in `news_taste_features` (58.602 Vektoren, `FEATURES_VERSION` 1).
+- Runbook: `npm run taste:backfill && npm run taste:export && npm run taste:train`
+  (Training läuft über `uv`). Ein Backfill-Lauf kostet ca. $4,53.
+- Ergebnis siehe Gate-Befund oben — deshalb bleibt der Admin-Vorschlags-Button
+  bei `total_score` statt einem trainierten Modell.
+
 ## Recent Changes (2026-01-14)
 
 ### Ghostwriter Queue Fix
@@ -177,3 +199,4 @@ Required:
 - `STOCKS_PREMARKET_API_KEY` - API key for premarket data
 - `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`
 - AI model API keys (OpenAI, Anthropic, Google)
+- `AI_GATEWAY_API_KEY` - nur Offline-Skripte (News-Taste)
