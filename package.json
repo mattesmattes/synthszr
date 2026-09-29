@@ -17,7 +17,8 @@
     "sync-companies": "tsx scripts/sync-premarket-companies.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:api": "vitest run tests/api"
+    "test:api": "vitest run tests/api",
+    "taste:backfill": "tsx scripts/backfill-taste-features.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.46",
