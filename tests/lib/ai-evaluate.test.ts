@@ -76,6 +76,49 @@ describe('evaluateState', () => {
     expect((fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBe(3) // 1 + 2 Retries
   })
 
+  it('wiederholt nach einem Netzwerkfehler (fetch wirft) und liefert danach die Antwort', async () => {
+    const waits: number[] = []
+    ;(fetch as ReturnType<typeof vi.fn>)
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce(new Response(JSON.stringify(okBody), { status: 200 }))
+    const res = await evaluateState('x', { is_event: { type: 'boolean', instructions: 'q' } }, {
+      sleep: async (ms) => { waits.push(ms) },
+    })
+    expect(res.answers.is_event.type).toBe('boolean')
+    expect(waits).toEqual([1000])
+  })
+
+  it('gibt nach maxRetries erschöpften Netzwerkfehlern auf, mit Ursache in der Meldung', async () => {
+    ;(fetch as ReturnType<typeof vi.fn>).mockRejectedValue(new TypeError('fetch failed'))
+    await expect(
+      evaluateState('x', { q: { type: 'boolean', instructions: 'q' } }, { maxRetries: 2, sleep: async () => {} }),
+    ).rejects.toThrow(/fetch failed/)
+    expect((fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBe(3)
+  })
+
+  it('bricht bei Timeout ab (AbortSignal) und wiederholt', async () => {
+    let callCount = 0
+    ;(fetch as ReturnType<typeof vi.fn>).mockImplementation((_url: string, init?: RequestInit) => {
+      callCount++
+      if (callCount === 1) {
+        // Erster Versuch haengt, bis das Timeout-Signal abbricht — genau das
+        // Verhalten eines echten fetch() mit AbortController.
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+        })
+      }
+      return Promise.resolve(new Response(JSON.stringify(okBody), { status: 200 }))
+    })
+    const waits: number[] = []
+    const res = await evaluateState('x', { is_event: { type: 'boolean', instructions: 'q' } }, {
+      timeoutMs: 10,
+      sleep: async (ms) => { waits.push(ms) },
+    })
+    expect(res.answers.is_event.type).toBe('boolean')
+    expect(callCount).toBe(2)
+    expect(waits.length).toBe(1)
+  })
+
   it('wirft mit Hinweis auf AI_GATEWAY_API_KEY, wenn die Umgebungsvariable fehlt', async () => {
     vi.stubEnv('AI_GATEWAY_API_KEY', '')
     await expect(

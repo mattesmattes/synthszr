@@ -15,6 +15,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 export const JEV_MODEL = 'typesafe-ai/jev'
 const EVALUATE_URL = 'https://ai-gateway.vercel.sh/v1/evaluate'
 const DEFAULT_MAX_RETRIES = 4
+// Jev antwortet normal in 70-500ms (siehe Live-Check-Finding); 30s schuetzt
+// nur vor haengenden Verbindungen, nicht vor normaler Latenz. Muster wie
+// lib/premarket/client.ts (AbortController + Timeout "to prevent hanging").
+const REQUEST_TIMEOUT_MS = 30_000
 
 export type EvaluateQuestion =
   | { type: 'boolean'; instructions: string; criteria?: { true: string; false: string } }
@@ -38,23 +42,54 @@ export interface EvaluateResult {
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
+/**
+ * fetch() mit Timeout — ohne AbortController haengt ein Aufruf, dessen TCP-
+ * Verbindung offen bleibt, aber nie antwortet, den Request-Handler auf
+ * unbestimmte Zeit auf (Vercel-Function-Timeout statt kontrolliertem Retry).
+ */
+async function fetchEvaluate(apiKey: string, state: string, questions: Record<string, EvaluateQuestion>, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(EVALUATE_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: JEV_MODEL, state, questions }),
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
 export async function evaluateState(
   state: string,
   questions: Record<string, EvaluateQuestion>,
-  opts: { useCase?: string; maxRetries?: number; sleep?: (ms: number) => Promise<void> } = {},
+  opts: { useCase?: string; maxRetries?: number; sleep?: (ms: number) => Promise<void>; timeoutMs?: number } = {},
 ): Promise<EvaluateResult> {
   const apiKey = process.env.AI_GATEWAY_API_KEY
   if (!apiKey) throw new Error('AI_GATEWAY_API_KEY fehlt in der Umgebung')
   const maxRetries = opts.maxRetries ?? DEFAULT_MAX_RETRIES
   const sleep = opts.sleep ?? defaultSleep
+  const timeoutMs = opts.timeoutMs ?? REQUEST_TIMEOUT_MS
 
   let lastError = ''
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const res = await fetch(EVALUATE_URL, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: JEV_MODEL, state, questions }),
-    })
+    let res: Response
+    try {
+      res = await fetchEvaluate(apiKey, state, questions, timeoutMs)
+    } catch (err) {
+      // fetch() selbst wirft bei DNS-Fehlern, ECONNRESET, "fetch failed" UND
+      // beim eigenen Timeout-Abort oben — es gibt dann keine Response mit
+      // Status, nur eine Exception. Frueherer Vorfall (lib/glossary/retryable.ts):
+      // genau diese Klasse wurde als endgueltig behandelt und verlor die
+      // Wiederholung, obwohl sie voruebergehend ist. Darum wie 5xx: Backoff,
+      // dann erneuter Versuch.
+      lastError = `Gateway-Request fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`
+      if (attempt === maxRetries) throw new Error(lastError)
+      await sleep(1000 * 2 ** attempt)
+      continue
+    }
     if (res.ok) {
       const body = (await res.json()) as {
         answers: Record<string, EvaluateAnswer>
