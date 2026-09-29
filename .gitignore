@@ -38,6 +38,7 @@ premarket-api-integration.json
 .superpowers/
 db-backups/
 backups/
+scripts/taste-dataset.json
 
 # Git-Worktrees fuer isolierte Feature-Arbeit
 .worktrees/

@@ -1,4 +1,5 @@
 import type { createAdminClient } from '@/lib/supabase/admin'
+import { isJunkTitle } from '@/lib/news-queue/service'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -81,4 +82,42 @@ export function dayWindow(day: string): { from: string; to: string } {
   const from = new Date(Date.UTC(y, m - 1, d))
   const to = new Date(Date.UTC(y, m - 1, d + 1))
   return { from: from.toISOString(), to: to.toISOString() }
+}
+
+export const MIN_CONTENT_LENGTH = 500 // wie ranking-service.ts (Stufe 1 des Rankings)
+export const DAY_LIMIT = 2000 // Kandidaten-Obergrenze je Tag
+
+export interface DayCandidateRow {
+  id: string
+  title: string
+  content_length: number | null
+}
+
+/**
+ * Lädt und filtert die news_queue-Kandidaten eines Tages (Junk-Titel raus,
+ * >= 500 Zeichen) — geteilt zwischen Backfill (Task 5) und Export (Task 7),
+ * damit beide exakt dieselbe Kandidatenmenge sehen (Trainings-Items müssen
+ * die Items sein, die auch Feature-Vektoren bekommen haben). `columns`
+ * wählt die Supabase-Select-Spalten je Aufrufer — der Backfill braucht z.B.
+ * excerpt für den State-Text, der Export nicht: weniger Spalten heißt
+ * weniger Egress (siehe Memory: Supabase-Egress-Diagnose).
+ *
+ * Wirft NICHT bei Query-Fehler (wie zuvor im Backfill inline) — der
+ * Aufrufer entscheidet, ob der Tag übersprungen wird, statt der ganze Lauf.
+ */
+export async function loadDayCandidates<T extends DayCandidateRow>(
+  supabase: AdminClient,
+  day: string,
+  columns: string,
+): Promise<{ rows: T[]; truncated: boolean; error: string | null }> {
+  const { from, to } = dayWindow(day)
+  const { data, error } = await supabase.from('news_queue')
+    .select(columns)
+    .gte('queued_at', from).lt('queued_at', to)
+    .order('id', { ascending: true }) // deterministisch, damit .limit() reproduzierbar abschneidet
+    .limit(DAY_LIMIT)
+  if (error) return { rows: [], truncated: false, error: error.message }
+  const raw = (data ?? []) as unknown as T[]
+  const rows = raw.filter((r) => !isJunkTitle(r.title) && (r.content_length ?? 0) >= MIN_CONTENT_LENGTH)
+  return { rows, truncated: raw.length === DAY_LIMIT, error: null }
 }

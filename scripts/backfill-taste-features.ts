@@ -23,8 +23,18 @@ import { existsSync } from 'node:fs'
 const prodEnv = `${process.env.HOME}/.synthszr.env.prod`
 config({ path: existsSync(prodEnv) ? prodEnv : '.env.local', quiet: true })
 
-const MIN_CONTENT_LENGTH = 500 // wie ranking-service.ts (Stufe 1 des Rankings)
-const DAY_LIMIT = 2000 // Kandidaten-Obergrenze je Tag
+interface DayRow {
+  id: string
+  title: string
+  excerpt: string | null
+  source_display_name: string | null
+  synthesis_score: number | null
+  relevance_score: number | null
+  uniqueness_score: number | null
+  source_bonus: number | null
+  source_pub_rate: number | null
+  content_length: number | null
+}
 
 /**
  * `--max-days=N`: nur die ersten N Ground-Truth-Tage verarbeiten (Probelauf).
@@ -41,9 +51,8 @@ function parseMaxDays(argv: string[]): number | undefined | null {
 
 async function main() {
   const { createAdminClient } = await import('@/lib/supabase/admin')
-  const { isJunkTitle } = await import('@/lib/news-queue/service')
   const { getOrComputeFeatures } = await import('@/lib/news-taste/features')
-  const { collectLabeledIds, collectGroundTruthDays, dayWindow } = await import('./lib/taste-ground-truth')
+  const { collectLabeledIds, collectGroundTruthDays, loadDayCandidates, DAY_LIMIT } = await import('./lib/taste-ground-truth')
   const supabase = createAdminClient()
 
   const maxDaysArg = parseMaxDays(process.argv.slice(2))
@@ -68,31 +77,27 @@ async function main() {
   let failedDays = 0
   const t0 = Date.now()
   for (const day of days) {
-    const { from, to } = dayWindow(day)
-    const { data, error } = await supabase.from('news_queue')
-      .select('id, title, excerpt, source_display_name, synthesis_score, relevance_score, uniqueness_score, source_bonus, source_pub_rate, content_length')
-      .gte('queued_at', from).lt('queued_at', to)
-      .order('id', { ascending: true }) // deterministisch, damit .limit() reproduzierbar abschneidet
-      .limit(DAY_LIMIT)
-    if (error) { console.error(day, 'Laden fehlgeschlagen:', error.message); failedDays++; continue }
-    if ((data ?? []).length === DAY_LIMIT) {
+    const { rows, truncated, error } = await loadDayCandidates<DayRow>(
+      supabase, day,
+      'id, title, excerpt, source_display_name, synthesis_score, relevance_score, uniqueness_score, source_bonus, source_pub_rate, content_length',
+    )
+    if (error) { console.error(day, 'Laden fehlgeschlagen:', error); failedDays++; continue }
+    if (truncated) {
       console.warn(`${day}: Limit von ${DAY_LIMIT} Zeilen erreicht — Tag ist möglicherweise abgeschnitten`)
     }
-    const inputs = (data ?? [])
-      .filter((r) => !isJunkTitle(r.title) && (r.content_length ?? 0) >= MIN_CONTENT_LENGTH)
-      .map((r) => ({
-        queueItemId: r.id as string,
-        title: r.title as string,
-        source: (r.source_display_name as string) ?? null,
-        // WARUM: nur excerpt, kein content — siehe Datei-Kommentar (Egress)
-        text: ((r.excerpt as string) || '').slice(0, 1500) || null,
-        synthesis: Number(r.synthesis_score) || 0,
-        relevance: Number(r.relevance_score) || 0,
-        uniqueness: Number(r.uniqueness_score) || 0,
-        sourceBonus: Number(r.source_bonus) || 0,
-        sourcePubRate: Number(r.source_pub_rate) || 0,
-        contentLength: Number(r.content_length) || 0,
-      }))
+    const inputs = rows.map((r) => ({
+      queueItemId: r.id,
+      title: r.title,
+      source: r.source_display_name ?? null,
+      // WARUM: nur excerpt, kein content — siehe Datei-Kommentar (Egress)
+      text: (r.excerpt || '').slice(0, 1500) || null,
+      synthesis: Number(r.synthesis_score) || 0,
+      relevance: Number(r.relevance_score) || 0,
+      uniqueness: Number(r.uniqueness_score) || 0,
+      sourceBonus: Number(r.source_bonus) || 0,
+      sourcePubRate: Number(r.source_pub_rate) || 0,
+      contentLength: Number(r.content_length) || 0,
+    }))
     try {
       // WARUM try/catch: getOrComputeFeatures wirft, wenn schon der
       // Versions-Lookup fehlschlägt (nicht nur einzelne Items landen dann in
