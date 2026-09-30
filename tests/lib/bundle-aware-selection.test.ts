@@ -122,33 +122,28 @@ describe('Quellen je Buendel', () => {
   })
 
   it('das Buendel zaehlt weiterhin als EINE Einheit', () => {
-    expect(capByUnits([...zwoelf, q('einzel', 1)], 1)).toHaveLength(5)
-    expect(capByUnits([...zwoelf, q('einzel', 1)], 2)).toHaveLength(6)
+    const zweiThemen = [...zwoelf, ...Array.from({ length: 8 }, (_, i) => q(`s2-${i}`, 7, 'topic', 's2'))]
+    // 2 Buendel je 5 Quellen = 10 Zeilen, aber nur 2 Einheiten.
+    expect(capByUnits(zweiThemen, 2)).toHaveLength(10)
+    expect(capByUnits(zweiThemen, 1)).toHaveLength(5)
   })
 })
 
-// BETREIBER-VORGABE 2026-09-28: Label vor Buendel — alle Items eines Labels
-// ergeben EINEN Abschnitt. Die Quellen-Grenze (fuenf je Buendel, 2026-08-13)
-// gilt weiter je Techmeme-Story: sie verhindert, dass zwoelf Quellen zur SELBEN
-// Meldung den Abschnitt zerfasern — sie darf aber keine andere Story und keine
-// von Hand gelabelte Meldung aus dem Abschnitt draengen.
-describe('Ein Label, eine Einheit', () => {
-  const zwoelf = Array.from({ length: 12 }, (_, i) => q(`s1-${i}`, 9 - i * 0.1, 'topic', 's1'))
-
-  it('zaehlt zwei Stories unter demselben Label als EINE Einheit — je Story die besten fuenf', () => {
-    const zweiThemen = [...zwoelf, ...Array.from({ length: 8 }, (_, i) => q(`s2-${i}`, 7, 'topic', 's2'))]
-    expect(capByUnits(zweiThemen, 1)).toHaveLength(10)
+// BETREIBER-VORGABE 2026-09-30: Die Quellen-Grenze (fünf je Bündel, 2026-08-13)
+// gilt nur für Techmeme-Stories — sie soll zwölf Quellen zur SELBEN Meldung
+// bändigen. Von Hand markierte Meldungen sind bewusste Einzelentscheidungen und
+// fallen nie aus dem Abschnitt.
+describe('capByUnits mit Handmarkierungen', () => {
+  it('behält alle von Hand markierten Meldungen eines Labels, auch mehr als fünf', () => {
+    const hand = Array.from({ length: 7 }, (_, i) => q(`hand-${i}`, 5 - i * 0.1, 'cover_story'))
+    expect(capByUnits(hand, 1)).toHaveLength(7)
   })
 
-  it('behaelt eine von Hand gelabelte Meldung ohne Story neben einer grossen Story', () => {
-    const ids = capByUnits([...zwoelf, q('evans', 0.5, 'topic')], 1).map((z) => z.id)
-    expect(ids).toContain('evans')
-    expect(ids).toHaveLength(6)
-  })
-
-  it('haelt verschiedene Labels weiterhin als eigene Einheiten auseinander', () => {
-    const gemischt = [...zwoelf, q('cover', 5, 'cover_story', 's9')]
-    expect(capByUnits(gemischt, 1)).toHaveLength(5)
-    expect(capByUnits(gemischt, 2)).toHaveLength(6)
+  it('kappt weiterhin nur die Techmeme-Story auf fünf Quellen', () => {
+    const zwoelf = Array.from({ length: 12 }, (_, i) => q(`s1-${i}`, 9 - i * 0.1, 'topic', 's1'))
+    const hand = Array.from({ length: 6 }, (_, i) => q(`hand-${i}`, 1, 'topic'))
+    const out = capByUnits([...zwoelf, ...hand], 2)
+    expect(out.filter((z) => z.id.startsWith('s1-'))).toHaveLength(5)
+    expect(out.filter((z) => z.id.startsWith('hand-'))).toHaveLength(6)
   })
 })

@@ -92,8 +92,7 @@ export function splitBundled<T extends { bundle_type?: string | null }>(
 }
 
 /**
- * Wie viele Quellen JE TECHMEME-STORY ein gebündelter Abschnitt höchstens
- * verarbeitet.
+ * Wie viele Quellen ein gebündelter Abschnitt höchstens verarbeitet.
  *
  * BETREIBER-VORGABE 2026-08-13: „damit die Bündel-Artikel nicht total ausfransen
  * mit sehr vielen Sourcen". Techmeme listet zu großen Meldungen bis zu 41
@@ -110,12 +109,6 @@ export const BUNDLE_SOURCES_MAX = 5
 
 /**
  * Auf `maxUnits` ABSCHNITTE kappen — nicht auf Items.
- *
- * Ein Label ist EIN Abschnitt (Betreiber-Vorgabe 2026-09-28, s.
- * computeBundleUnits). Die Quellen-Grenze gilt dagegen je Story: Sie soll
- * verhindern, dass zwölf Quellen zur SELBEN Meldung den Abschnitt zerfasern —
- * nicht, dass eine zweite Story oder eine von Hand gelabelte Meldung aus dem
- * Label-Abschnitt fällt.
  *
  * BEFUND 2026-08-13: Nach dem Techmeme-Umbau standen 48 gebündelte Quellen zu
  * fünf Themen zur Auswahl. `slice(0, 25)` hätte sie nach Punktzahl
@@ -134,29 +127,29 @@ export function capByUnits<T extends { total_score?: number; bundle_type?: strin
 ): T[] {
   const { bundled, single } = splitBundled(items)
 
-  // Je Label eine Einheit, darin je Story (ohne Story: eine gemeinsame Gruppe)
-  // die Quellen-Grenze.
-  const labels = new Map<string, Map<string, T[]>>()
+  // Je (Typ, Story) ein Bündel — dieselbe Aufteilung wie in der Schreibphase
+  // (computeBundleUnits). Ohne Story-Schlüssel bildet der Typ die Gruppe.
+  const gruppen = new Map<string, T[]>()
   for (const item of bundled) {
-    const label = String(item.bundle_type)
-    const story = bundleKeyOf(item.metadata) ?? ''
-    const stories = labels.get(label) ?? new Map<string, T[]>()
-    labels.set(label, stories)
-    stories.set(story, [...(stories.get(story) ?? []), item])
+    const story = item.metadata?.techmeme_story
+    const key = `${item.bundle_type}::${typeof story === 'string' ? story : ''}`
+    const vorhanden = gruppen.get(key)
+    if (vorhanden) vorhanden.push(item)
+    else gruppen.set(key, [item])
   }
 
   const out: T[] = []
   let einheiten = 0
-  for (const stories of labels.values()) {
+  for (const [key, gruppe] of gruppen) {
     if (einheiten >= maxUnits) break
-    for (const gruppe of stories.values()) {
-      // Je Story die BESTEN Quellen — nicht die ersten. Die Punktzahl trägt
-      // Techmemes Rang in sich, es bleiben also die vorn platzierten.
-      const beste = [...gruppe]
-        .sort((a, b) => (b.total_score ?? 0) - (a.total_score ?? 0))
-        .slice(0, BUNDLE_SOURCES_MAX)
-      out.push(...beste)
-    }
+    // Je Bündel die BESTEN Quellen — nicht die ersten. Die Punktzahl trägt
+    // Techmemes Rang in sich, es bleiben also die vorn platzierten.
+    // Die Grenze gilt nur für Techmeme-Stories (Schlüssel endet nicht auf
+    // '::'): Von Hand markierte Meldungen sind bewusste Einzelentscheidungen
+    // und fallen nie aus dem Abschnitt (Betreiber-Vorgabe 2026-09-30).
+    const istStory = !key.endsWith('::')
+    const beste = [...gruppe].sort((a, b) => (b.total_score ?? 0) - (a.total_score ?? 0))
+    out.push(...(istStory ? beste.slice(0, BUNDLE_SOURCES_MAX) : beste))
     einheiten++
   }
 
@@ -186,16 +179,20 @@ export function toPipelineItem(item: {
     source_url: sanitizeUrl(item.source_url) || deriveSourceUrl(null, item.source_identifier),
     source_identifier: item.source_identifier,
     bundle_type: item.bundle_type ?? null,
+    bundle_key: bundleKeyOf(item.metadata),
   }
 }
 
 /**
- * Zu welcher Techmeme-Story gehört eine News?
+ * Woran erkennt die Pipeline, dass zwei gebündelte News DASSELBE Thema
+ * behandeln?
  *
- * Steht bereits in den Metadaten — ein eigenes Feld daneben könnte davon
- * abweichen und wäre eine zweite Wahrheit über dieselbe Sache. Bestimmt NICHT
- * mehr die Abschnitte (ein Label, ein Abschnitt — 2026-09-28), nur noch die
- * Quellen-Grenze je Story in capByUnits.
+ * An der Techmeme-Story. Sie steht bereits in den Metadaten — ein eigenes Feld
+ * daneben könnte davon abweichen und wäre eine zweite Wahrheit über dieselbe
+ * Sache.
+ *
+ * Ohne Schlüssel (händisch markierte News) bleibt es beim bisherigen Verhalten:
+ * alle Items eines Typs bilden EIN Bündel.
  */
 export function bundleKeyOf(metadata: Record<string, unknown> | null | undefined): string | null {
   const key = metadata?.techmeme_story
@@ -238,8 +235,8 @@ export async function selectAndEnrichItems(opts: {
     source_url: string | null
     source_identifier: string
     bundle_type?: BundleType | null
-    // Trägt die Techmeme-Story, aus der capByUnits die Quellen-Grenze je Story
-    // ableitet (bundleKeyOf).
+    // Trägt die Techmeme-Story, aus der bundleKeyOf den Gruppierungsschlüssel
+    // liest — ohne sie fielen fünf Themen wieder zu einem Abschnitt zusammen.
     metadata?: Record<string, unknown> | null
   }>
 
@@ -438,6 +435,13 @@ export async function selectAndEnrichItems(opts: {
 
   // Track item IDs for marking as used
   const usedItemIds = selectedItems.map(i => i.id)
+
+  // Handmarkierte Meldungen der passenden Techmeme-Story zuordnen — erst HIER,
+  // nach capByUnits, damit sie dort als eigene Gruppe zählten und nicht der
+  // Top-5-Grenze der Story zum Opfer fielen. Best-effort (bundle-attach.ts).
+  // Dynamischer Import: bundle-attach nutzt bundleKeyOf aus dieser Datei.
+  const { attachManualToStories } = await import('./bundle-attach')
+  selectedItems = await attachManualToStories(selectedItems)
 
   const pipelineItems: PipelineItem[] = selectedItems.map(toPipelineItem)
 
