@@ -1,4 +1,5 @@
 import { cache } from 'react'
+import { unstable_cache } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { momentumScore, momentumHistory } from '@/lib/rankings/score'
 import { getRankedProductsShared } from '@/lib/rankings/leaderboard'
@@ -79,12 +80,38 @@ function cleanTitle(t: string | null): string | null {
   return cleaned || null
 }
 
+/**
+ * Sprachgruppe für den Datencache: Der Loader unterscheidet nur Deutsch von
+ * allen anderen Sprachen (die zeigen den EN-Fallback). So teilen sich en, cs,
+ * fr und nds einen Cache-Eintrag statt vier.
+ */
+export function detailCacheLocale(locale: string): 'de' | 'en' {
+  return locale === 'de' ? 'de' : 'en'
+}
+
 /** Lädt eine sichtbare Produkt-Detailansicht (Header + Belege + Rang/Score).
  *
  *  cache(): generateMetadata und die Page rufen beide getProductDetail — ohne
  *  Memoisierung liefen alle Queries pro Render doppelt (vgl. getGlossaryTerm in
- *  lib/glossary/detail.ts, dort auch, warum das nicht unit-testbar ist). */
-export const getProductDetail = cache(async (slug: string, locale = 'de'): Promise<ProductDetail | null> => {
+ *  lib/glossary/detail.ts, dort auch, warum das nicht unit-testbar ist).
+ *
+ *  Dahinter der Next-Datencache (Egress-Befund 2026-10-03): Ein Headless-
+ *  Crawler rief ~6.700 Detailseiten am Tag auf, je 43–320 KB aus Supabase —
+ *  jedes Produkt im Schnitt 4,7-mal über bis zu fünf Sprachen, verteilt über
+ *  ~18 h. Ein Cache pro URL greift da nicht; dieser gilt pro Produkt und
+ *  Sprachgruppe für 24 h und wird vom täglichen precompute-metrics-Cron über
+ *  das Tag 'rankings' invalidiert. Bewusst nicht Redis: Das Upstash-Kontingent
+ *  war am 28.08. schon einmal durch einen Crawler erschöpft (shared-cache.ts). */
+export const getProductDetail = cache((slug: string, locale = 'de'): Promise<ProductDetail | null> =>
+  getProductDetailCached(slug, detailCacheLocale(locale)))
+
+const getProductDetailCached = unstable_cache(
+  (slug: string, locale: 'de' | 'en') => loadProductDetail(slug, locale),
+  ['rankings-product-detail-v1'],
+  { revalidate: 86400, tags: ['rankings'] },
+)
+
+async function loadProductDetail(slug: string, locale: string): Promise<ProductDetail | null> {
   const supabase = createAdminClient()
 
   const { data: product, error: pErr } = await supabase
@@ -210,7 +237,7 @@ export const getProductDetail = cache(async (slug: string, locale = 'de'): Promi
       sourceUrl: joinedField(m.daily_repo, 'source_url'),
     })),
   }
-})
+}
 
 /**
  * Volltext der Quelle hinter einer Erwähnung (Quellen-Dialog der Produktseite),

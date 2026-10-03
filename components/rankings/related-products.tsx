@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getRankedProducts } from '@/lib/rankings/leaderboard'
+import { getRelatedRankedProducts } from '@/lib/rankings/leaderboard'
 import { VendorAvatar } from './vendor-avatar'
 
 /** Server-gerendertes "Weitere Produkte in dieser Kategorie"-Modul: verlinkt
@@ -18,9 +18,10 @@ export async function RelatedProducts({
   excludeSlug: string
   heading: string
 }) {
-  let items: Awaited<ReturnType<typeof getRankedProducts>>
+  let items: Awaited<ReturnType<typeof getRelatedRankedProducts>>
   try {
-    items = await getRankedProducts({ category: categorySlug, limit: 13, minMentions: 2 })
+    // Je Kategorie gecacht (Egress-Befund 2026-10-03, s. leaderboard.ts).
+    items = await getRelatedRankedProducts(categorySlug)
   } catch {
     return null // nicht essenziell — Seite darf ohne das Modul rendern
   }

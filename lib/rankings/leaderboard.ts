@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { toDisplayScore } from '@/lib/rankings/score'
 import { withSharedCache } from '@/lib/cache/shared-cache'
+import { unstable_cache } from 'next/cache'
 
 export interface RankedProduct {
   id: string
@@ -215,3 +216,19 @@ export async function getRankedProductsShared(opts: RankedProductsOpts = {}): Pr
     (v) => Array.isArray(v) && v.length > 0,
   )
 }
+
+/**
+ * Kategorie-Nachbarn für „Weitere Produkte" auf der Produktseite (RelatedProducts).
+ *
+ * WARUM (Egress-Befund 2026-10-03): Das Modul rief bei JEDEM Render der
+ * Produktseite das ungecachte getRankedProducts — ~57 KB aus Supabase, bei
+ * ~6.700 Crawler-Treffern am Tag. Es gibt nur rund zwanzig Kategorien, ein
+ * Datencache je Kategorie trifft also fast immer. Next-Datencache statt Redis
+ * (Upstash-Kontingent, s. shared-cache.ts); der tägliche precompute-metrics-
+ * Cron invalidiert ihn über das Tag 'rankings'.
+ */
+export const getRelatedRankedProducts = unstable_cache(
+  (category: string) => getRankedProducts({ category, limit: 13, minMentions: 2 }),
+  ['rankings-related-v1'],
+  { revalidate: 86400, tags: ['rankings'] },
+)

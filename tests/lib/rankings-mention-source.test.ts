@@ -35,6 +35,9 @@ vi.mock('@/lib/supabase/admin', () => ({
 vi.mock('@/lib/rankings/leaderboard', () => ({
   getRankedProductsShared: vi.fn(async () => []),
 }))
+// Der Next-Datencache (unstable_cache) braucht den Request-Kontext von Next —
+// im Test reicht er den Loader durch, damit die Queries selbst prüfbar bleiben.
+vi.mock('next/cache', () => ({ unstable_cache: (fn: unknown) => fn }))
 
 import { getMentionSourceText, getProductDetail } from '@/lib/rankings/product-detail'
 
