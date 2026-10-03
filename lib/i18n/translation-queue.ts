@@ -10,6 +10,7 @@ import { translateContent, type TranslationModel } from '@/lib/i18n/translation-
 import type { LanguageCode, TranslationQueueItem } from '@/lib/types'
 import { parseTipTapContent } from '@/lib/utils/safe-json'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { CONTENT_TRANSLATIONS_TAG, revalidateCompanyCache } from '@/lib/companies/company-page-data'
 import { reinjectGlossaryMarksForTranslation } from '@/lib/glossary/translate'
 import { typographicQuotes } from '@/lib/typography/quotes'
 
@@ -217,6 +218,9 @@ async function processGeneratedPost(
   } else {
     await supabase.from('content_translations').insert(data)
   }
+  // Company-Seiten cachen die übersetzten Artikel je Post 24 h
+  // (company-page-data.ts) — neu oder erneut übersetzt soll sofort gelten.
+  revalidateCompanyCache(CONTENT_TRANSLATIONS_TAG)
 
   await supabase.from('translation_queue').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', item.id)
   return { success: true }

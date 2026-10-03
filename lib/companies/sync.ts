@@ -8,6 +8,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { extractCompaniesPerArticle, parseTipTapContent } from './extractor'
 import { extractUnknownCompanyTags, discoverAndClassifyCompanies } from './discovery'
+import { COMPANY_MENTIONS_TAG, revalidateCompanyCache } from './company-page-data'
 
 export interface SyncResult {
   success: boolean
@@ -77,6 +78,11 @@ export async function syncPostCompanyMentions(
         return { success: false, companiesFound: mentions.length, articlesWithCompanies: 0, error: insertError.message }
       }
     }
+
+    // Company-Seiten cachen ihre Erwähnungen 24 h (company-page-data.ts) — ohne
+    // diese Invalidierung erschiene ein neu veröffentlichter Artikel erst am
+    // nächsten Tag auf den Seiten der erwähnten Firmen.
+    revalidateCompanyCache(COMPANY_MENTIONS_TAG)
 
     // Count unique companies and articles
     const uniqueCompanies = new Set(mentions.map(m => m.company.slug)).size

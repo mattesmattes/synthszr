@@ -1,76 +1,15 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { createAdminClient } from '@/lib/supabase/admin'
 import { CompanyDetailClient } from './company-detail-client'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
-import { parseTipTapContent } from '@/lib/companies/extractor'
-import { stripLexTags } from '@/lib/glossary/mentions'
+import { getCompanyMentions, getTranslatedArticlesByPost, type CompanyMentionRow } from '@/lib/companies/company-page-data'
 import { VendorProducts } from '@/components/rankings/vendor-products'
 import { SITE_URL, safeJsonLd } from '@/lib/seo/site'
 import type { LanguageCode } from '@/lib/types'
 import type { Metadata } from 'next'
-
-interface TipTapNode {
-  type?: string
-  text?: string
-  content?: TipTapNode[]
-  attrs?: { level?: number; [key: string]: unknown }
-}
-
-function extractTextFromNode(node: TipTapNode): string {
-  if (node.text) return node.text
-  if (node.content && Array.isArray(node.content)) {
-    return node.content.map(extractTextFromNode).join(' ')
-  }
-  return ''
-}
-
-function extractExcerpt(text: string, maxLength = 150): string {
-  // {lex:Begriff}-Direktiven zuerst auflösen, sonst verschwindet der Begriff
-  // mitsamt Klammern im generischen {...}-Strip direkt darunter (vierter
-  // Strip-Pfad im Repo, Abschluss-Review Befund A2).
-  const cleaned = stripLexTags(text).replace(/\{[^}]+\}/g, '').replace(/\s+/g, ' ').trim()
-  if (cleaned.length <= maxLength) return cleaned
-  const truncated = cleaned.slice(0, maxLength)
-  const lastSpace = truncated.lastIndexOf(' ')
-  if (lastSpace > maxLength * 0.7) return truncated.slice(0, lastSpace) + '...'
-  return truncated + '...'
-}
-
-/** Extract H2-delimited articles from TipTap content, same skip rules as extractor.ts */
-function extractArticlesFromContent(content: unknown): { headline: string; excerpt: string }[] {
-  if (!content || typeof content !== 'object') return []
-  const root = content as TipTapNode
-  if (!root.content || !Array.isArray(root.content)) return []
-
-  const articles: { headline: string; text: string }[] = []
-  let current: { headline: string; text: string } | null = null
-
-  for (const node of root.content) {
-    if (node.type === 'heading' && node.attrs?.level === 2) {
-      const headlineText = extractTextFromNode(node)
-      const lower = headlineText.toLowerCase()
-      if (
-        lower.includes('synthszr take') ||
-        lower.includes('synthszr contra') ||
-        lower.includes('mattes synthese') ||
-        lower.includes("mattes' synthese")
-      ) {
-        continue
-      }
-      current = { headline: headlineText, text: headlineText }
-      articles.push(current)
-    } else if (current) {
-      const nodeText = extractTextFromNode(node)
-      if (nodeText.trim()) current.text += ' ' + nodeText
-    }
-  }
-
-  return articles.map((a) => ({ headline: a.headline, excerpt: extractExcerpt(a.text) }))
-}
 
 // On-demand ISR (siehe rankings/[slug]): Anon-Client + leeres
 // generateStaticParams → Vercel cached 1h am Edge statt no-store.
@@ -80,21 +19,20 @@ export async function generateStaticParams() {
   return []
 }
 
-interface PostInfo {
-  id: string
-  title: string
-  slug: string | null
-  created_at: string
-}
+type CompanyMention = CompanyMentionRow
 
-interface CompanyMention {
-  company_name: string
-  company_slug: string
-  company_type: 'public' | 'premarket'
-  article_index: number | null
-  article_headline: string | null
-  article_excerpt: string | null
-  post: PostInfo
+/**
+ * Erwähnungen aus dem Datencache (lib/companies/company-page-data.ts). Ein
+ * Ladefehler ergibt eine leere Liste — wie zuvor bei einem Query-Fehler —, wird
+ * aber NICHT gecacht, der nächste Aufruf versucht es erneut.
+ */
+async function loadMentions(slug: string): Promise<CompanyMention[]> {
+  try {
+    return await getCompanyMentions(slug.toLowerCase())
+  } catch (err) {
+    console.error(`[companies/${slug}] Query error:`, err instanceof Error ? err.message : err)
+    return []
+  }
 }
 
 interface ArticleInfo {
@@ -115,18 +53,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   // Next liefert Dynamic-Params percent-encoded ("Hugging%20Face") — ohne
   // Decode 404en alle Company-Slugs mit Leerzeichen (~105 Premarket-Firmen).
   const slug = decodeURIComponent(rawSlug)
-  // post_company_mentions ist RLS-gesperrt → service_role statt anon
-  const supabase = createAdminClient()
 
-  // Fetch company name from mentions (case-insensitive)
-  const { data: mention } = await supabase
-    .from('post_company_mentions')
-    .select('company_name')
-    .ilike('company_slug', slug)
-    .limit(1)
-    .single()
-
-  const companyName = mention?.company_name || slug
+  // Firmenname aus den (gecachten) Erwähnungen — derselbe Cache-Eintrag wie die
+  // Seite selbst, also keine zusätzliche Abfrage.
+  const companyName = (await loadMentions(slug))[0]?.company_name || slug
 
   return generateLocalizedMetadata({
     title: `${companyName} — Synthszr`,
@@ -162,41 +92,13 @@ export default async function CompanyDetailPage({ params }: PageProps) {
   // Decode 404en alle Company-Slugs mit Leerzeichen (~105 Premarket-Firmen).
   const slug = decodeURIComponent(rawSlug)
   const locale = lang as LanguageCode
-  // post_company_mentions ist RLS-gesperrt → service_role statt anon
-  const supabase = createAdminClient()
   const t = await getTranslations(locale)
 
   // Resolve slug case-insensitively against known companies
   const knownCompany = resolveCompanyBySlug(slug)
 
-  // Fetch company mentions with article-level detail (case-insensitive slug match)
-  const { data: mentions, error } = await supabase
-    .from('post_company_mentions')
-    .select(`
-      company_name,
-      company_slug,
-      company_type,
-      article_index,
-      article_headline,
-      article_excerpt,
-      post:generated_posts!inner(
-        id,
-        title,
-        slug,
-        created_at,
-        status
-      )
-    `)
-    .ilike('company_slug', slug)
-    .eq('post.status', 'published')
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    console.error(`[companies/${slug}] Query error:`, error)
-  }
-
-  // Cast and filter
-  const typedMentions = (mentions || []) as unknown as CompanyMention[]
+  // Company mentions with article-level detail (case-insensitive slug match)
+  const typedMentions = await loadMentions(slug)
 
   // 404 only if the slug is not a known company at all
   if (typedMentions.length === 0 && !knownCompany) {
@@ -209,29 +111,13 @@ export default async function CompanyDetailPage({ params }: PageProps) {
     ? { name: firstMention.company_name, slug: firstMention.company_slug, type: firstMention.company_type }
     : knownCompany!
 
-  // For non-German locales, load translated post content so we can show
-  // localized article headlines + excerpts instead of the German originals
-  // stored in post_company_mentions.
-  const translatedArticlesByPost = new Map<string, { headline: string; excerpt: string }[]>()
-  if (locale !== 'de') {
-    const postIds = Array.from(new Set(typedMentions.map((m) => m.post.id)))
-    if (postIds.length > 0) {
-      const { data: translations } = await supabase
-        .from('content_translations')
-        .select('generated_post_id, content')
-        .in('generated_post_id', postIds)
-        .eq('language_code', locale)
-        .eq('translation_status', 'completed')
-
-      for (const t of (translations || []) as { generated_post_id: string; content: unknown }[]) {
-        const parsed = parseTipTapContent(t.content as string | object)
-        const articles = extractArticlesFromContent(parsed)
-        if (articles.length > 0) {
-          translatedArticlesByPost.set(t.generated_post_id, articles)
-        }
-      }
-    }
-  }
+  // For non-German locales, use the translated headline + excerpt per article
+  // instead of the German originals stored in post_company_mentions. Je Post
+  // und Sprache gecacht und zwischen allen Firmen geteilt — vorher lud jeder
+  // Render den vollen übersetzten Inhalt aller Posts (OpenAI/en: 8 MB).
+  const translatedArticlesByPost = locale !== 'de'
+    ? await getTranslatedArticlesByPost(Array.from(new Set(typedMentions.map((m) => m.post.id))), locale)
+    : new Map<string, { headline: string; excerpt: string }[]>()
 
   // Build articles list from mentions, preferring translated headline/excerpt when available
   const articles: ArticleInfo[] = typedMentions
