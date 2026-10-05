@@ -31,6 +31,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Slider } from '@/components/ui/slider'
+import { filterByTags } from '@/lib/news-queue/tag-filter'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Dialog,
@@ -777,22 +778,23 @@ export default function NewsQueuePage() {
     }
   }
 
-  // Filter items by minimum content length and active tag (substring match on title/excerpt)
+  // Filter items by minimum content length and tag pills (lib/news-queue/tag-filter.ts).
+  // Ohne aktive Pille zeigt „Pending" nur den Rest, den keine Pille trifft.
   const activeTag = activeTagId ? filterTags.find(t => t.id === activeTagId) : null
-  const tagNeedle = activeTag?.label.toLowerCase().trim() ?? null
-  const filteredItems = items.filter(item => {
-    if (item.content && item.content.length < minContentLength) return false
-    if (tagNeedle) {
+  const tagRestMode = statusFilter === 'pending' && !activeTag && filterTags.length > 0
+  const filteredItems = filterByTags(
+    items.filter(item => !(item.content && item.content.length < minContentLength)),
+    {
+      activeLabel: activeTag?.label ?? null,
+      allLabels: filterTags.map(t => t.label),
+      restMode: tagRestMode,
       // Die Herkunft gehört mit in die Suche: Sonst findet ein Filter-Tag
       // „Techmeme" nichts, obwohl das Badge daneben sichtbar „Techmeme" sagt.
       // Gilt für alle Herkünfte gleichermaßen — auch „Web" und „Manual" sind
       // damit filterbar.
-      const herkunft = herkunftOf(item)?.label ?? ''
-      const haystack = `${item.title ?? ''} ${item.excerpt ?? ''} ${item.source_identifier ?? ''} ${item.source_display_name ?? ''} ${herkunft}`.toLowerCase()
-      if (!haystack.includes(tagNeedle)) return false
-    }
-    return true
-  })
+      haystackOf: item => `${item.title ?? ''} ${item.excerpt ?? ''} ${item.source_identifier ?? ''} ${item.source_display_name ?? ''} ${herkunftOf(item)?.label ?? ''}`,
+    },
+  )
 
   // Extract all total scores for gradient calculation
   const allTotalScores = filteredItems.map(item => item.total_score)
@@ -1229,6 +1231,7 @@ export default function NewsQueuePage() {
           {filteredItems.length !== items.length && (
             <span className="text-[10px] text-muted-foreground">
               {filteredItems.length}/{items.length} Items
+              {tagRestMode && ' · Rest: ohne Treffer in den Filtern'}
             </span>
           )}
         </div>
