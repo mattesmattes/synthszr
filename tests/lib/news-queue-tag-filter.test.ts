@@ -5,7 +5,7 @@
  * mehr in der Liste sehen; die findet er über die Pille selbst.
  */
 import { describe, expect, it } from 'vitest'
-import { filterByTags } from '@/lib/news-queue/tag-filter'
+import { filterByTags, isTagRestMode } from '@/lib/news-queue/tag-filter'
 
 type Item = { id: string; text: string }
 const items: Item[] = [
@@ -43,5 +43,25 @@ describe('filterByTags', () => {
 
   it('zeigt ohne angelegte Pillen alles, auch im Rest-Modus', () => {
     expect(filterByTags(items, { activeLabel: null, allLabels: [], restMode: true, haystackOf })).toHaveLength(5)
+  })
+})
+
+// Schwarze „All"-Pille (Betreiber-Vorgabe 2026-10-05): hebt den Rest-Modus auf,
+// Pending zeigt dann wieder alle Meldungen.
+describe('isTagRestMode', () => {
+  const base = { status: 'pending', hasActiveTag: false, showAll: false, tagCount: 3 }
+
+  it('gilt in Pending ohne aktive Pille', () => {
+    expect(isTagRestMode(base)).toBe(true)
+  })
+
+  it('gilt nicht, wenn „All" aktiv ist', () => {
+    expect(isTagRestMode({ ...base, showAll: true })).toBe(false)
+  })
+
+  it('gilt nicht mit aktiver Pille, außerhalb von Pending und ohne angelegte Pillen', () => {
+    expect(isTagRestMode({ ...base, hasActiveTag: true })).toBe(false)
+    expect(isTagRestMode({ ...base, status: 'selected' })).toBe(false)
+    expect(isTagRestMode({ ...base, tagCount: 0 })).toBe(false)
   })
 })

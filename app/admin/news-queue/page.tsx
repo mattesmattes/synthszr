@@ -31,7 +31,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Slider } from '@/components/ui/slider'
-import { filterByTags } from '@/lib/news-queue/tag-filter'
+import { filterByTags, isTagRestMode } from '@/lib/news-queue/tag-filter'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Dialog,
@@ -208,6 +208,8 @@ export default function NewsQueuePage() {
   interface FilterTag { id: string; label: string; color: string; sort_order: number }
   const [filterTags, setFilterTags] = useState<FilterTag[]>([])
   const [activeTagId, setActiveTagId] = useState<string | null>(null)
+  // Schwarze „All"-Pille: hebt den Rest-Modus auf, Pending zeigt alles.
+  const [showAllItems, setShowAllItems] = useState(false)
   const [tagDeleteMode, setTagDeleteMode] = useState(false)
   const [showAddTagDialog, setShowAddTagDialog] = useState(false)
   const [newTagLabel, setNewTagLabel] = useState('')
@@ -779,9 +781,10 @@ export default function NewsQueuePage() {
   }
 
   // Filter items by minimum content length and tag pills (lib/news-queue/tag-filter.ts).
-  // Ohne aktive Pille zeigt „Pending" nur den Rest, den keine Pille trifft.
+  // Ohne aktive Pille zeigt „Pending" nur den Rest, den keine Pille trifft —
+  // außer die schwarze „All"-Pille ist aktiv.
   const activeTag = activeTagId ? filterTags.find(t => t.id === activeTagId) : null
-  const tagRestMode = statusFilter === 'pending' && !activeTag && filterTags.length > 0
+  const tagRestMode = isTagRestMode({ status: statusFilter, hasActiveTag: !!activeTag, showAll: showAllItems, tagCount: filterTags.length })
   const filteredItems = filterByTags(
     items.filter(item => !(item.content && item.content.length < minContentLength)),
     {
@@ -1149,6 +1152,22 @@ export default function NewsQueuePage() {
 
       {/* Filter Tags */}
       <div className="flex flex-wrap items-center gap-2 mb-3">
+        {/* „All": fest, nicht löschbar — im Lösch-Modus ausgeblendet. */}
+        {!tagDeleteMode && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowAllItems(prev => !prev)
+              setActiveTagId(null)
+            }}
+            className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium transition-all border bg-zinc-900 text-white ${
+              showAllItems ? 'ring-2 ring-offset-1 ring-zinc-900 border-zinc-900' : 'border-transparent hover:opacity-80'
+            }`}
+            title="Alle Meldungen zeigen, ohne Filter"
+          >
+            All
+          </button>
+        )}
         {filterTags.map(tag => {
           const isActive = activeTagId === tag.id
           return (
@@ -1160,6 +1179,7 @@ export default function NewsQueuePage() {
                   handleDeleteTag(tag.id)
                 } else {
                   setActiveTagId(isActive ? null : tag.id)
+                  setShowAllItems(false)
                 }
               }}
               className={`group inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all border ${
@@ -1200,10 +1220,10 @@ export default function NewsQueuePage() {
             <Trash2 className="h-3 w-3" />
           </Button>
         )}
-        {activeTag && !tagDeleteMode && (
+        {(activeTag || showAllItems) && !tagDeleteMode && (
           <button
             type="button"
-            onClick={() => setActiveTagId(null)}
+            onClick={() => { setActiveTagId(null); setShowAllItems(false) }}
             className="text-[10px] text-muted-foreground hover:text-foreground underline"
           >
             Filter zurücksetzen

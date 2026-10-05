@@ -11,6 +11,15 @@
  * die findet er über die Pille selbst. In Selected/Used/… bleibt ohne Pille
  * alles sichtbar, sonst verschwänden dort etwa ausgewählte OpenAI-Meldungen.
  */
+/**
+ * Gilt der Rest-Modus? Nur in „Pending", nur ohne aktive Pille, nur wenn es
+ * überhaupt Pillen gibt — und nicht, wenn die schwarze „All"-Pille aktiv ist:
+ * Die hebt jeden Filter auf (Betreiber-Vorgabe 2026-10-05).
+ */
+export function isTagRestMode(opts: { status: string; hasActiveTag: boolean; showAll: boolean; tagCount: number }): boolean {
+  return opts.status === 'pending' && !opts.hasActiveTag && !opts.showAll && opts.tagCount > 0
+}
+
 export function filterByTags<T>(
   items: T[],
   opts: {
