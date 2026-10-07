@@ -3,7 +3,7 @@
  * Prices in USD per 1M tokens
  *
  * Since no provider offers a pricing API, this is maintained manually.
- * Last updated: 2026-08-03
+ * Last updated: 2026-10-07
  *
  * Pricing sources:
  * - Anthropic: https://platform.claude.com/docs/en/about-claude/pricing
@@ -25,16 +25,43 @@ export interface ModelInfo {
   category?: 'text' | 'image'
 }
 
-// Last verified: 2026-08-03
-export const PRICING_LAST_UPDATED = '2026-08-03'
+// Last verified: 2026-10-07
+export const PRICING_LAST_UPDATED = '2026-10-07'
 
 export const MODEL_PRICING: Record<string, ModelInfo> = {
-  // ── Anthropic (verified 2026-08-03) ───────────────────────────────────────
+  // ── Anthropic (verified 2026-10-07) ───────────────────────────────────────
+  // Betreiber-Vorgabe 2026-10-05 (Spec Morgenkonferenz, „Kosten"): opus-5-5,
+  // fable-5-1 und mythos-5-1 fehlten hier, obwohl sie im Admin einstellbar und
+  // in model-capabilities.ts belegt sind — Aufrufe damit landeten mit
+  // cost_usd = NULL in llm_usage, und die Tagessumme führte sie als 0.
+  // Preise von https://platform.claude.com/docs/en/about-claude/pricing
+  // (gelesen 2026-10-07). Bekannte Unschärfe: Cache-Hits kosten bei Fable 5.1
+  // und Mythos 5.1 laut Seite 0,025x Input, bei Opus 5.5 0,05x; usage-cost.ts
+  // rechnet pauschal 0,1x — die Cache-Leseposten dieser Modelle sind damit
+  // leicht ÜBERschätzt, nie unterschätzt. Bewusst nicht in dieser Änderung.
+  'claude-fable-5-1': {
+    id: 'claude-fable-5-1',
+    name: 'Claude Fable 5.1',
+    provider: 'anthropic',
+    pricing: { input: 10, output: 50 },
+  },
+  'claude-mythos-5-1': {
+    id: 'claude-mythos-5-1',
+    name: 'Claude Mythos 5.1',
+    provider: 'anthropic',
+    pricing: { input: 10, output: 50 },
+  },
   'claude-fable-5': {
     id: 'claude-fable-5',
     name: 'Claude Fable 5',
     provider: 'anthropic',
     pricing: { input: 10, output: 50 },
+  },
+  'claude-opus-5-5': {
+    id: 'claude-opus-5-5',
+    name: 'Claude Opus 5.5',
+    provider: 'anthropic',
+    pricing: { input: 4, output: 20 },
   },
   'claude-opus-5': {
     id: 'claude-opus-5',
