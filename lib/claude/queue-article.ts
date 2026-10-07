@@ -242,7 +242,7 @@ export async function selectAndEnrichItems(opts: {
 
   if (queueItemIds && queueItemIds.length > 0) {
     // Use specified items
-    const result = await selectItemsForArticle(queueItemIds)
+    const result = await selectItemsForArticle(queueItemIds, { actor: 'operator' }) // explizite IDs = Handauswahl (s. :370-372), kein Pipeline-Pick
     if (result.error) throw new Error(result.error)
     selectedItems = result.items
   } else if (useSelected) {
@@ -276,7 +276,7 @@ export async function selectAndEnrichItems(opts: {
 
           if (additionalItems.length > 0) {
             const itemIds = additionalItems.map(s => s.id)
-            const result = await selectItemsForArticle(itemIds)
+            const result = await selectItemsForArticle(itemIds, { actor: 'pipeline' })
             console.log(`[Ghostwriter-Queue] selectItemsForArticle returned ${result.items.length} items (error: ${result.error || 'none'})`)
 
             if (!result.error && result.items.length > 0) {
@@ -302,7 +302,7 @@ export async function selectAndEnrichItems(opts: {
 
       const itemIds = balancedSelection.map(s => s.id)
       console.log(`[Ghostwriter-Queue] Calling selectItemsForArticle with ${itemIds.length} item IDs`)
-      const result = await selectItemsForArticle(itemIds)
+      const result = await selectItemsForArticle(itemIds, { actor: 'pipeline' })
       console.log(`[Ghostwriter-Queue] selectItemsForArticle returned ${result.items.length} items (error: ${result.error || 'none'})`)
 
       if (result.error) throw new Error(result.error)
@@ -319,7 +319,7 @@ export async function selectAndEnrichItems(opts: {
     }
 
     const itemIds = balancedSelection.map(s => s.id)
-    const result = await selectItemsForArticle(itemIds)
+    const result = await selectItemsForArticle(itemIds, { actor: 'pipeline' })
 
     if (result.error) throw new Error(result.error)
 

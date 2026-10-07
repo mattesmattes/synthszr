@@ -411,7 +411,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'itemIds array required' }, { status: 400 })
         }
 
-        const result = await selectItemsForArticle(itemIds)
+        const result = await selectItemsForArticle(itemIds, { actor: 'operator' })
         if (result.error) {
           return NextResponse.json({ error: result.error }, { status: 400 })
         }
@@ -427,7 +427,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'itemIds and postId required' }, { status: 400 })
         }
 
-        const result = await markItemsAsUsed(itemIds, postId)
+        const result = await markItemsAsUsed(itemIds, postId, { actor: 'operator' })
         if (result.error) {
           return NextResponse.json({ error: result.error, updated: result.updated }, { status: 500 })
         }
