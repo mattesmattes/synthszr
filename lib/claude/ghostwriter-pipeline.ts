@@ -669,7 +669,11 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   // Analog zu enforceHeadingLength: nur angestoßen, wenn der Regex anschlägt.
   trimmed = await enforceTakeEnding(trimmed, (take) => rewriteWerEnding(take))
 
-  return trimmed
+  // Queue-ID-Marker als LETZTER Schritt — nach enforceHeadingLength (sonst
+  // zählte die ≤90-Zeichen-Prüfung den Kommentar mit) und nach allen Satz-Caps.
+  // Einzelabschnitt = genau ein Item (Spec 2026-10-05 „Heading-Marker": jede
+  // H2 trägt die IDs ihrer Quellen, nicht nur Bündel).
+  return ensureQueueIdMarker(trimmed, [item.id])
 }
 
 // Formt den Schluss eines Takes um, dessen letzter/vorletzter Satz mit der
@@ -1101,7 +1105,12 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   // danebenstehend mitwachsen, trotz ausdrücklicher Anweisung im Prompt.
   withSources = sanitizeLexTags(capTake(withSources))
 
-  return ensureBundleMarker(withSources, bundleType)
+  // Beide Marker in EINER Heading-Zeile: zuerst die IDs ALLER Member in
+  // Quellen-Reihenfolge (so bekommt published_units.member_ids das komplette
+  // Bündel, nicht nur das eine Item, das embedQueueItemIds per Wort-Overlap
+  // erraten hätte — BEFUND 2026-10-06), dann der Typ als LETZTER Kommentar —
+  // Rückfallschutz für den Extraktor vor Task 7 (s. ensureQueueIdMarker).
+  return ensureBundleMarker(ensureQueueIdMarker(withSources, items.map((it) => it.id)), bundleType)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1625,15 +1634,20 @@ export async function writeSectionsBatch(
         section = await withTimeout(proofreadText(section, proofreadModel), SECTION_PROOFREAD_TIMEOUT_MS, section)
           .catch(() => section)
       }
-      // Deterministischer Backstop: falls der Proofread den data-bundle-type-
-      // Kommentar entgegen PROOFREADING_PROMPT Regel 9 doch entfernt hat,
-      // hier erzwungen wieder einsetzen (idempotent, no-op wenn er noch da ist).
-      if (unit.kind === 'bundle') {
-        section = ensureBundleMarker(section, unit.bundleType)
-      }
+      // Deterministischer Backstop: falls der Proofread die HTML-Kommentare
+      // (data-bundle-type, data-queue-item-ids) entgegen PROOFREADING_PROMPT
+      // Regel 9 doch entfernt hat, hier erzwungen wieder einsetzen (idempotent,
+      // no-op wenn sie noch da sind). Seit 2026-10-06 für Bündel UND Einzel —
+      // jede H2 trägt ihre Queue-IDs. Trifft auch die Timeout-/Fehler-
+      // Platzhalter oben: die tragen dann die IDs ihrer Unit, was beim
+      // Nachschreiben hilft und beim Löschen nicht stört (Test: „Fehler-
+      // Platzhalter" in ghostwriter-queue-id-marker.test.ts).
+      section = ensureUnitMarkers(section, unit)
       // Kompensation: bei aktiven Bündeln wird jeder NORMALE Abschnitt (nicht die
       // Bündel-Section selbst) um genau einen Satz gekürzt (Zusammenfassung + Take),
       // damit der Artikel durch die zusätzliche Bündel-Section nicht insgesamt länger wird.
+      // shortenBySentences erhält die Heading-Zeile samt Kommentaren (splitHeading
+      // in bundle-length.ts nimmt `#{1,6}[^\n]*`), die Marker überleben also.
       if (unit.kind === 'single' && bundlesActive) {
         section = shortenBySentences(section, 2)
       }
