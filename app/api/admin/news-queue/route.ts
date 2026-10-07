@@ -24,6 +24,7 @@ import {
 } from '@/lib/news-queue/service'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { parseIntParam } from '@/lib/validation/query-params'
+import { readStatusSnapshot, recordQueueEvents } from '@/lib/news-queue/events'
 
 // GET: List queue items, stats, or distribution
 export async function GET(request: NextRequest) {
@@ -466,14 +467,30 @@ export async function POST(request: NextRequest) {
 
       case 'reset-item': {
         // Reset a single item back to pending (when user removes it from a draft post)
-        const { itemId } = body as { itemId: string }
+        const { itemId, reason, source } = body as { itemId: string; reason?: unknown; source?: unknown }
 
         if (!itemId) {
           return NextResponse.json({ error: 'itemId required' }, { status: 400 })
         }
 
+        // Eingaben fuer das Event normalisieren statt casten: reason landet in
+        // queue_item_events.reason (text), source wird zum Grund. Ein Objekt,
+        // eine Zahl oder eine unbekannte Quelle ('foo' → 'foo_remove') hat dort
+        // nichts verloren — Unbrauchbares wird zu null, der Reset laeuft wie
+        // bisher (alte Aufrufer senden beides nicht).
+        const grund = typeof reason === 'string' ? reason : null
+        const quelle = source === 'draft' || source === 'queue' ? source : null
+
         // Use admin client to bypass RLS
         const adminClient = createAdminClient()
+
+        // Vorzustand VOR dem Update lesen: danach steht in der Zeile nur noch
+        // 'pending'. BEFUND 2026-10-06: Die Route filtert nicht nach Status,
+        // auch ein 'used'-Item landet hier — das Event soll das sichtbar machen.
+        // readStatusSnapshot wirft nie (Task 3); ein Lesefehler kostet nur
+        // from_status, nicht den Reset.
+        const vorher = await readStatusSnapshot(adminClient, [itemId])
+
         const { data, error } = await adminClient
           .from('news_queue')
           .update({
@@ -492,6 +509,24 @@ export async function POST(request: NextRequest) {
           console.warn('[NewsQueue] reset-item: no rows updated for itemId:', itemId)
           return NextResponse.json({ error: 'Item not found' }, { status: 404 })
         }
+
+        // Final Cut festhalten (Betreiber-Vorgabe 2026-10-05: reset-item bekommt
+        // reason/source aus der Edit-Seite). Das Event ist die einzige Spur, dass
+        // der Betreiber dieses Item SELBST gewaehlt und dann gestrichen hat —
+        // edit_history kennt den Vorgang nicht, und ohne Spur saehe die Zeile aus
+        // wie nie gewaehlt (schwaechste statt staerkste Negativ-Stufe). Ein
+        // genannter reason hat Vorrang; nennt der Aufrufer nur source, wird daraus
+        // der Grund ('draft_remove'/'queue_remove'). Erst NACH dem erfolgreichen
+        // Update: Bei 500/404 hat sich die Zeile nicht geaendert, ein Event
+        // behauptete das Gegenteil.
+        await recordQueueEvents(adminClient, [{
+          queue_item_id: itemId,
+          event: 'remove',
+          actor: 'operator',
+          from_status: vorher.get(itemId)?.status ?? null,
+          to_status: 'pending',
+          reason: grund ?? (quelle ? `${quelle}_remove` : null),
+        }])
 
         console.log('[NewsQueue] reset-item success:', data[0])
         return NextResponse.json({ success: true, updated: data[0] })
