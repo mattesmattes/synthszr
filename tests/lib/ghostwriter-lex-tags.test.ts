@@ -48,4 +48,16 @@ describe('Proofreading-Erhaltungsliste', () => {
     expect(rule9?.[1]).toContain('{lex:...}')
     expect(rule9?.[1]).toContain('{Company}')
   })
+
+  it('nennt beide Heading-Kommentare (data-bundle-type UND data-queue-item-ids) als unantastbar', () => {
+    // Regel 9 ist eine einzelne Zeile im Template-Literal. Ohne den neuen
+    // Kommentar im Prompt wüsste der Lektor nur von data-bundle-type und
+    // dürfte die ID-Liste als „Müll in der Überschrift" aufräumen — der
+    // Backstop fängt das zwar ab, aber die Prompt-Bitte ist die erste Hürde.
+    const rule9 = PROOFREADING_PROMPT.match(/^9\. .*$/m)?.[0] ?? ''
+    expect(rule9).toContain('data-bundle-type')
+    expect(rule9).toContain('data-queue-item-ids')
+    expect(rule9).toMatch(/beide nebeneinander/)
+    expect(rule9).toMatch(/auch nicht einzelne IDs/)
+  })
 })
