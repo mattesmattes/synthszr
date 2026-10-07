@@ -25,6 +25,7 @@ import { fetchSourceText, type FetchContext } from '@/lib/techmeme/fetch-text'
 import { buildQueueItem, filterKnownSources, storyKeyFor, type TechmemeQueueItem } from '@/lib/techmeme/queue-items'
 import { addToQueue } from '@/lib/news-queue/service'
 import { pickTopicStories, TOPIC_STORY_LIMIT } from '@/lib/techmeme/topic-selection'
+import { recordQueueEvents, type QueueEvent } from '@/lib/news-queue/events'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -172,29 +173,31 @@ async function loadActiveTopicStories(supabase: AdminClient): Promise<Set<string
  * bundle_type=null, obwohl der Lauf die Story inzwischen korrekt als Thema
  * erkennt.
  */
-async function promoteExistingTopicSources(
+export async function promoteExistingTopicSources(
   supabase: AdminClient,
   themen: Set<string>,
 ): Promise<number> {
   if (themen.size === 0) return 0
   const seit = new Date(Date.now() - KNOWN_URL_DAYS * 24 * 60 * 60 * 1000).toISOString()
   const PAGE = 1000
-  const zuHeben: string[] = []
+  // bundle_type wird mitgelesen, damit das Event den Vorzustand (from_role)
+  // kennt — nach dem Update steht in der Zeile nur noch 'topic'.
+  const zuHeben: Array<{ id: string; bundle_type: string | null }> = []
 
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from('news_queue')
-      .select('id, metadata')
+      .select('id, metadata, bundle_type')
       .eq('status', 'pending')
       .gte('queued_at', seit)
       .range(from, from + PAGE - 1)
     if (error) {
       throw new Error(`Nachtraegliche Themen-Zuordnung nicht lesbar: ${error.message}`)
     }
-    const seite = (data ?? []) as Array<{ id: string; metadata: Record<string, unknown> | null }>
+    const seite = (data ?? []) as Array<{ id: string; metadata: Record<string, unknown> | null; bundle_type: string | null }>
     for (const zeile of seite) {
       const key = zeile.metadata?.techmeme_story
-      if (typeof key === 'string' && themen.has(key)) zuHeben.push(zeile.id)
+      if (typeof key === 'string' && themen.has(key)) zuHeben.push({ id: zeile.id, bundle_type: zeile.bundle_type ?? null })
     }
     if (seite.length < PAGE) break
   }
@@ -207,11 +210,29 @@ async function promoteExistingTopicSources(
     const { error } = await supabase
       .from('news_queue')
       .update({ bundle_type: 'topic', status: 'selected', selected_at: new Date().toISOString() })
-      .in('id', batch)
+      .in('id', batch.map((z) => z.id))
     if (error) {
       throw new Error(`Nachtraegliche Themen-Zuordnung fehlgeschlagen: ${error.message}`)
     }
     angehoben += batch.length
+
+    // Herkunft festhalten (Betreiber-Vorgabe 2026-10-05): Ein so gehobenes Item
+    // ist vom Techmeme-Lauf gewaehlt, nicht vom Betreiber — es darf verfallen,
+    // solange er es nicht anfasst (am 03.10. liess er 89 von 100 verfallen).
+    // Ohne Event faellt die Herkunftsregel auf metadata.techmeme zurueck, das
+    // stimmt hier zwar, aber nur zufaellig. Je Batch nach dessen Erfolg, damit
+    // ein Fehler im naechsten Batch die schon gehobenen nicht spurlos laesst.
+    // Best-effort, bricht den Lauf nie ab.
+    const events: QueueEvent[] = batch.map((z) => ({
+      queue_item_id: z.id,
+      event: 'techmeme_promote',
+      actor: 'techmeme',
+      from_status: 'pending',
+      to_status: 'selected',
+      from_role: z.bundle_type,
+      to_role: 'topic',
+    }))
+    await recordQueueEvents(supabase, events)
   }
   return angehoben
 }
