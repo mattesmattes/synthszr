@@ -302,7 +302,7 @@ export async function markJobError(id: string, message: string): Promise<void> {
  * Returns the new post id.
  */
 async function persistDraftPost(supabase: AdminClient, job: ArticleJob, fullMarkdown: string): Promise<string> {
-  const { parseArticleContent, generateSlug } = await import('@/lib/utils/parse-article-content')
+  const { parseArticleContent, generateSlug, stripHtmlComments } = await import('@/lib/utils/parse-article-content')
   const { sanitizeTiptapUrls } = await import('@/lib/utils/url-verifier')
   const { buildUniqueSlug } = await import('@/lib/article-jobs/unique-slug')
 
@@ -366,7 +366,9 @@ async function persistDraftPost(supabase: AdminClient, job: ArticleJob, fullMark
       excerpt: metadata.excerpt || null,
       category: metadata.category || 'AI & Tech',
       content: JSON.stringify(tiptap),
-      word_count: body.split(/\s+/).length,
+      // Ohne Heading-Marker zählen — jeder HTML-Kommentar zählte sonst als drei
+      // Wörter (BEFUND 2026-10-06, jede H2 trägt seit Task 9 einen).
+      word_count: stripHtmlComments(body).split(/\s+/).length,
       status: 'draft',
       ai_model: job.model,
       pending_queue_item_ids: job.used_item_ids?.length ? job.used_item_ids : [],
