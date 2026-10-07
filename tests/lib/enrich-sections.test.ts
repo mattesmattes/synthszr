@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractSections, applySectionResult, sectionMatchesKey } from '@/lib/enrich/sections'
+import { extractSections, applySectionResult, sectionMatchesKey, restorePreservedHeadingAttrs, PRESERVED_HEADING_ATTRS } from '@/lib/enrich/sections'
 import type { TiptapDoc, TiptapNode } from '@/lib/email/tiptap-to-html'
 
 function h2(text: string, attrs: Record<string, string> = {}): TiptapNode {
@@ -173,5 +173,84 @@ describe('sectionMatchesKey', () => {
     ]
     const remaining = allSections.filter((s) => !excludeKeys.some((k) => sectionMatchesKey(s, k)))
     expect(remaining.map((s) => s.headingText)).toEqual(['Ohne ID A', 'Ohne ID B'])
+  })
+})
+
+// Betreiber-Vorgabe 2026-10-05 (Spec Heading-Marker, Review Focus 4): der
+// Markdown-Rundgang des Enrich verliert alle Heading-Attrs; die Route schreibt
+// sie mit restorePreservedHeadingAttrs vom urspruenglichen H2 zurueck. Fehlt
+// hier ein Attr, ist der Final Cut nach dem ersten Enrich unsichtbar.
+describe('restorePreservedHeadingAttrs', () => {
+  const fullAttrs = {
+    queueItemId: 'q1',
+    bundleType: 'topic',
+    queueItemIds: 'q1,q2,q3',
+    curationRank: '3',
+    curationTier: 'bench',
+  }
+
+  it('listet genau die fuenf Heading-Attrs aus Vertrag 2.5', () => {
+    expect([...PRESERVED_HEADING_ATTRS]).toEqual(['queueItemId', 'bundleType', 'queueItemIds', 'curationRank', 'curationTier'])
+  })
+
+  it('kopiert alle fuenf Attrs vom Original-H2 auf das neue Heading, level bleibt', () => {
+    const original = h2('Alte Ueberschrift', fullAttrs)
+    const revised = h2('Neue Ueberschrift')
+    restorePreservedHeadingAttrs(original, revised)
+    expect(revised.attrs).toEqual({ level: 2, ...fullAttrs })
+  })
+
+  it('Original gewinnt gegen gleichnamige Attrs des neuen Headings', () => {
+    // Das Modell koennte einen Marker halluzinieren — massgeblich ist das H2
+    // VOR dem Enrich.
+    const original = h2('Alt', { queueItemId: 'q1', queueItemIds: 'q1,q2' })
+    const revised = h2('Neu', { queueItemId: 'falsch', queueItemIds: 'falsch' })
+    restorePreservedHeadingAttrs(original, revised)
+    expect(revised.attrs).toEqual({ level: 2, queueItemId: 'q1', queueItemIds: 'q1,q2' })
+  })
+
+  it('entfernt Attrs, die nur das neue Heading traegt (halluzinierter Marker)', () => {
+    // Das Original hat weder curationTier noch queueItemId. Schreibt das
+    // Modell einen Marker in die Antwort, setzt der Konverter das Attr — es
+    // darf den Restore nicht ueberleben, sonst entscheidet das Modell ueber
+    // Tier und Queue-Zuordnung.
+    const original = h2('Alt')
+    const revised = h2('Neu', { curationTier: 'held', queueItemId: 'halluziniert' })
+    restorePreservedHeadingAttrs(original, revised)
+    expect(revised.attrs).toEqual({ level: 2 })
+  })
+
+  it('uebernimmt keine leeren, fehlenden oder Nicht-String-Werte', () => {
+    // TiptapNode.attrs erlaubt string | number; die fuenf Attrs sind laut
+    // Vertrag 2.5 Strings — eine Zahl ist ein Fehler im Quell-JSON und wird
+    // nicht weitergetragen.
+    const original: TiptapNode = { type: 'heading', attrs: { level: 2, queueItemId: '', curationRank: 3, curationTier: 'held' } }
+    const revised = h2('Neu')
+    restorePreservedHeadingAttrs(original, revised)
+    expect(revised.attrs).toEqual({ level: 2, curationTier: 'held' })
+  })
+
+  it('ohne Original bleibt vom neuen Heading nur level', () => {
+    // Keine Quelle → keines der fuenf Attrs, auch kein vom Modell gesetztes.
+    const revised = h2('Neu', { bundleType: 'recap' })
+    restorePreservedHeadingAttrs(undefined, revised)
+    expect(revised.attrs).toEqual({ level: 2 })
+  })
+
+  it('findet das Original-H2 ueber startIndex wie die Route (sectionNodes[0])', () => {
+    // Spiegelt app/api/enrich/route.ts: sectionNodes = content.slice(startIndex,
+    // endIndex), Quelle = sectionNodes[0]. Mit Intro-Absatz vor der ersten H2,
+    // damit ein Off-by-one (Absatz statt H2) auffiele.
+    const doc: TiptapDoc = {
+      type: 'doc',
+      content: [p('Intro'), h2('Buendel', fullAttrs), p('Text'), h2('Einzeln', { queueItemId: 'q9' }), p('Text 2')],
+    }
+    const [bundle, single] = extractSections(doc)
+    const revisedBundle = h2('Buendel neu')
+    const revisedSingle = h2('Einzeln neu')
+    restorePreservedHeadingAttrs(doc.content!.slice(bundle.startIndex, bundle.endIndex)[0], revisedBundle)
+    restorePreservedHeadingAttrs(doc.content!.slice(single.startIndex, single.endIndex)[0], revisedSingle)
+    expect(revisedBundle.attrs).toEqual({ level: 2, ...fullAttrs })
+    expect(revisedSingle.attrs).toEqual({ level: 2, queueItemId: 'q9' })
   })
 })

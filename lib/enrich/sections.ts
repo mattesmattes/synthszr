@@ -123,3 +123,45 @@ export function applySectionResult(
   const newContent = [...content.slice(0, match.startIndex), ...result.nodes, ...content.slice(match.endIndex)]
   return { ...doc, content: newContent }
 }
+
+/**
+ * Heading-Attribute, die den Markdown-Rundgang des Enrich NICHT ueberleben
+ * (convertTiptapToMarkdown schreibt im Heading-Fall keine Attrs mit raus, s.
+ * lib/utils/tiptap-to-markdown.ts) und deshalb vom urspruenglichen H2
+ * zurueckgeschrieben werden. Betreiber-Vorgabe 2026-10-05 (Spec Heading-
+ * Marker): neben queueItemId/bundleType auch die Kurations-Attribute
+ * queueItemIds/curationRank/curationTier — alle fuenf sind Strings
+ * (lib/tiptap/heading-with-queue-id.ts). Fuer den Enrich-Restore muss ein
+ * neues Heading-Attr nur hier ergaenzt werden (EnrichSection bleibt bewusst
+ * schmal). Damit es ueberhaupt im Dokument steht und Editor-Save/HTML-Parse
+ * ueberlebt, muss es zusaetzlich in lib/tiptap/heading-with-queue-id.ts
+ * deklariert und in applyBundleMarkers (lib/utils/markdown-to-tiptap.ts)
+ * gesetzt werden.
+ */
+export const PRESERVED_HEADING_ATTRS = ['queueItemId', 'bundleType', 'queueItemIds', 'curationRank', 'curationTier'] as const
+
+/**
+ * Schreibt die PRESERVED_HEADING_ATTRS vom urspruenglichen H2 (`original`,
+ * in der Enrich-Route sectionNodes[0] — startIndex ist die H2 selbst) auf die
+ * neue erste Heading-Node (`target`). Mutiert `target`. Das Original ist die
+ * EINZIGE Quelle dieser fuenf Attrs: sie werden am Ziel zuerst entfernt, dann
+ * vom Original gesetzt. WARUM: das Modell koennte einen Marker halluzinieren
+ * (`<!-- data-curation-tier:held -->` in der Antwort), den der Konverter in
+ * markdownToTiptapServer als Attr setzt — massgeblich ist aber das H2 VOR dem
+ * Enrich, auch wenn es das Attr gar nicht traegt. Andere Attrs des Ziels
+ * (level) bleiben. Nur nicht-leere Strings werden uebernommen — die fuenf
+ * Attrs sind laut Vertrag Strings, ein leerer Wert waere ein Marker ohne
+ * Inhalt.
+ * BEFUND 2026-10-06: als reine Funktion herausgezogen, damit der Restore ohne
+ * Route (Session, Supabase, Modell-SDK, SSE) in tests/lib geprueft wird —
+ * ein Tippfehler hier machte den Final Cut nach dem ersten Enrich unsichtbar.
+ */
+export function restorePreservedHeadingAttrs(original: TiptapNode | undefined, target: TiptapNode): void {
+  const attrs: Record<string, string | number> = { ...(target.attrs || {}) }
+  for (const key of PRESERVED_HEADING_ATTRS) {
+    delete attrs[key]
+    const value = original?.attrs?.[key]
+    if (typeof value === 'string' && value) attrs[key] = value
+  }
+  target.attrs = attrs
+}

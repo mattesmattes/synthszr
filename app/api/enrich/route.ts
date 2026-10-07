@@ -8,7 +8,7 @@ import { resolveModel } from '@/lib/claude/ghostwriter'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { parseTiptapContent, convertTiptapToMarkdown } from '@/lib/utils/tiptap-to-markdown'
 import { markdownToTiptapServer } from '@/lib/utils/markdown-to-tiptap-server'
-import { extractSections, sectionMatchesKey, type SectionKey } from '@/lib/enrich/sections'
+import { extractSections, sectionMatchesKey, restorePreservedHeadingAttrs, type SectionKey } from '@/lib/enrich/sections'
 import { ANTI_LLM_STYLE_RULES } from '@/lib/enrich/style-rules'
 import { linkPostContent } from '@/lib/glossary/backfill'
 import { getMatcherTerms, getChartProductNames, buildReservedNames } from '@/lib/glossary/terms'
@@ -215,11 +215,14 @@ export async function POST(request: NextRequest) {
           if (firstNode?.type !== 'heading') {
             throw new Error('Modell-Antwort beginnt nicht mit einer Überschrift — Abschnitt verworfen')
           }
-          firstNode.attrs = {
-            ...(firstNode.attrs || {}),
-            ...(section.queueItemId ? { queueItemId: section.queueItemId } : {}),
-            ...(section.bundleType ? { bundleType: section.bundleType } : {}),
-          }
+          // Quelle ist das URSPRUENGLICHE H2 (sectionNodes[0] — startIndex ist
+          // laut lib/enrich/sections.ts die H2 selbst), nicht EnrichSection:
+          // fuer diesen Restore muessen neue Attribute nur in
+          // PRESERVED_HEADING_ATTRS stehen; deklariert werden sie zusaetzlich
+          // in lib/tiptap/heading-with-queue-id.ts, gesetzt in
+          // applyBundleMarkers (lib/utils/markdown-to-tiptap.ts)
+          // (Betreiber-Vorgabe 2026-10-05, Spec Heading-Marker).
+          restorePreservedHeadingAttrs(sectionNodes[0], firstNode)
 
           // Glossar-Links (Mark-Typ 'glossaryLink') ueberleben den Markdown-
           // Rundgang ebenfalls NICHT — renderTextNode() in tiptap-to-markdown.ts
