@@ -1,6 +1,7 @@
 // lib/news-queue/suggestions.ts
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { RankedSuggestion, UserAction } from './ranking-types'
+import { recordQueueEvents, type QueueEventName } from '@/lib/news-queue/events'
 
 /** Create a run row, returning its id. */
 export async function createRun(meta: {
@@ -63,15 +64,40 @@ export async function recordFeedback(
     .select('id')
 
   if (updateError) throw new Error(`recordFeedback update failed: ${updateError.message}`)
-  if (updated && updated.length > 0) return
 
-  // No existing row → the item was user-added (never suggested). Insert it.
-  const { error: insertError } = await supabase.from('ranking_suggestions').insert({
-    run_id: runId,
-    queue_item_id: queueItemId,
-    user_action: action,
-    final_rank: finalRank,
-    acted_at: new Date().toISOString(),
-  })
-  if (insertError) throw new Error(`recordFeedback insert failed: ${insertError.message}`)
+  if (!updated || updated.length === 0) {
+    // No existing row → the item was user-added (never suggested). Insert it.
+    const { error: insertError } = await supabase.from('ranking_suggestions').insert({
+      run_id: runId,
+      queue_item_id: queueItemId,
+      user_action: action,
+      final_rank: finalRank,
+      acted_at: new Date().toISOString(),
+    })
+    if (insertError) throw new Error(`recordFeedback insert failed: ${insertError.message}`)
+  }
+
+  // Das Panel-Urteil zusätzlich als Queue-Event: Die Herkunftsregel
+  // (Betreiber-Vorgabe 2026-10-05, Spec „Herkunft und Hand-Begriff") macht ein
+  // Item erst durch ein Operator-Event zum bestätigten Hand-Item — ein im Panel
+  // behaltenes Techmeme-Item darf danach nicht mehr wie unberührtes Techmeme
+  // verfallen. ranking_suggestions allein sieht die Herkunftsableitung nicht.
+  // Best-effort: recordQueueEvents loggt Fehler, wirft nie.
+  const event = panelEventFor(action)
+  if (event) {
+    await recordQueueEvents(supabase, [
+      { queue_item_id: queueItemId, event, actor: 'operator', run_id: runId },
+    ])
+  }
+}
+
+/**
+ * accepted und added sind ein Ja des Betreibers (added: er hat das Item selbst
+ * dazugeholt — „Zugaben des Betreibers sind die wichtigsten Beispiele"),
+ * rejected ein Nein. reordered/pending sagen nichts über das Item aus.
+ */
+function panelEventFor(action: UserAction): QueueEventName | null {
+  if (action === 'accepted' || action === 'added') return 'panel_accept'
+  if (action === 'rejected') return 'panel_reject'
+  return null
 }
