@@ -29,4 +29,23 @@ describe('renderStaticArticleHtml', () => {
     expect(renderStaticArticleHtml('kein json')).toBe('')
     expect(renderStaticArticleHtml({} as Record<string, unknown>)).toBe('')
   })
+
+  it('gibt die Kurations-Attrs der H2 bewusst als data-Attribute aus (wie data-queue-item-id)', () => {
+    // Entscheidung 2026-10-06 (Task 8): die oeffentliche Ausgabe ist gewollt —
+    // s. Kopfkommentar lib/tiptap/heading-with-queue-id.ts. Faellt dieser Test,
+    // wurde die Entscheidung geaendert: dann bewusst hier anpassen.
+    const html = renderStaticArticleHtml({
+      type: 'doc',
+      content: [{
+        type: 'heading',
+        attrs: { level: 2, queueItemId: 'q1', bundleType: 'topic', queueItemIds: 'q1,q2', curationRank: '2', curationTier: 'recommended' },
+        content: [{ type: 'text', text: 'Buendel' }],
+      }],
+    })
+    expect(html).toContain('data-queue-item-id="q1"')
+    expect(html).toContain('data-queue-item-ids="q1,q2"')
+    expect(html).toContain('data-curation-rank="2"')
+    expect(html).toContain('data-curation-tier="recommended"')
+    expect(html).toContain('Buendel')
+  })
 })
