@@ -22,7 +22,9 @@
     "taste:baseline": "tsx scripts/measure-reranker-baseline.ts",
     "taste:export": "tsx scripts/export-taste-dataset.ts",
     "taste:train": "uv run scripts/train_news_taste.py",
-    "curation:precedents": "tsx scripts/build-curation-precedents.ts"
+    "curation:units": "tsx scripts/build-published-units.ts",
+    "curation:precedents": "tsx scripts/build-curation-precedents.ts",
+    "curation:baseline": "tsx scripts/measure-curation-baseline.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.46",
