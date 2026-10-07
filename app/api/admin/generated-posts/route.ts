@@ -253,6 +253,33 @@ export async function PATCH(request: NextRequest) {
 
     const supabase = createAdminClient()
 
+    // published_at (Curation Phase 0, Betreiber-Vorgabe 2026-10-05): der
+    // Zeitpunkt des Übergangs auf 'published' ist die Zeitbasis für
+    // published_units und das as-of der Baseline-Messung. BEFUND 2026-10-06:
+    // diese PATCH-Route (Editor-Speichern) ist der häufigere Publish-Pfad und
+    // kannte den Vorzustand bisher nicht — nur PUT hatte wasPublished.
+    // Regel: nur beim ERSTEN Übergang setzen. Ein erneutes Speichern eines
+    // schon veröffentlichten Artikels lässt published_at unverändert, sonst
+    // würde jede Korrektur das as-of nach vorn schieben.
+    if (body.status === 'published') {
+      const { data: currentPost, error: readError } = await supabase
+        .from('generated_posts')
+        .select('status')
+        .eq('id', id)
+        .maybeSingle()
+      // Fail-closed (Review-Fund Task 2): bei PostgREST-Fehler ist currentPost
+      // null und sähe wie „noch nie veröffentlicht" aus — ein schon
+      // veröffentlichter Artikel bekäme einen neuen Zeitstempel, das as-of
+      // rutscht still nach vorn. Lieber einmal kein published_at (NULL ist
+      // in Task 10/15 sichtbar) als ein falsches. Das Speichern selbst
+      // scheitert daran nicht.
+      if (readError) {
+        console.error(`[Curation] published_at für Post ${id} nicht gesetzt — Vorzustand-Read fehlgeschlagen:`, readError.message)
+      } else if (currentPost?.status !== 'published') {
+        updateData.published_at = new Date().toISOString()
+      }
+    }
+
     // Fachbegriff-Lexikon (Task 11): Mark-Injektion und Draft-Freigabe
     // serverseitig, nicht im Client — der Browser hat keinen Service-Role-
     // Zugriff, und dieselbe Injektion muss auch die Übersetzungs- und
@@ -382,12 +409,24 @@ export async function PUT(request: NextRequest) {
     // Check if we're publishing (need to know previous status)
     let wasPublished = false
     if (status === 'published') {
-      const { data: currentPost } = await supabase
+      const { data: currentPost, error: readError } = await supabase
         .from('generated_posts')
         .select('status, content')
         .eq('id', id)
         .single()
       wasPublished = currentPost?.status === 'published'
+      // published_at nur beim ERSTEN Übergang auf 'published' — gleiche Regel
+      // wie in PATCH (Curation Phase 0, Betreiber-Vorgabe 2026-10-05). PUT
+      // kannte den Vorzustand schon für Pregenerate/Translations; hier
+      // hängt sich der Zeitstempel an dieselbe Erkennung. Fail-closed wie in
+      // PATCH: bei Read-Fehler kein Zeitstempel. wasPublished selbst bleibt
+      // bei Fehler false wie bisher — Pregenerate und Translations sind
+      // wiederholbar, ein falscher Zeitstempel nicht.
+      if (readError) {
+        console.error(`[Curation] published_at für Post ${id} nicht gesetzt — Vorzustand-Read fehlgeschlagen:`, readError.message)
+      } else if (!wasPublished) {
+        updateData.published_at = new Date().toISOString()
+      }
     }
 
     const { data, error } = await supabase
