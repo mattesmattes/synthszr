@@ -146,10 +146,22 @@ Vorarbeit für das Agenten-Team „Morgenkonferenz" (Spec
 `docs/superpowers/specs/2026-10-05-news-curation-team-design.md`). Kein
 LLM-Textaufruf in Phase 0; nur Embeddings (`gemini-embedding-001`, 768 Dim.).
 
+**Merge-Bedingung (hart):** `feat/curation-phase0` erst nach `main` mergen, wenn
+die Migration `20261006090000_curation_phase0.sql` auf Prod angewendet UND
+verifiziert ist (Plan Task 1 Steps 4/5; anwenden NUR per
+`cd /Users/mattes/dev/synthszr && npx -y supabase@2.84.1 db query --linked --file <absoluter Pfad>`,
+niemals `supabase db push` — Remote-Registry und Migrationsordner laufen
+auseinander). Vercel deployt `main` automatisch. Ohne Spalte fallen PATCH/PUT
+beim ersten Publish zwar auf einen Update ohne `published_at` zurück
+(`isMissingPublishedAtColumn`, Log `[Curation] published_at-Spalte fehlt`),
+diese Posts bekommen ihren Zeitstempel dann erst aus dem Backfill der
+Migration (`updated_at`-Näherung), und die Event-Hooks loggen nur Fehler.
+
 **Tabellen (Migration `supabase/migrations/20261006090000_curation_phase0.sql`,
 RLS ohne Policy = nur Service-Role):**
 - `generated_posts.published_at` — gesetzt beim Übergang auf `published`
   (PATCH/PUT `app/api/admin/generated-posts/route.ts`); Bestand backgefüllt.
+  Fehlt die Spalte (PGRST204/42703), speichern beide Routen einmal ohne sie.
 - `published_units` — eine Zeile je Top-Level-H2 eines veröffentlichten Posts
   (`position`, `heading`, `bundle_type`, `member_ids uuid[]`, `embedding`).
   Ground Truth für Recall/Precision und Archivbrief.

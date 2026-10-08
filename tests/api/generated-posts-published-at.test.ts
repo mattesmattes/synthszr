@@ -225,3 +225,64 @@ describe('PUT /api/admin/generated-posts: published_at', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('[Curation]'), 'boom')
   })
 })
+
+describe('published_at-Spalte fehlt (Migration noch nicht angewendet)', () => {
+  // BEFUND 2026-10-08 (Abschluss-Review A-1/E-1): PostgREST lehnt den ganzen
+  // Update ab, wenn published_at im Body steht und die Spalte fehlt — ohne
+  // Rückfall scheiterte jede Erstveröffentlichung mit 500. Erwartet: genau
+  // ein zweiter Update ohne published_at, Publish geht durch, [Curation]-Log.
+  const MISSING_COLUMN = {
+    data: null,
+    error: { code: 'PGRST204', message: "Could not find the 'published_at' column of 'generated_posts' in the schema cache" },
+  }
+  const updatePayloads = (): Array<Record<string, unknown>> =>
+    state.chains
+      .filter((c) => c.table === 'generated_posts' && c.update.mock.calls.length > 0)
+      .map((c) => c.update.mock.calls[0][0] as Record<string, unknown>)
+
+  it('PATCH: wiederholt den Update einmal ohne published_at und antwortet 200', async () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
+    state.queues = {
+      generated_posts: [{ data: { status: 'draft' }, error: null }, MISSING_COLUMN, { data: null, error: null }],
+    }
+    const { PATCH } = await import('@/app/api/admin/generated-posts/route')
+    const res = await PATCH(req('PATCH', { id: 'p1', status: 'published', title: 'Neu' }))
+
+    expect(res.status).toBe(200)
+    const [first, second] = updatePayloads()
+    expect(first.published_at).toBe(NOW)
+    expect(second).toEqual({ status: 'published', title: 'Neu' })
+    expect(updatePayloads()).toHaveLength(2)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[Curation] published_at-Spalte fehlt'), MISSING_COLUMN.error.message)
+  })
+
+  it('PUT: wiederholt den Update einmal ohne published_at, Erst-Publish-Nebenwirkungen laufen weiter', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    state.queues = {
+      generated_posts: [
+        { data: { status: 'draft', content: null }, error: null },
+        MISSING_COLUMN,
+        { data: { id: 'p1', status: 'published' }, error: null },
+      ],
+    }
+    const { PUT } = await import('@/app/api/admin/generated-posts/route')
+    const res = await PUT(req('PUT', { id: 'p1', status: 'published' }))
+
+    expect(res.status).toBe(200)
+    const [first, second] = updatePayloads()
+    expect(first.published_at).toBe(NOW)
+    expect(second).toEqual({ status: 'published' })
+    expect(mocks.queueTranslations).toHaveBeenCalledWith('generated_post', 'p1', 10)
+  })
+
+  it('anderer Update-Fehler: kein zweiter Versuch, weiter 500', async () => {
+    state.queues = {
+      generated_posts: [{ data: { status: 'draft' }, error: null }, { data: null, error: { code: '23505', message: 'duplicate key' } }],
+    }
+    const { PATCH } = await import('@/app/api/admin/generated-posts/route')
+    const res = await PATCH(req('PATCH', { id: 'p1', status: 'published', title: 'Neu' }))
+
+    expect(res.status).toBe(500)
+    expect(updatePayloads()).toHaveLength(1)
+  })
+})

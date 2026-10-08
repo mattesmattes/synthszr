@@ -20,6 +20,25 @@ import { revalidatePostPaths } from '@/lib/comments/service'
 // reicht dafuer.
 
 /**
+ * Fehlt die Spalte generated_posts.published_at (Migration
+ * 20261006090000_curation_phase0.sql noch nicht angewendet)?
+ *
+ * BEFUND 2026-10-08 (Abschluss-Review Curation Phase 0, A-1/E-1): PATCH und
+ * PUT schreiben published_at im SELBEN Update wie status='published'.
+ * PostgREST lehnt eine unbekannte Spalte im Update-Body als Ganzes ab
+ * (PGRST204 „Could not find the 'published_at' column … in the schema
+ * cache", direkt aus Postgres 42703) — ohne Rückfall scheiterte damit jede
+ * Erstveröffentlichung mit 500, sobald der Branch vor der Migration deployt
+ * ist (Vercel deployt main automatisch). Darum: genau dieser Fehler →
+ * Update einmal OHNE published_at wiederholen. Der Zeitstempel fehlt dann
+ * (NULL, wie beim fail-closed Vorzustand-Read), der Publish selbst geht durch.
+ */
+function isMissingPublishedAtColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false
+  return (error.code === 'PGRST204' || error.code === '42703') && /published_at/.test(error.message ?? '')
+}
+
+/**
  * Setzt `alreadyPublished` in der Kandidatenliste eines Artikels auf den
  * AKTUELLEN Stand. Das Freigabe-Panel blendet damit alles aus, was schon im
  * Lexikon steht (Betreiber-Wunsch 2026-08-07).
@@ -350,10 +369,20 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from('generated_posts')
       .update(updateData)
       .eq('id', id)
+
+    // Rückfall ohne published_at, solange die Migration fehlt (isMissingPublishedAtColumn).
+    if ('published_at' in updateData && isMissingPublishedAtColumn(error)) {
+      console.error(`[Curation] published_at-Spalte fehlt (Migration 20261006090000 nicht angewendet) — Post ${id} ohne published_at gespeichert:`, error?.message)
+      const { published_at: _omit, ...withoutPublishedAt } = updateData
+      ;({ error } = await supabase
+        .from('generated_posts')
+        .update(withoutPublishedAt)
+        .eq('id', id))
+    }
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     // Artikelseiten cachen seit 2026-09-19 10 statt 1 Minute (Egress) —
@@ -429,12 +458,24 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('generated_posts')
       .update(updateData)
       .eq('id', id)
       .select()
       .single()
+
+    // Rückfall ohne published_at, solange die Migration fehlt (isMissingPublishedAtColumn).
+    if ('published_at' in updateData && isMissingPublishedAtColumn(error)) {
+      console.error(`[Curation] published_at-Spalte fehlt (Migration 20261006090000 nicht angewendet) — Post ${id} ohne published_at gespeichert:`, error?.message)
+      const { published_at: _omit, ...withoutPublishedAt } = updateData
+      ;({ data, error } = await supabase
+        .from('generated_posts')
+        .update(withoutPublishedAt)
+        .eq('id', id)
+        .select()
+        .single())
+    }
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
