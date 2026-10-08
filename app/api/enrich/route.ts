@@ -93,8 +93,8 @@ const SOFT_TIME_BUDGET_MS = 650_000
  * Output-Protokoll (SSE-artig, newline-delimited JSON):
  *   {started, totalSections, model, promptName}
  *   {sectionStart, queueItemId, isTake, headingText}       — vor jedem Abschnitt
- *   {sectionDone, queueItemId, isTake, nullIndex, nodes}   — TipTap-Knoten des ueberarbeiteten Abschnitts
- *   {sectionError, queueItemId, isTake, nullIndex, headingText, error} — Abschnitt bleibt im Editor unveraendert
+ *   {sectionDone, queueItemId, isTake, nullIndex, occurrence, nodes}   — TipTap-Knoten des ueberarbeiteten Abschnitts
+ *   {sectionError, queueItemId, isTake, nullIndex, occurrence, headingText, error} — Abschnitt bleibt im Editor unveraendert
  *   {done, processed, errors, needsContinuation}           — einmal am Ende jedes Aufrufs
  */
 export async function POST(request: NextRequest) {
@@ -250,6 +250,7 @@ export async function POST(request: NextRequest) {
             queueItemId: section.queueItemId,
             isTake: section.isTake,
             nullIndex: section.nullIndex,
+            occurrence: section.occurrence,
             nodes: revisedContentAfterLinking,
           })
           processed++
@@ -260,6 +261,7 @@ export async function POST(request: NextRequest) {
             queueItemId: section.queueItemId,
             isTake: section.isTake,
             nullIndex: section.nullIndex,
+            occurrence: section.occurrence,
             headingText: section.headingText,
             error: err instanceof Error ? err.message : 'Unbekannter Fehler',
           })

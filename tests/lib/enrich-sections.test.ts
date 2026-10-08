@@ -129,6 +129,36 @@ describe('applySectionResult', () => {
     expect(sections).toHaveLength(3)
     expect(sections.map((s) => s.headingText)).toEqual(['EU DSA', 'OpenClaw ENRICHED', 'Product Manager ENRICHED'])
   })
+  it('REGRESSION (Abschluss-Review B1): Buendel und Einzelfassung mit gleicher queueItemId landen je an ihrer Stelle', () => {
+    // Pipeline: Buendel-H2 traegt queueItemIds 'X,Y' → queueItemId = X; die
+    // Einzelfassung des inhaltsstaerksten Items X traegt ebenfalls X. Die
+    // Route stellt die Attrs vom Original-H2 wieder her
+    // (restorePreservedHeadingAttrs) — genau so wird es hier nachgestellt.
+    // Vorher traf .find() beide Male das Buendel: Ergebnis war
+    // ['Einzel ENR', 'einzel neu', 'Einzel', 'einzel body'], Buendel weg.
+    const original: TiptapDoc = {
+      type: 'doc',
+      content: [
+        h2('Buendel', { queueItemId: 'X', queueItemIds: 'X,Y', bundleType: 'topic' }), p('buendel body'),
+        h2('Einzel', { queueItemId: 'X', queueItemIds: 'X' }), p('einzel body'),
+      ],
+    }
+    const sections = extractSections(original)
+    expect(sections.map((s) => [s.queueItemId, s.occurrence])).toEqual([['X', 0], ['X', 1]])
+
+    let doc = original
+    for (const [section, label] of [[sections[0], 'Buendel'], [sections[1], 'Einzel']] as const) {
+      const revised = h2(`${label} ENR`)
+      restorePreservedHeadingAttrs(original.content![section.startIndex], revised)
+      const applied = applySectionResult(doc, {
+        queueItemId: section.queueItemId, isTake: false, nullIndex: section.nullIndex, occurrence: section.occurrence,
+        nodes: [revised, p(`${label.toLowerCase()} neu`)],
+      })
+      expect(applied).not.toBeNull()
+      doc = applied!
+    }
+    expect(doc.content!.map((n) => n.content?.[0]?.text)).toEqual(['Buendel ENR', 'buendel neu', 'Einzel ENR', 'einzel neu'])
+  })
 })
 
 describe('sectionMatchesKey', () => {
@@ -173,6 +203,15 @@ describe('sectionMatchesKey', () => {
     ]
     const remaining = allSections.filter((s) => !excludeKeys.some((k) => sectionMatchesKey(s, k)))
     expect(remaining.map((s) => s.headingText)).toEqual(['Ohne ID A', 'Ohne ID B'])
+  })
+  it('Fortsetzung schliesst bei gleicher queueItemId nur das verarbeitete Vorkommen aus (B1)', () => {
+    const sections = extractSections({
+      type: 'doc',
+      content: [h2('Buendel', { queueItemId: 'X' }), p('x'), h2('Einzel', { queueItemId: 'X' }), p('x')],
+    })
+    const excludeKeys = [{ queueItemId: 'X', isTake: false, nullIndex: -1, occurrence: 0 }]
+    const remaining = sections.filter((s) => !excludeKeys.some((k) => sectionMatchesKey(s, k)))
+    expect(remaining.map((s) => s.headingText)).toEqual(['Einzel'])
   })
 })
 
