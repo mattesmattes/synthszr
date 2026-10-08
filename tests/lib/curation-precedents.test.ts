@@ -20,8 +20,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { QueueEventActor, QueueEventName, QueueEventRow } from '@/lib/news-queue/events'
 import { isHandItem } from '@/lib/curation/origin'
 import {
-  berlinDay, buildPrecedentSelected, classifyPrecedents, eventsAsOf, isoDayShift, parseSinceArg, pickPrecedentJobs,
-  precedentJobsSince, precedentSelectedItems, replacePrecedentDay, staleDaysOf,
+  berlinDay, buildPrecedentSelected, classifyPrecedents, eventsAsOf, firstSelectionByItem, isoDayShift,
+  loadPostPublishTimes, parseSinceArg, pickPrecedentJobs, poolExclusionAsOf, precedentJobsSince,
+  precedentSelectedItems, precedentSimilarityProbe, replacePrecedentDay, staleDaysOf,
   type PrecedentInputs, type PrecedentJob, type PrecedentQueueRow, type PrecedentRow, type PrecedentSelected,
   type PrecedentUnit,
 } from '@/lib/curation/precedents'
@@ -715,5 +716,79 @@ describe('isoDayShift — Berlin-unabhängige Tagesverschiebung (Controller-Ruli
 
   it('Schaltjahr 2028: 2028-02-28 + 1 Tag ist der 29. Februar', () => {
     expect(isoDayShift('2028-02-28', 1)).toBe('2028-02-29')
+  })
+})
+
+describe('poolExclusionAsOf / firstSelectionByItem / loadPostPublishTimes — Pool as-of (Abschluss-Review C3/I1)', () => {
+  const AS_OF = '2026-10-05T06:00:00.000Z'
+  const row = (id: string, extra: Partial<{ expires_at: string | null; used_in_post_id: string | null }> = {}) =>
+    ({ id, expires_at: null, used_in_post_id: null, ...extra })
+
+  it('gestern in einem anderen, vor asOf veröffentlichten Post verbraucht → used_earlier', () => {
+    const times = new Map([['post-gestern', '2026-10-04T05:00:00.000Z']])
+    expect(poolExclusionAsOf(row('a', { used_in_post_id: 'post-gestern' }), AS_OF, POST, times)).toBe('used_earlier')
+  })
+
+  it('verbraucht im EIGENEN Post oder in einem erst nach asOf veröffentlichten Post → wählbar', () => {
+    const times = new Map([[POST, '2026-10-05T07:00:00.000Z'], ['post-morgen', '2026-10-06T05:00:00.000Z']])
+    expect(poolExclusionAsOf(row('a', { used_in_post_id: POST }), AS_OF, POST, times)).toBeNull()
+    expect(poolExclusionAsOf(row('b', { used_in_post_id: 'post-morgen' }), AS_OF, POST, times)).toBeNull()
+    // Post unbekannt (gelöscht) → nicht ausschließen.
+    expect(poolExclusionAsOf(row('c', { used_in_post_id: 'weg' }), AS_OF, POST, new Map())).toBeNull()
+  })
+
+  it('abgelaufenes Techmeme-Thema (expires_at <= asOf) → expired; Grenze inklusive', () => {
+    expect(poolExclusionAsOf(row('t', { expires_at: '2026-10-05T05:59:59.000Z' }), AS_OF, POST, new Map())).toBe('expired')
+    expect(poolExclusionAsOf(row('t', { expires_at: AS_OF }), AS_OF, POST, new Map())).toBe('expired')
+    expect(poolExclusionAsOf(row('t', { expires_at: '2026-10-05T06:00:01.000Z' }), AS_OF, POST, new Map())).toBeNull()
+  })
+
+  it('in einem früheren Job gewählt → selected_earlier; Wahl genau zu asOf (eigener Job) zählt nicht', () => {
+    const first = new Map([['a', '2026-10-04T06:00:00.000Z'], ['b', AS_OF]])
+    expect(poolExclusionAsOf(row('a'), AS_OF, POST, new Map(), first)).toBe('selected_earlier')
+    expect(poolExclusionAsOf(row('b'), AS_OF, POST, new Map(), first)).toBeNull()
+  })
+
+  it('firstSelectionByItem: frühester Job je Item, unabhängig von der Eingabereihenfolge', () => {
+    const jobs: PrecedentJob[] = [
+      { id: 'j2', created_at: '2026-10-05T06:00:00.000Z', generated_post_id: null, selected_items: [{ id: 'a' }, { id: 'b' }] },
+      { id: 'j1', created_at: '2026-10-04T06:00:00.000Z', generated_post_id: null, selected_items: [{ id: 'a' }] },
+    ]
+    expect(Object.fromEntries(firstSelectionByItem(jobs))).toEqual({ a: '2026-10-04T06:00:00.000Z', b: '2026-10-05T06:00:00.000Z' })
+  })
+
+  it('loadPostPublishTimes: published_at, ersatzweise created_at; Fehler wirft', async () => {
+    state.queues = {
+      generated_posts: [{
+        data: [
+          { id: 'p1', published_at: '2026-10-04T07:00:00.000Z', created_at: '2026-10-03T20:00:00.000Z' },
+          { id: 'p2', published_at: null, created_at: '2026-10-03T05:00:00.000Z' },
+        ],
+        error: null,
+      }],
+    }
+    const times = await loadPostPublishTimes(client, ['p1', 'p2', 'p1'])
+    expect(Object.fromEntries(times)).toEqual({ p1: '2026-10-04T07:00:00.000Z', p2: '2026-10-03T05:00:00.000Z' })
+    expect(state.chains.generated_posts[0].in).toHaveBeenCalledWith('id', ['p1', 'p2'])
+
+    state.queues = { generated_posts: [{ data: null, error: { message: 'boom' } }] }
+    await expect(loadPostPublishTimes(client, ['p1'])).rejects.toThrow('generated_posts (publish times): boom')
+  })
+})
+
+describe('precedentSimilarityProbe — Positivkontrolle der merged-Schwelle (Abschluss-Review C4)', () => {
+  it('Cosine published-Item ↔ eigene Einheit, getrennt nach Einzel/Bündel; maxCosine der dropped-Items', () => {
+    const selected = [
+      sel('s', { embedding: E_SIM_080 }),           // Einzel-Einheit E_BASE → 0,8
+      sel('b', { embedding: E_FAR }),               // Bündel-Einheit E_BASE → 0
+      sel('d', { embedding: E_SIM_079 }),           // dropped, best 0,79
+      sel('n', { embedding: null }),                // ohne Vektor → fehlt
+    ]
+    const units = [unit(0, 'Einzel', ['s']), unit(1, 'Bündel', ['b', 'x'])]
+    const rows = classifyPrecedents(inputs({ selected, publishedUnits: units }))
+    const probe = precedentSimilarityProbe(selected, units, rows)
+    expect(probe.publishedOwnSingle).toEqual([0.8])
+    expect(probe.publishedOwnBundle).toEqual([0])
+    expect(probe.droppedMax.map((x) => x.toFixed(3))).toEqual(['0.790'])
   })
 })

@@ -11,7 +11,11 @@
  *     → daily_repo.embedding; Hand-Entscheidung über isHandItem mit den
  *     queue_item_events BIS job.created_at (eventsAsOf; historisch leer →
  *     metadata-Fallback)
- *   - Pool „nie gewählt": news_queue.queued_at in [created_at − 48 h, created_at)
+ *   - Pool „nie gewählt": news_queue.queued_at in [created_at − 48 h, created_at),
+ *     OHNE Items, die bei created_at nicht (mehr) wählbar waren
+ *     (poolExclusionAsOf: in einem früheren Job gewählt, in einem vorher
+ *     veröffentlichten anderen Post verbraucht, abgelaufen) — gezählt als
+ *     pool_selected_earlier / pool_used_earlier / pool_expired
  *   - Einheiten: published_units des Posts (Task 10 muss gelaufen sein),
  *     seitenweise gelesen (PostgREST kappt still bei 1000 Zeilen)
  *   - classifyPrecedents → replacePrecedentDay
@@ -27,6 +31,17 @@
  * liefen, in dropped_after_selection. Historisch nicht trennbar; ab Phase 0
  * tragen sie ein select-Event mit actor 'pipeline' vor created_at und
  * werden über eventsAsOf zu pending_never_selected.
+ *
+ * VORBEHALT Pool (Abschluss-Review C3): news_queue kennt nur den heutigen
+ * Status. Ein vor created_at übersprungenes Item oder eines, dessen
+ * used_in_post_id später überschrieben wurde, bleibt „nie gewählt"; ab
+ * Phase 0 lässt sich das über queue_item_events nachschärfen.
+ *
+ * POSITIVKONTROLLE merged-Schwelle (Abschluss-Review C4): auch im Dry-Run
+ * Cosine published-Item ↔ eigene Einheit (p10/p50/p90, getrennt nach
+ * Einzel-/Bündel-Einheit) und maxCosine der dropped-Items. Liegt p50 der
+ * Einzel-Einheiten unter 0,8, die Schwelle mit dem Betreiber klären, BEVOR
+ * der Negativblock genutzt wird.
  *
  * Voraussetzung auch für --dry-run: Migration Task 1 auf Prod
  * (published_units, queue_item_events, curation_precedents) und
@@ -44,7 +59,7 @@
  */
 import { config } from 'dotenv'
 import { existsSync } from 'node:fs'
-import type { PrecedentJob, PrecedentQueueRow, PrecedentRow, PrecedentUnit } from '@/lib/curation/precedents'
+import type { PoolExclusion, PoolStatusRow, PrecedentJob, PrecedentQueueRow, PrecedentRow, PrecedentUnit } from '@/lib/curation/precedents'
 const prodEnv = `${process.env.HOME}/.synthszr.env.prod`
 config({ path: existsSync(prodEnv) ? prodEnv : '.env.local', quiet: true })
 
@@ -74,10 +89,12 @@ async function main() {
   const { createAdminClient } = await import('@/lib/supabase/admin')
   const { loadEventsForItems } = await import('@/lib/news-queue/events')
   const {
-    buildPrecedentSelected, classifyPrecedents, parseSinceArg, pickPrecedentJobs, precedentJobsSince,
-    precedentSelectedItems, replacePrecedentDay, staleDaysOf,
+    buildPrecedentSelected, classifyPrecedents, firstSelectionByItem, isoDayShift, loadPostPublishTimes, parseSinceArg,
+    pickPrecedentJobs, poolExclusionAsOf, precedentJobsSince, precedentSelectedItems, precedentSimilarityProbe,
+    replacePrecedentDay, staleDaysOf,
   } = await import('@/lib/curation/precedents')
-  const { parseEmbedding } = await import('@/lib/news-queue/semantic-dedup')
+  const { DEFAULT_DEDUP_THRESHOLD, parseEmbedding } = await import('@/lib/news-queue/semantic-dedup')
+  const { quantiles } = await import('@/lib/curation/baseline-metrics')
   const supabase = createAdminClient()
 
   const argv = process.argv.slice(2)
@@ -103,7 +120,10 @@ async function main() {
     // Konservative Untergrenze: Berlin-Mitternacht liegt bei 22:00Z (CEST)
     // oder 23:00Z (CET); +02:00 ist nie zu spät, im Winter eine Stunde zu
     // früh — den exakten Berlin-Tag schneidet precedentJobsSince (getestet).
-    if (since) q = q.gte('created_at', `${since}T00:00:00+02:00`)
+    // 3 Tage Vorlauf (Abschluss-Review C3): Jobs bis 48 h vor dem ersten
+    // Tag liefern firstSelectionByItem — sonst gälte ein am Vortag von
+    // --since gewähltes Item im Pool des ersten Tages als „nie gewählt".
+    if (since) q = q.gte('created_at', `${isoDayShift(since, -3)}T00:00:00+02:00`)
     const { data, error } = await q
     if (error) throw new Error(`article_jobs: ${error.message}`)
     if (!data || data.length === 0) break
@@ -111,6 +131,8 @@ async function main() {
     if (data.length < PAGE) break
   }
   const jobs = precedentJobsSince(jobsRaw, since)
+  const firstSelectedAt = firstSelectionByItem(jobsRaw)
+  const postTimeById = new Map<string, string>()
 
   // 2) Post-Status + Einheiten in Scheiben à 200 Posts (nur Jobs mit Post).
   const postIds = [...new Set(jobs.map((j) => j.generated_post_id).filter((id): id is string => !!id))]
@@ -163,6 +185,8 @@ async function main() {
   let poolInUnits = 0
   let unattributableUnits = 0
   let unattributableExcluded = 0
+  const poolExcluded: Record<PoolExclusion, number> = { selected_earlier: 0, used_earlier: 0, expired: 0 }
+  const probe = { publishedOwnSingle: [] as number[], publishedOwnBundle: [] as number[], droppedMax: [] as number[] }
   let failedDays = 0
   let rowsWritten = 0
   const t0 = Date.now()
@@ -210,21 +234,33 @@ async function main() {
       const events = await loadEventsForItems(supabase, selectedIds)
       const selected = buildPrecedentSelected(items, queueById, embByRepo, events, job.created_at)
 
-      // 4d) Pool „nie gewählt": [created_at − 48 h, created_at), nur IDs.
+      // 4d) Pool „nie gewählt": [created_at − 48 h, created_at).
       //     Halboffen wie Task 15 (loadDayInputs, Vertrag 2.10 „queued_at < asOf").
+      //     Abschluss-Review C3: ohne Items, die bei created_at nicht (mehr)
+      //     wählbar waren (poolExclusionAsOf, getestet). Mitglieder des
+      //     eigenen Posts bleiben (Entscheidung 6 → published).
       const jobAt = new Date(job.created_at)
       const poolFrom = new Date(jobAt.getTime() - POOL_WINDOW_MS).toISOString()
-      const pool: string[] = []
+      const poolRows: PoolStatusRow[] = []
       for (let offset = 0; ; offset += POOL_PAGE) {
         const { data, error } = await supabase.from('news_queue')
-          .select('id')
+          .select('id, expires_at, used_in_post_id')
           .gte('queued_at', poolFrom)
           .lt('queued_at', jobAt.toISOString())
           .order('id', { ascending: true })
           .range(offset, offset + POOL_PAGE - 1)
         if (error) throw new Error(`news_queue (pool): ${error.message}`)
-        for (const r of (data ?? []) as Array<{ id: string }>) if (!selectedSet.has(r.id)) pool.push(r.id)
+        for (const r of (data ?? []) as PoolStatusRow[]) if (!selectedSet.has(r.id)) poolRows.push(r)
         if (!data || data.length < POOL_PAGE) break
+      }
+      const missingPosts = [...new Set(poolRows.map((r) => r.used_in_post_id).filter((id): id is string => !!id && id !== postId && !postTimeById.has(id)))]
+      for (const [id, at] of await loadPostPublishTimes(supabase, missingPosts)) postTimeById.set(id, at)
+      const memberSet = new Set(units.flatMap((u) => u.memberIds))
+      const pool: string[] = []
+      for (const r of poolRows) {
+        const reason = memberSet.has(r.id) ? null : poolExclusionAsOf(r, job.created_at, postId, postTimeById, firstSelectedAt)
+        if (reason) poolExcluded[reason]++
+        else pool.push(r.id)
       }
 
       // 4e) Klassifizieren und den Tag ersetzen.
@@ -243,10 +279,16 @@ async function main() {
         // Entscheidung 6: Pool-Item, das im Post lief (Marker ohne selected_items-Eintrag).
         else if (r.stage === 'published') poolInUnits++
       }
-      // Entscheidung 7: Hand-Items, die einer Einheit ohne Marker zugeordnet
-      // wurden, bekommen keine Zeile — hier sichtbar machen.
+      // Entscheidungen 7/7b: Hand-Items, die einer Einheit ohne Marker oder
+      // einem Altbestand-Bündel (≤ 1 ID, gleiches Label) zugeordnet wurden,
+      // bekommen keine Zeile — hier sichtbar machen.
       unattributableUnits += units.filter((u) => u.memberIds.length === 0).length
       unattributableExcluded += selectedIds.length - selectedRows
+      // Positivkontrolle merged-Schwelle (C4), reine Rechnung auf geladenen Daten.
+      const p = precedentSimilarityProbe(selected, units, rows)
+      probe.publishedOwnSingle.push(...p.publishedOwnSingle)
+      probe.publishedOwnBundle.push(...p.publishedOwnBundle)
+      probe.droppedMax.push(...p.droppedMax)
 
       // Entscheidung 12: delete where day, dann Upsert — kein Mischen mit
       // Zeilen früherer Läufe/Jobs.
@@ -294,6 +336,9 @@ async function main() {
     stale_days_cleared: staleCleared,
     missing_in_news_queue: missingInQueue,
     pool_in_units: poolInUnits,
+    pool_selected_earlier: poolExcluded.selected_earlier,
+    pool_used_earlier: poolExcluded.used_earlier,
+    pool_expired: poolExcluded.expired,
     unattributable_units: unattributableUnits,
     unattributable_excluded: unattributableExcluded,
     published: counts.published,
@@ -304,6 +349,25 @@ async function main() {
   })
   console.log(`[Curation] FERTIG: ${processed} Jobs, ${rowsWritten} Zeilen ${dryRun ? '(DRY-RUN, nichts geschrieben)' : 'geschrieben (je Tag ersetzt)'}.`)
   console.log('[Curation] VORBEHALT: dropped_after_selection vor Phase 0 kann Füll-Items aus getBalancedSelection enthalten (nicht trennbar, Task 15 Entscheidung 23).')
+  console.log('[Curation] VORBEHALT: pending_never_selected kennt den Status as-of nur über used_in_post_id/expires_at/frühere Jobs — vor created_at übersprungene Items bleiben „nie gewählt" (Abschluss-Review C3).')
+
+  // Positivkontrolle der merged-Schwelle (Abschluss-Review C4).
+  const fq = (xs: number[]) => {
+    const [p10, p50, p90] = quantiles(xs, [0.1, 0.5, 0.9])
+    const f = (x: number) => (Number.isFinite(x) ? x.toFixed(3) : '–')
+    const above = xs.length ? (xs.filter((x) => x >= DEFAULT_DEDUP_THRESHOLD).length / xs.length).toFixed(2) : '–'
+    return { n: xs.length, p10: f(p10), p50: f(p50), p90: f(p90), [`anteil_ge_${DEFAULT_DEDUP_THRESHOLD}`]: above }
+  }
+  console.log(`[Curation] Positivkontrolle merged-Schwelle ${DEFAULT_DEDUP_THRESHOLD} (Cosine Item ↔ Einheit):`)
+  console.table({
+    published_eigene_einzel_einheit: fq(probe.publishedOwnSingle),
+    published_eigene_buendel_einheit: fq(probe.publishedOwnBundle),
+    dropped_max_ueber_einheiten: fq(probe.droppedMax),
+  })
+  const singleP50 = quantiles(probe.publishedOwnSingle, [0.5])[0]
+  if (Number.isFinite(singleP50) && singleP50 < DEFAULT_DEDUP_THRESHOLD) {
+    console.warn(`[Curation] WARNUNG: p50 published-Item ↔ eigene Einzel-Einheit = ${singleP50.toFixed(3)} < ${DEFAULT_DEDUP_THRESHOLD} — merged entsteht kaum, echte Zusammenlegungen landen in dropped_after_selection. Schwelle mit dem Betreiber klären, bevor der Negativblock genutzt wird.`)
+  }
   // WARUM kein pnpm-Alias im Hinweis: curation:units trägt erst Task 15 in package.json ein.
   if (pick.skipped.no_units > 0) console.warn(`[Curation] WARNUNG: ${pick.skipped.no_units} Posts ohne published_units — erst pnpm tsx scripts/build-published-units.ts laufen lassen, dann erneut.`)
   if (failedDays > 0) console.warn('[Curation] WARNUNG: mind. ein Tag fehlgeschlagen (ggf. leer) — Log prüfen, erneut laufen lassen (ersetzt je Tag).')

@@ -271,6 +271,129 @@ export function classifyPrecedents(input: PrecedentInputs, threshold: number = D
 }
 
 /**
+ * Positivkontrolle der merged-Schwelle (BEFUND 2026-10-08, Abschluss-Review
+ * C4). Die 0,8 ist für daily_repo ↔ daily_repo kalibriert
+ * (semantic-dedup.ts: „0.80–0.96 for same-event items"); hier vergleicht sie
+ * Titel + bis zu 2000 Zeichen Quelltext (oft englisch) mit deutscher
+ * Ghostwriter-Überschrift + erstem Absatz. Erreichen veröffentlichte Items
+ * zu IHRER EIGENEN Einheit typischerweise keine 0,8, entsteht fast nie
+ * merged, und echte Zusammenlegungen landen im Negativblock.
+ *   publishedOwnSingle — Cosine published-Item ↔ eigene Einheit mit genau
+ *                        einer Member-ID (die saubere Kontrolle)
+ *   publishedOwnBundle — dasselbe für Bündel-Einheiten (≥ 2 IDs; nur ein
+ *                        Mitglied steht im Heading, daher niedriger erwartet)
+ *   droppedMax         — maxCosine der dropped_after_selection-Items über alle Einheiten
+ * Nur Zeilen aus `selected`; Items/Einheiten ohne Vektor fehlen. Rein.
+ */
+export interface PrecedentSimilarityProbe {
+  publishedOwnSingle: number[]
+  publishedOwnBundle: number[]
+  droppedMax: number[]
+}
+
+export function precedentSimilarityProbe(
+  selected: PrecedentSelected[],
+  units: PrecedentUnit[],
+  rows: PrecedentRow[],
+): PrecedentSimilarityProbe {
+  const out: PrecedentSimilarityProbe = { publishedOwnSingle: [], publishedOwnBundle: [], droppedMax: [] }
+  const itemById = new Map(selected.map((s) => [s.id, s]))
+  for (const row of rows) {
+    const item = itemById.get(row.item_id)
+    if (!item || !item.embedding || item.embedding.length === 0) continue
+    if (row.stage === 'published') {
+      const unit = units.find((u) => u.memberIds.includes(item.id))
+      const s = unit ? safeCosine(item.embedding, unit.embedding) : null
+      if (s === null || !unit) continue
+      ;(unit.memberIds.length === 1 ? out.publishedOwnSingle : out.publishedOwnBundle).push(s)
+    } else if (row.stage === 'dropped_after_selection') {
+      const match = bestMatch(item.embedding, units)
+      if (match) out.droppedMax.push(match.similarity)
+    }
+  }
+  return out
+}
+
+/** news_queue-Spalten für den Status eines Pool-Items zum Zeitpunkt as-of. */
+export interface PoolStatusRow {
+  id: string
+  expires_at: string | null
+  used_in_post_id: string | null
+}
+
+export type PoolExclusion = 'selected_earlier' | 'used_earlier' | 'expired'
+
+/**
+ * War ein Pool-Item bei `asOfIso` für den Betreiber gar nicht (mehr) wählbar?
+ * BEFUND 2026-10-08 (Abschluss-Review C3/I1): das 48-h-Fenster ist zeitlich
+ * as-of, beim Status nicht — bei täglichen Jobs enthält es die komplette
+ * Vortagscharge. Ohne diese Prüfung bekäme ein gestern veröffentlichtes
+ * Item am Tag D die Stufe „nie gewählt" (curation_precedents), und in der
+ * Baseline senkten gestern verbrauchte Items und abgelaufene Techmeme-Themen
+ * (TTL 30 h < 48 h, lib/techmeme/queue-items.ts) die Gate-Referenz.
+ *   selected_earlier — Item steht in selected_items eines früheren Jobs
+ *                      (`firstSelectedAt`, Erstwahl vor asOf)
+ *   used_earlier     — used_in_post_id zeigt auf einen ANDEREN Post, der vor
+ *                      asOf veröffentlicht wurde (`postTimeById`:
+ *                      published_at, ersatzweise created_at)
+ *   expired          — expires_at <= asOf
+ * Grenze: news_queue kennt nur den HEUTIGEN Zustand. Ein später erneut
+ * genutztes Item überschreibt used_in_post_id; ein vor asOf übersprungenes
+ * Item ist ohne queue_item_events (erst ab Phase 0) nicht erkennbar.
+ */
+export function poolExclusionAsOf(
+  row: PoolStatusRow,
+  asOfIso: string,
+  currentPostId: string,
+  postTimeById: Map<string, string>,
+  firstSelectedAt: Map<string, string> = new Map(),
+): PoolExclusion | null {
+  const asOf = Date.parse(asOfIso)
+  const selectedAt = firstSelectedAt.get(row.id)
+  if (selectedAt !== undefined && Date.parse(selectedAt) < asOf) return 'selected_earlier'
+  if (row.used_in_post_id && row.used_in_post_id !== currentPostId) {
+    const usedAt = postTimeById.get(row.used_in_post_id)
+    if (usedAt !== undefined && Date.parse(usedAt) < asOf) return 'used_earlier'
+  }
+  if (row.expires_at && Date.parse(row.expires_at) <= asOf) return 'expired'
+  return null
+}
+
+/** Item-ID → created_at des FRÜHESTEN Jobs, in dessen selected_items es steht. */
+export function firstSelectionByItem(jobs: PrecedentJob[]): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const job of jobs) {
+    for (const { id } of precedentSelectedItems(job.selected_items)) {
+      const prev = out.get(id)
+      if (prev === undefined || Date.parse(job.created_at) < Date.parse(prev)) out.set(id, job.created_at)
+    }
+  }
+  return out
+}
+
+/**
+ * Veröffentlichungszeitpunkt je Post: published_at (Phase 0), ersatzweise
+ * created_at. Scheiben à 200 (HeadersOverflowError ab ~400 UUIDs). Unbekannte
+ * Posts fehlen in der Map (→ poolExclusionAsOf schließt nicht aus). Wirft
+ * Error('generated_posts (publish times): …').
+ */
+export async function loadPostPublishTimes(supabase: SupabaseAdmin, postIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  const ids = [...new Set(postIds)]
+  for (let i = 0; i < ids.length; i += PRECEDENT_WRITE_BATCH) {
+    const { data, error } = await supabase.from('generated_posts')
+      .select('id, published_at, created_at')
+      .in('id', ids.slice(i, i + PRECEDENT_WRITE_BATCH))
+    if (error) throw new Error(`generated_posts (publish times): ${error.message}`)
+    for (const r of (data ?? []) as Array<{ id: string; published_at: string | null; created_at: string | null }>) {
+      const at = r.published_at ?? r.created_at
+      if (at) out.set(r.id, at)
+    }
+  }
+  return out
+}
+
+/**
  * Events eines Items bis einschließlich `asOfIso` (job.created_at), Reihenfolge
  * bleibt (loadEventsForItems sortiert nach at, id). WARUM `<=`: selectAndEnrichItems
  * ruft selectItemsForArticle VOR dem article_jobs-Insert (lib/article-jobs/service.ts:162-171),
