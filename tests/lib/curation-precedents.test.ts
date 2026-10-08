@@ -281,6 +281,59 @@ describe('classifyPrecedents — Einheiten ohne Queue-Marker (Review-Fokus 1, En
   })
 })
 
+describe('classifyPrecedents — Altbestand-Bündel mit höchstens einer ID (Entscheidung 7b, Abschluss-Review C1)', () => {
+  // Altposts: Bündel-H2 trägt nur EINE queueItemId (embedQueueItemIds), die
+  // Pipeline bündelte aber alle Items desselben Labels in diese H2.
+  it('recap-Bündel mit 1 ID, drei gewählte recap-Items: A published, B und C ohne Zeile', () => {
+    const rows = classifyPrecedents(inputs({
+      selected: [
+        sel('A', { bundle_type: 'recap', embedding: E_FAR }),
+        sel('B', { bundle_type: 'recap', embedding: E_FAR }),
+        sel('C', { bundle_type: 'recap', embedding: E_SIM_079 }),
+      ],
+      publishedUnits: [unit(0, 'Nachlese', ['A'], { bundleType: 'recap', embedding: E_BASE })],
+    }))
+    expect(rows.map((r) => [r.item_id, r.stage])).toEqual([['A', 'published']])
+  })
+
+  it('Bündel-H2 ganz ohne ID: alle gleich gelabelten Hand-Items ohne Zeile (n-zu-1), anders gelabelte bleiben dropped', () => {
+    const rows = classifyPrecedents(inputs({
+      selected: [
+        sel('A', { bundle_type: 'deep_dive', embedding: E_FAR }),
+        sel('B', { bundle_type: 'deep_dive', embedding: E_FAR }),
+        sel('D', { bundle_type: 'recap', embedding: E_FAR }),
+        sel('E', { bundle_type: null, embedding: E_FAR }),
+      ],
+      publishedUnits: [
+        unit(0, 'Deep Dive', [], { bundleType: 'deep_dive', embedding: E_BASE }),
+        unit(1, 'Einzel', ['x'], { embedding: E_BASE }),
+      ],
+    }))
+    // Die markerlose Einheit ist durch 7b erklärt — Entscheidung 7 nimmt
+    // daher nicht zusätzlich D oder E heraus.
+    expect(rows.map((r) => [r.item_id, r.stage, r.bundle_type_selected])).toEqual([
+      ['D', 'dropped_after_selection', 'recap'],
+      ['E', 'dropped_after_selection', null],
+    ])
+  })
+
+  it('Phase-0-Bündel mit allen IDs (≥ 2): ein gleich gelabeltes Hand-Item ohne ID-Treffer bleibt dropped', () => {
+    const rows = classifyPrecedents(inputs({
+      selected: [sel('A', { bundle_type: 'recap' }), sel('B', { bundle_type: 'recap' }), sel('C', { bundle_type: 'recap', embedding: E_FAR })],
+      publishedUnits: [unit(0, 'Nachlese', ['A', 'B'], { bundleType: 'recap', embedding: E_BASE })],
+    }))
+    expect(rows.map((r) => [r.item_id, r.stage])).toEqual([['A', 'published'], ['B', 'published'], ['C', 'dropped_after_selection']])
+  })
+
+  it('Einheit ohne Label (Einzelmeldung mit 1 ID) greift nicht: ungelabeltes Hand-Item bleibt dropped', () => {
+    const rows = classifyPrecedents(inputs({
+      selected: [sel('A'), sel('B', { embedding: E_FAR })],
+      publishedUnits: [unit(0, 'Einzel', ['A'], { embedding: E_BASE })],
+    }))
+    expect(rows.map((r) => [r.item_id, r.stage])).toEqual([['A', 'published'], ['B', 'dropped_after_selection']])
+  })
+})
+
 describe('classifyPrecedents — Nicht-Hand-Items und Pool', () => {
   it('selected, nicht Hand, nicht veröffentlicht → pending_never_selected (auch bei Similarity 1,0)', () => {
     const rows = classifyPrecedents(inputs({
@@ -388,15 +441,31 @@ describe('buildPrecedentSelected — Label, Embedding, Hand-Status je gewähltem
     return { id, queue_item_id: item, event: 'select', actor, from_status: 'pending', to_status: 'selected', from_role: null, to_role: null, reason: null, run_id: null, at }
   }
 
-  it('Label zum Zeitpunkt der Auswahl gewinnt, sonst news_queue.bundle_type; ohne Queue-Zeile null (Entscheidungen 1, 2)', () => {
+  it('Label zum Zeitpunkt der Auswahl gewinnt; news_queue.bundle_type nur bei fehlendem Schlüssel; ohne Queue-Zeile null (Entscheidungen 1, 2)', () => {
     const out = buildPrecedentSelected(
-      [{ id: 'a', bundle_type: 'topic' }, { id: 'b', bundle_type: null }, { id: 'weg', bundle_type: null }],
-      new Map([['a', q('a', { bundle_type: 'recap' })], ['b', q('b', { bundle_type: 'deep_dive' })]]),
+      [
+        { id: 'a', bundle_type: 'topic' },
+        { id: 'alt', bundle_type: undefined },
+        { id: 'weg', bundle_type: undefined },
+      ],
+      new Map([['a', q('a', { bundle_type: 'recap' })], ['alt', q('alt', { bundle_type: 'deep_dive' })]]),
       new Map(), new Map(), AS_OF,
     )
-    expect(out.map((s) => [s.id, s.bundle_type])).toEqual([['a', 'topic'], ['b', 'deep_dive'], ['weg', null]])
+    expect(out.map((s) => [s.id, s.bundle_type])).toEqual([['a', 'topic'], ['alt', 'deep_dive'], ['weg', null]])
     // Item nicht mehr in news_queue: metadata null → Fallback operator → Hand-Item, ohne Embedding.
     expect(out[2]).toEqual({ id: 'weg', bundle_type: null, embedding: null, isHand: true })
+  })
+
+  it('explizites null (zum Auswahlzeitpunkt ungelabelt) fällt NICHT auf ein späteres news_queue-Label zurück (Abschluss-Review C2)', () => {
+    // toPipelineItem schreibt seit 2026-07-18 immer bundle_type: … ?? null.
+    // Ein Label aus dem Bündel-Toggle nach dem Job darf nicht rückwirkend
+    // in bundle_type_selected des vergangenen Tages landen.
+    const out = buildPrecedentSelected(
+      [{ id: 'x', bundle_type: null }],
+      new Map([['x', q('x', { bundle_type: 'topic' })]]),
+      new Map(), new Map(), AS_OF,
+    )
+    expect(out[0].bundle_type).toBeNull()
   })
 
   it('Embedding über daily_repo_id; ohne daily_repo_id oder ohne Vektor null', () => {
@@ -430,11 +499,16 @@ describe('precedentSelectedItems / berlinDay', () => {
       { title: 'ohne id' },
       null,
       { id: 'c', bundle_type: '' },
+      { id: 'd', title: 'Job vor 2026-07-18, ohne Schlüssel' },
     ])).toEqual([
       { id: 'a', bundle_type: 'topic' },
       { id: 'b', bundle_type: null },
       { id: 'c', bundle_type: null },
+      { id: 'd', bundle_type: undefined },
     ])
+    // toEqual setzt undefined und fehlend gleich — hier die Unterscheidung explizit.
+    expect(precedentSelectedItems([{ id: 'b', bundle_type: null }])[0].bundle_type).toBeNull()
+    expect(precedentSelectedItems([{ id: 'd' }])[0].bundle_type).toBeUndefined()
     expect(precedentSelectedItems(null)).toEqual([])
     expect(precedentSelectedItems({ id: 'a' })).toEqual([])
   })

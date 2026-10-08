@@ -158,8 +158,12 @@ function excludedByUnattributable(candidates: PrecedentSelected[], openUnits: Pr
  * Stufe je Item (Vertrag 2.7):
  *   published               — id ∈ memberIds einer Einheit (gilt für selected UND Pool)
  *   merged                  — sonst, Hand-Item und maxCosine >= threshold (alle Einheiten)
+ *   (keine Zeile)           — sonst, Hand-Item mit Label L, und es gibt eine
+ *                             Einheit mit bundleType L und höchstens EINER Member-ID
+ *                             (Altbestand-Bündel, Entscheidung 7b) — n-zu-1
  *   (keine Zeile)           — sonst, Hand-Item, eins-zu-eins einer Einheit OHNE
- *                             memberIds zugeordnet, die kein merged-Item erklärt (Entscheidung 7)
+ *                             memberIds zugeordnet, die kein merged-Item und
+ *                             keine 7b-Zuordnung erklärt (Entscheidung 7)
  *   dropped_after_selection — sonst, Hand-Item
  *   pending_never_selected  — sonst (selected, nicht Hand) sowie der restliche Pool
  *
@@ -213,12 +217,39 @@ export function classifyPrecedents(input: PrecedentInputs, threshold: number = D
     selectedRows.push({ row, item })
   }
 
-  // Entscheidung 7: Einheiten ohne Marker, die kein merged-Item schon erklärt.
-  const openUnits = publishedUnits.filter((u) => u.memberIds.length === 0 && !mergedTargets.has(u))
-  const candidates = selectedRows.filter((s) => s.row.stage === 'dropped_after_selection').map((s) => s.item)
-  const excluded = openUnits.length > 0 && candidates.length > 0
-    ? excludedByUnattributable(candidates, openUnits)
-    : new Set<string>()
+  // Entscheidung 7b (BEFUND 2026-10-08, Abschluss-Review C1): Altposts
+  // tragen je H2 höchstens EINE queueItemId (embedQueueItemIds, ein Item je
+  // H2 über usedIds), die Pipeline schrieb nur data-bundle-type —
+  // computeBundleUnits fasst aber ALLE Items desselben bundle_type in einer
+  // H2 zusammen. Die übrigen Mitglieder eines solchen Bündels finden keine
+  // ID und erreichen gegen Heading + ersten Absatz kaum Cosine ≥ 0,8; ohne
+  // diese Regel landeten sie als dropped_after_selection MIT Label vorn im
+  // Negativblock — veröffentlichte Meldungen als „gestrichen" gelernt.
+  // Heuristik „höchstens eine Member-ID": ab Phase 0 schreibt
+  // ensureQueueIdMarker ALLE Mitglieder in queueItemIds, ein Bündel mit
+  // mehreren Items hat dann ≥ 2 IDs; ein gleich gelabeltes Hand-Item ohne
+  // ID-Treffer gibt es dort nicht („ein Label, ein Abschnitt", e76aeeaf).
+  // Konservativ wie Entscheidung 7: keine Zeile statt published (lieber ein
+  // echtes Negativ verlieren als ein falsches lernen).
+  const legacyBundleUnits = publishedUnits.filter((u) => u.bundleType !== null && u.memberIds.length <= 1)
+  const legacyLabels = new Set(legacyBundleUnits.map((u) => u.bundleType as string))
+  const excluded = new Set<string>()
+  const explainedUnits = new Set<PrecedentUnit>(mergedTargets)
+  for (const s of selectedRows) {
+    if (s.row.stage !== 'dropped_after_selection' || !s.item.bundle_type || !legacyLabels.has(s.item.bundle_type)) continue
+    excluded.add(s.item.id)
+    for (const u of legacyBundleUnits) if (u.bundleType === s.item.bundle_type) explainedUnits.add(u)
+  }
+
+  // Entscheidung 7: Einheiten ohne Marker, die kein merged-Item und keine
+  // 7b-Zuordnung schon erklärt.
+  const openUnits = publishedUnits.filter((u) => u.memberIds.length === 0 && !explainedUnits.has(u))
+  const candidates = selectedRows
+    .filter((s) => s.row.stage === 'dropped_after_selection' && !excluded.has(s.item.id))
+    .map((s) => s.item)
+  if (openUnits.length > 0 && candidates.length > 0) {
+    for (const id of excludedByUnattributable(candidates, openUnits)) excluded.add(id)
+  }
 
   const rows: PrecedentRow[] = selectedRows.filter((s) => !excluded.has(s.item.id)).map((s) => s.row)
 
@@ -269,19 +300,35 @@ export function isoDayShift(day: string, deltaDays: number): string {
 }
 
 /**
+ * Gewähltes Item aus selected_items. bundle_type: String = Label zum
+ * Auswahlzeitpunkt, null = Schlüssel vorhanden, aber ungelabelt (null, '' oder
+ * kein String), undefined = Schlüssel fehlt (Jobs vor c494199d, 2026-07-18).
+ */
+export interface PrecedentSelectedItem { id: string; bundle_type: string | null | undefined }
+
+/**
  * article_jobs.selected_items (jsonb, PipelineItem[]) → { id, bundle_type } je
  * Item, dedupliziert (erstes Vorkommen gewinnt), Einträge ohne String-ID fallen weg.
+ * WARUM undefined ≠ null (BEFUND 2026-10-08, Abschluss-Review C2): seit
+ * c494199d schreibt toPipelineItem IMMER `bundle_type: item.bundle_type ?? null`
+ * (lib/claude/queue-article.ts) — null heißt dort „zum Auswahlzeitpunkt
+ * ungelabelt". Nur ein FEHLENDER Schlüssel darf auf news_queue zurückfallen
+ * (buildPrecedentSelected), sonst landete ein später gesetztes Label
+ * (Bündel-Toggle im Editor, Neuwahl an D+1) im vergangenen Tag.
  */
-export function precedentSelectedItems(raw: unknown): Array<{ id: string; bundle_type: string | null }> {
+export function precedentSelectedItems(raw: unknown): PrecedentSelectedItem[] {
   if (!Array.isArray(raw)) return []
-  const out: Array<{ id: string; bundle_type: string | null }> = []
+  const out: PrecedentSelectedItem[] = []
   const seen = new Set<string>()
   for (const entry of raw) {
     if (!entry || typeof entry !== 'object') continue
     const { id, bundle_type } = entry as { id?: unknown; bundle_type?: unknown }
     if (typeof id !== 'string' || id.length === 0 || seen.has(id)) continue
     seen.add(id)
-    out.push({ id, bundle_type: typeof bundle_type === 'string' && bundle_type.length > 0 ? bundle_type : null })
+    const label = !('bundle_type' in entry)
+      ? undefined
+      : typeof bundle_type === 'string' && bundle_type.length > 0 ? bundle_type : null
+    out.push({ id, bundle_type: label })
   }
   return out
 }
@@ -399,7 +446,10 @@ export interface PrecedentQueueRow {
 /**
  * selected_items eines Jobs → Eingabe für classifyPrecedents.
  *   - bundle_type: Label ZUM ZEITPUNKT der Auswahl (PipelineItem), Fallback
- *     news_queue.bundle_type (Entscheidung 1) — das aktuelle Label kann seit
+ *     news_queue.bundle_type (Entscheidung 1) NUR, wenn der Schlüssel im
+ *     PipelineItem fehlt (undefined, Jobs vor 2026-07-18) — ein explizites
+ *     null bleibt null (Abschluss-Review C2, s. precedentSelectedItems). Für
+ *     Altjobs bleibt der Fallback eine Näherung: das aktuelle Label kann seit
  *     dem Job umgelabelt sein.
  *   - embedding: daily_repo.embedding über news_queue.daily_repo_id;
  *     Techmeme/ohne daily_repo_id/ohne Vektor → null.
@@ -408,7 +458,7 @@ export interface PrecedentQueueRow {
  *     Fallback 'operator' (Entscheidung 2).
  */
 export function buildPrecedentSelected(
-  items: Array<{ id: string; bundle_type: string | null }>,
+  items: PrecedentSelectedItem[],
   queueById: Map<string, PrecedentQueueRow>,
   embByRepo: Map<string, number[]>,
   eventsById: Map<string, QueueEventRow[]>,
@@ -419,7 +469,7 @@ export function buildPrecedentSelected(
     const repoId = q?.daily_repo_id ?? null
     return {
       id: p.id,
-      bundle_type: p.bundle_type ?? q?.bundle_type ?? null,
+      bundle_type: p.bundle_type === undefined ? (q?.bundle_type ?? null) : p.bundle_type,
       embedding: repoId ? (embByRepo.get(repoId) ?? null) : null,
       isHand: isHandItem({ id: p.id, metadata: q?.metadata ?? null }, eventsAsOf(eventsById.get(p.id) ?? [], asOfIso)),
     }
