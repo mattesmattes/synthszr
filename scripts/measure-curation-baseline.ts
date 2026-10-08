@@ -6,7 +6,9 @@
  *
  * Je Berlin-Tag mit manuellem article_job und veröffentlichtem Post:
  *   Pool = news_queue mit queued_at in [asOf − 48 h, asOf), asOf = created_at
- *   des Jobs; Ground Truth = published_units des Posts. Baselines:
+ *   des Jobs, ohne Zeilen, die bei asOf nicht mehr wählbar waren (anderswo
+ *   veröffentlicht, abgelaufen — poolExclusionAsOf); Ground Truth =
+ *   published_units des Posts. Alle Listen je K auf K Einheiten. Baselines:
  *   total_score-Top-20 via capByUnits, je K auf K Einheiten (Hand-Scores und
  *   Betreiber-Labels neutralisiert), Nachtlauf-Ist (selected_items des Auto-Jobs mit
  *   status=done), Handauswahl (isHandItem wie curation_precedents, P/R; dazu
@@ -89,7 +91,7 @@ const ANALYSIS_RUN_GAP_MS = 15 * 60 * 1000
 // Abschnitten — kurze Jobs (Tests, abgebrochene Versuche) verzerren Units/Minute.
 const MIN_UNITS_FOR_THROUGHPUT = 20
 const OUT_FILE = 'scripts/curation-baseline.json'
-const NOTE = 'Pool = news_queue mit queued_at in [asOf-48h, asOf), asOf = created_at des manuellen Jobs, seitenweise à 1000 bis 2000; Stufe-1-Filter (Junk raus, content_length ≥ 500) — Abdeckung/Recall von total_score und random messen gegen DIESEN gefilterten Pool, Einheiten nur aus Techmeme-Quellen (< 500 Zeichen) fallen darunter (coverage.units_techmeme_only); total_score_top20 = capByUnits je K auf K Einheiten (je K die volle Liste bewertet; ein Techmeme-Bündel = 1 Einheit mit bis zu 5 IDs; ranked_ids = Liste für 20 Einheiten) nach Neutralisierung der Hand-Signale: metadata.manual-Items (total_score ≈ 20 aus der Admin-UI) auf Score 0, bundle_type nur bei metadata.techmeme mit bundle_type=topic behalten (der einzige automatisch gesetzte Wert) — sonst stünden die veröffentlichten Einheiten selbst vorn (Ground-Truth-Leak); REST-LEAK: ein Techmeme-Item, das der Betreiber von null auf topic gelabelt hat, ist historisch nicht von der Techmeme-Promotion zu trennen und bleibt vorn; NICHT neutralisiert: Artikel aus queueFromDailyRepo (daily_repo.source_type=article) tragen Scores 9,0 ohne Marker und können total_score_top20 leicht nach oben verzerren; unit_recall_covered je K (10/15/20) = Treffer auf abgedeckte Einheiten ÷ abgedeckte Einheiten (Zähler und Nenner pool-beschränkt, auch für hand/nightly); gemessener Job je Tag = pickPrecedentJobs aus lib/curation/precedents (dieselbe Funktion wie curation_precedents): jüngster manueller Job mit veröffentlichtem Post, ohne Rückfall auf ältere Jobs übersprungen bei no_units/no_attributable_units/no_selected (skipped_jobs); hand = isHandItem-Teilmenge der selected_items dieses Jobs, Events as-of created_at (wie curation_precedents; unberührte Techmeme-Themen zählen nicht), hand_all_selected = alle selected_items, je nur Tage mit nicht-leerer Liste; precedents_agreement = Abgleich des gemessenen Jobs mit dem Job in curation_precedents — VORBEHALT: der manuelle Pfad füllt mit getBalancedSelection auf, wenn nach dem Published-Filter weniger Items als maxItems übrig sind oder der Slider über der Auswahl steht, und nimmt ohne Handauswahl ganz die Balanced-Auswahl; Füll-Items sind historisch nicht erkennbar, precision_full ist dann eine Untergrenze, duplicate_rate und die Diff Hand−total_score enthalten Pipeline-Picks; Nachtlauf-Ist nur aus Auto-Jobs mit status=done, kein Nachtlauf-Replay (getBalancedSelection nicht as-of-fähig, offene Abweichung von der Spec); Story-Ebene über assignStoryKeys (0.8); Kosten und Durchsatz nur manuelle Jobs mit status=done: llm_usage im Fenster [started_at, completed_at] ÷ Write-Units (written_sections.length; Bündel + Einzelfassung zählen doppelt, daher Obergrenze je published_unit; published_units nur für den gemessenen Job des Tages); llm_usage-Zeilen mit cost_usd NULL aus den Token-Spalten mit heutiger MODEL_PRICING nachberechnet (repriced_calls), ohne Preis auch danach = unpriced_calls (0 $, Untergrenze); Draft-Kosten erst ab 2026-09-20 (Start von llm_usage, bis 2026-09-22 Zeilenverluste möglich) und nur Anthropic-Aufrufe (Gemini-Drafts loggen nicht) — Jobs ohne llm_usage-Zeile im Fenster stehen nicht in per_job, sondern in jobs_without_usage; Lexikon-Phase des Jobs (use_case glossary_candidate_identification) bewusst NICHT in den Draft-Kosten, weil derselbe use_case parallel im Artikel-Crawl läuft und im Zeitfenster nicht trennbar ist — der Durchsatz enthält sie (Wanduhr), die Kosten nicht, beide beziehen sich also auf leicht verschiedene Mengen, die Kosten sind eine bekannte Untergrenze; Techmeme-Stories über techmeme_story dedupliziert (eine Story in zwei 48-h-Fenstern zählt einmal); Analyse-Ende = Ende des ersten queued_at-Laufs (Lücke 15 min) ab schedule_config.dailyAnalysis je vollem Berlin-Tag der letzten 30 (angeschnittener erster und laufender Tag fallen weg), spätere Handergänzungen/Neuläufe als later_rows; Zeiten: analysis_end Berlin-Tag, techmeme UTC-Tag ab Bereichsanfang, newsletter = Vorlauf in Minuten vor dem nächsten Analyse-Slot (Berlin), kritischste Quelle zuerst; MDE: mde50 mit z 1.645 (50 % Power), mde80 mit z 1.645+0.8416 (80 % Power, maßgeblich für die Gate-Kalibrierung); Dubletten-Rate nur für den gemessenen Job je Tag; Zufalls-Seed = 42 + Tage seit 1970 (unabhängig von --since)'
+const NOTE = 'Pool = news_queue mit queued_at in [asOf-48h, asOf), asOf = created_at des manuellen Jobs, seitenweise à 1000 bis 2000; zuerst Status as-of: Zeilen, die in einem anderen, vor asOf veröffentlichten Post verbraucht (used_in_post_id → published_at, ersatzweise created_at) oder bei asOf abgelaufen waren (expires_at <= asOf, v. a. Techmeme-Themen mit TTL 30 h), fallen raus (pool_excluded_as_of je Tag, selected_items des Jobs ausgenommen; news_queue kennt nur den heutigen Zustand, ein später überschriebenes used_in_post_id bleibt unerkannt); dann Stufe-1-Filter (Junk raus, content_length ≥ 500) — Abdeckung/Recall von total_score und random messen gegen DIESEN gefilterten Pool, Einheiten nur aus Techmeme-Quellen (< 500 Zeichen) fallen darunter (coverage.units_techmeme_only); total_score_top20 = capByUnits je K auf K Einheiten (je K die volle Liste bewertet; ein Techmeme-Bündel = 1 Einheit mit bis zu 5 IDs; ranked_ids = Liste für 20 Einheiten) nach Neutralisierung der Hand-Signale: metadata.manual-Items (total_score ≈ 20 aus der Admin-UI) auf Score 0, bundle_type nur bei metadata.techmeme mit bundle_type=topic behalten (der einzige automatisch gesetzte Wert) — sonst stünden die veröffentlichten Einheiten selbst vorn (Ground-Truth-Leak); REST-LEAK: ein Techmeme-Item, das der Betreiber von null auf topic gelabelt hat, ist historisch nicht von der Techmeme-Promotion zu trennen und bleibt vorn; NICHT neutralisiert: Artikel aus queueFromDailyRepo (daily_repo.source_type=article) tragen Scores 9,0 ohne Marker und können total_score_top20 leicht nach oben verzerren; unit_recall_covered je K (10/15/20) = Treffer auf abgedeckte Einheiten ÷ abgedeckte Einheiten (Zähler und Nenner pool-beschränkt, auch für hand/nightly); gemessener Job je Tag = pickPrecedentJobs aus lib/curation/precedents (dieselbe Funktion wie curation_precedents): jüngster manueller Job mit veröffentlichtem Post, ohne Rückfall auf ältere Jobs übersprungen bei no_units/no_attributable_units/no_selected (skipped_jobs); hand, hand_all_selected, nightly_actual und random je K auf K EINHEITEN wie total_score (Einheit wie capByUnits: Label::techmeme_story, ungelabelt je ID; Hand/Nachtlauf mit dem Label aus selected_items ihres Jobs, Zufall mit den neutralisierten Pool-Labels) — die Differenz Hand−total_score vergleicht damit dieselbe Währung; hand = isHandItem-Teilmenge der selected_items dieses Jobs, Events as-of created_at (wie curation_precedents; unberührte Techmeme-Themen zählen nicht), hand_all_selected = alle selected_items, je nur Tage mit nicht-leerer Liste; precedents_agreement = Abgleich des gemessenen Jobs mit dem Job in curation_precedents — VORBEHALT: der manuelle Pfad füllt mit getBalancedSelection auf, wenn nach dem Published-Filter weniger Items als maxItems übrig sind oder der Slider über der Auswahl steht, und nimmt ohne Handauswahl ganz die Balanced-Auswahl; Füll-Items sind historisch nicht erkennbar, precision_full ist dann eine Untergrenze, duplicate_rate und die Diff Hand−total_score enthalten Pipeline-Picks; Nachtlauf-Ist nur aus Auto-Jobs mit status=done, kein Nachtlauf-Replay (getBalancedSelection nicht as-of-fähig, offene Abweichung von der Spec); Story-Ebene über assignStoryKeys (0.8); Kosten und Durchsatz nur manuelle Jobs mit status=done: llm_usage im Fenster [started_at, completed_at] ÷ Write-Units (written_sections.length; Bündel + Einzelfassung zählen doppelt, daher Obergrenze je published_unit; published_units nur für den gemessenen Job des Tages); llm_usage-Zeilen mit cost_usd NULL aus den Token-Spalten mit heutiger MODEL_PRICING nachberechnet (repriced_calls), ohne Preis auch danach = unpriced_calls (0 $, Untergrenze); Draft-Kosten erst ab 2026-09-20 (Start von llm_usage, bis 2026-09-22 Zeilenverluste möglich) und nur Anthropic-Aufrufe (Gemini-Drafts loggen nicht) — Jobs ohne llm_usage-Zeile im Fenster stehen nicht in per_job, sondern in jobs_without_usage; Lexikon-Phase des Jobs (use_case glossary_candidate_identification) bewusst NICHT in den Draft-Kosten, weil derselbe use_case parallel im Artikel-Crawl läuft und im Zeitfenster nicht trennbar ist — der Durchsatz enthält sie (Wanduhr), die Kosten nicht, beide beziehen sich also auf leicht verschiedene Mengen, die Kosten sind eine bekannte Untergrenze; Techmeme-Stories über techmeme_story dedupliziert (eine Story in zwei 48-h-Fenstern zählt einmal); Analyse-Ende = Ende des ersten queued_at-Laufs (Lücke 15 min) ab schedule_config.dailyAnalysis je vollem Berlin-Tag der letzten 30 (angeschnittener erster und laufender Tag fallen weg), spätere Handergänzungen/Neuläufe als later_rows; Zeiten: analysis_end Berlin-Tag, techmeme UTC-Tag ab Bereichsanfang, newsletter = Vorlauf in Minuten vor dem nächsten Analyse-Slot (Berlin), kritischste Quelle zuerst; MDE: mde50 mit z 1.645 (50 % Power), mde80 mit z 1.645+0.8416 (80 % Power, maßgeblich für die Gate-Kalibrierung); Dubletten-Rate auf Einheiten-Ebene (Anteil der Einheiten mit Story-Schlüssel aus einer früheren Einheit; ein gelabeltes Mehr-Quellen-Bündel ist eine Einheit, keine Dublette) nur für den gemessenen Job je Tag; Zufalls-Seed = 42 + Tage seit 1970 (unabhängig von --since)'
 
 async function main() {
   const {
@@ -97,7 +99,7 @@ async function main() {
     parseArgs, rangeStartOf, rangeFromIso, inBerlinRange, daySeed, dailyAnalysisMinuteOf,
     mean, meanFinite, sampleSd, utcMinutesOfDay, hhmm, isoDayShift,
     groupJobsByDay, totalScoreListsByK, coverageOf, wantedIdsOf, repoIdsOf, itemEmbeddingsOf,
-    publishedContentLengthsOf, rankedMetricsOf, unitCappedMetricsOf, handMetricsOf,
+    publishedContentLengthsOf, unitCappedMetricsOf, handMetricsOf, unitKeyOf, unitListsByK, selectedLabelsOf, neutralizeHandLabels,
     aggregateRanked, aggregateHandExtras, pairedDiffs, precedentAgreementOf, techmemeAdoption, draftCostsOf, analysisEndByDay,
     throughputOf, newsletterArrivalOf, techmemeByUtcDay,
     POOL_LIMIT, POOL_PAGE, MIN_CONTENT_LENGTH,
@@ -196,6 +198,7 @@ async function main() {
   const techmemeDays: Array<{ items: TechmemeItem[]; publishedIds: Set<string> }> = []
   const unitsByJob = new Map<string, number>()
   let truncatedDays = 0
+  const poolExcludedAsOf = { used_earlier: 0, expired: 0 }
   // days_total = Berlin-Tage mit mindestens einem manuellen Job (auch Tage,
   // deren Jobs alle ohne Post sind) — keine Kalendertage (Erklärung unter dem JSON-Shape).
   const days = [...manualByDay.keys()].sort()
@@ -206,6 +209,7 @@ async function main() {
     // damit sie eine news_queue-Zeile und damit ein Embedding bekommen (Entscheidung 6).
     const autoMeta = autoByDay.get(day)
     const nightlyIds = autoMeta ? selectedIdsOf(rowOf(autoMeta)) : null
+    const nightlyLabels = autoMeta ? selectedLabelsOf(rowOf(autoMeta)) : new Map<string, string | null>()
 
     const loaded = await loadDayInputs(supabase, chosen, nightlyIds ?? [])
     if (loaded.reason !== null) {
@@ -221,7 +225,16 @@ async function main() {
     // K zählt Einheiten — je K eine eigene capByUnits-Liste, die 20er-Liste ist die Obermenge)
     const totalLists = totalScoreListsByK(inputs.pool, KS)
     const totalScoreIds = totalLists[String(TOP_UNITS)]
-    const randomIds = seededShuffle(inputs.pool.map((p) => p.id), mulberry32(daySeed(day, RANDOM_SEED))).slice(0, TOP_UNITS)
+    // Einheiten je Liste wie capByUnits (Abschluss-Review I2): Hand/Nachtlauf
+    // mit dem Label ihres Jobs, Zufall mit den neutralisierten Pool-Labels
+    // (dieselben wie total_score). K zählt überall Einheiten.
+    const metaOf = (id: string) => inputs.itemRows.get(id)?.metadata ?? null
+    const handUnitOf = (id: string) => unitKeyOf(id, inputs.selectedLabels.get(id) ?? null, metaOf(id))
+    const nightlyUnitOf = (id: string) => unitKeyOf(id, nightlyLabels.get(id) ?? null, metaOf(id))
+    const neutralLabel = new Map(neutralizeHandLabels(inputs.pool).map((p) => [p.id, p.bundle_type]))
+    const poolUnitOf = (id: string) => unitKeyOf(id, neutralLabel.get(id) ?? null, metaOf(id))
+    const randomLists = unitListsByK(seededShuffle(inputs.pool.map((p) => p.id), mulberry32(daySeed(day, RANDOM_SEED))), poolUnitOf, KS)
+    const randomIds = randomLists[String(TOP_UNITS)]
     // Handauswahl = isHandItem-Teilmenge der selected_items (Entscheidung 24,
     // dieselbe Menge wie curation_precedents); selectedIds = alle selected_items
     // (Zusatzzeile hand_all_selected). Kann Füll-Items aus getBalancedSelection
@@ -250,19 +263,21 @@ async function main() {
     coverage.units_covered += cov.covered.length
     coverage.units_techmeme_only += cov.techmemeOnly.length
 
-    const ranked = (ids: string[]) => rankedMetricsOf(ids, units, cov.covered, storyOf, KS)
-    // WARUM nicht ranked(): rankedMetricsOf schneidet bei K IDs — bei Techmeme-Bündeln weniger als K Einheiten
+    // Alle Listen je K auf K Einheiten (unitCappedMetricsOf) — rankedMetricsOf
+    // schnitte bei K IDs, bei Bündeln also weniger als K Einheiten (I2).
     const total = unitCappedMetricsOf(totalLists, units, cov.covered, storyOf, KS)
-    const nightly = nightlyIds ? ranked(nightlyIds) : null
-    const random = ranked(randomIds)
-    const hand = handMetricsOf(handIds, units, cov.covered, storyOf, KS)
-    const handAll = handMetricsOf(selectedIds, units, cov.covered, storyOf, KS)
+    const nightly = nightlyIds ? unitCappedMetricsOf(unitListsByK(nightlyIds, nightlyUnitOf, KS), units, cov.covered, storyOf, KS) : null
+    const random = unitCappedMetricsOf(randomLists, units, cov.covered, storyOf, KS)
+    const hand = handMetricsOf(handIds, handUnitOf, units, cov.covered, storyOf, KS)
+    const handAll = handMetricsOf(selectedIds, handUnitOf, units, cov.covered, storyOf, KS)
 
     // Verteilungen
     poolSizes.push(inputs.pool.length)
     if (handIds.length > 0) handSizes.push(handIds.length)
     if (selectedIds.length > 0) selectedSizes.push(selectedIds.length)
     if (inputs.poolTruncated) truncatedDays++
+    poolExcludedAsOf.used_earlier += inputs.poolExcludedAsOf.used_earlier
+    poolExcludedAsOf.expired += inputs.poolExcludedAsOf.expired
     contentLengths.push(...publishedContentLengthsOf(publishedIds, inputs.itemRows))
     techmemeDays.push({ items: inputs.techmemeItems, publishedIds })
     unitsByJob.set(chosen.id, units.length)
@@ -271,7 +286,7 @@ async function main() {
     perDay.push({
       day, job_id: chosen.id, post_id: inputs.postId, as_of: inputs.asOf,
       in_gate_window: day >= GATE_START && day <= GATE_END, precedent_job_id: precedentJobId,
-      pool_size: inputs.pool.length, pool_truncated: inputs.poolTruncated,
+      pool_size: inputs.pool.length, pool_truncated: inputs.poolTruncated, pool_excluded_as_of: inputs.poolExcludedAsOf,
       units: units.length, units_attributable: cov.attributable.length, units_covered: cov.covered.length,
       units_techmeme_only: cov.techmemeOnly.length,
       hand_items: handIds.length, selected_items: selectedIds.length, nightly_items: nightlyIds ? nightlyIds.length : null,
@@ -417,6 +432,7 @@ async function main() {
     precedents_agreement: precedentsAgreement,
     pool: {
       window_hours: 48, min_content_length: MIN_CONTENT_LENGTH, page: POOL_PAGE, limit: POOL_LIMIT, truncated_days: truncatedDays,
+      excluded_as_of: poolExcludedAsOf,
       size_quantiles: q(poolSizes, [0.1, 0.5, 0.9], ['p10', 'p50', 'p90']),
     },
     coverage: {

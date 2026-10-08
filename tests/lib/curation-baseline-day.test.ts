@@ -9,7 +9,7 @@
  * build-curation-precedents) prüfbar sind. Client als Parameter, kein vi.mock.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { mulberry32 } from '@/lib/curation/baseline-metrics'
+import { mulberry32, unitDuplicateRate } from '@/lib/curation/baseline-metrics'
 import {
   berlinDay, berlinHHMM, berlinMinutesOfDay, poolWindow, seededShuffle,
   loadDayInputs, loadRepoEmbeddings, loadJobPayloads, loadPrecedentJobId, loadPickInputs, llmRowOf,
@@ -17,6 +17,7 @@ import {
   daySeed, dailyAnalysisMinuteOf,
   mean, meanFinite, sampleSd, utcMinutesOfDay, hhmm, isoDayShift, clusterRuns,
   groupJobsByDay, neutralizeHandLabels, totalScoreCandidates, totalScoreListsByK, unitCappedMetricsOf, coverageOf,
+  unitKeyOf, unitListsByK, selectedLabelsOf,
   wantedIdsOf, repoIdsOf, itemEmbeddingsOf, publishedContentLengthsOf,
   rankedMetricsOf, handMetricsOf, aggregateRanked, aggregateHandExtras, pairedDiffs, precedentAgreementOf,
   techmemeAdoption, draftCostOf, draftCostsOf, analysisEndByDay, throughputOf, newsletterArrivalOf, techmemeByUtcDay,
@@ -374,6 +375,45 @@ describe('loadDayInputs — Pool-Fenster, Seiten und Nachladen', () => {
     expect(state.chains.news_queue[0].range).toHaveBeenCalledWith(0, POOL_PAGE - 1)
     expect(state.chains.news_queue[1].range).toHaveBeenCalledWith(POOL_PAGE, 2 * POOL_PAGE - 1)
     expect(state.chains.news_queue[2].in).toHaveBeenCalledWith('id', [U1, HAND_OLD])
+  })
+
+  it('Status as-of (Abschluss-Review I1): gestern verbrauchte Items und abgelaufene Techmeme-Themen fliegen vor total_score raus', async () => {
+    const USED_YESTERDAY = 'aaaaaaaa-0000-4000-8000-000000000001'
+    const USED_TODAY = 'aaaaaaaa-0000-4000-8000-000000000002'
+    const TM_EXPIRED = 'aaaaaaaa-0000-4000-8000-000000000003'
+    const TM_RESELECTED = 'aaaaaaaa-0000-4000-8000-000000000004'
+    const USED_LATER = 'aaaaaaaa-0000-4000-8000-000000000005'
+    state.queues.generated_posts = [
+      PUBLISHED,
+      { data: [
+        { id: 'post-gestern', published_at: '2026-09-09T05:00:00.000Z', created_at: '2026-09-09T05:00:00.000Z' },
+        { id: 'post-morgen', published_at: '2026-09-11T05:00:00.000Z', created_at: '2026-09-10T20:00:00.000Z' },
+      ], error: null },
+    ]
+    state.queues.published_units = [{ data: [{ id: 'u', position: 0, heading: 'H', bundle_type: null, member_ids: [U1] }], error: null }]
+    const tm = (story: string) => ({ techmeme: true, techmeme_story: story, techmeme_story_index: 0 })
+    state.queues.news_queue = [{ data: [
+      poolRow(U1, { total_score: 5 }),
+      poolRow(USED_YESTERDAY, { total_score: 14, used_in_post_id: 'post-gestern' }),
+      poolRow(USED_TODAY, { total_score: 13, used_in_post_id: 'post-1' }),
+      poolRow(USED_LATER, { total_score: 12, used_in_post_id: 'post-morgen' }),
+      // TTL 30 h abgelaufen vor asOf (04:30Z) — als topic stünde es in capByUnits VOR allen Singles
+      poolRow(TM_EXPIRED, { bundle_type: 'topic', metadata: tm('alt'), expires_at: '2026-09-10T02:00:00.000Z' }),
+      // ebenfalls abgelaufen, aber im Job gewählt → nachweislich wählbar, bleibt
+      poolRow(TM_RESELECTED, { bundle_type: 'topic', metadata: tm('neu'), expires_at: '2026-09-10T02:00:00.000Z' }),
+    ], error: null }]
+    const res = await loadDayInputs(client, { ...JOB, selected_items: [{ id: U1 }, { id: TM_RESELECTED, bundle_type: 'topic' }] })
+    const inputs = res.inputs!
+
+    expect(inputs.pool.map((p) => p.id)).toEqual([U1, USED_TODAY, USED_LATER, TM_RESELECTED])
+    expect(inputs.poolExcludedAsOf).toEqual({ used_earlier: 1, expired: 1 })
+    expect(inputs.techmemeItems.map((t) => t.id)).toEqual([TM_RESELECTED])
+    // Veröffentlichungszeiten nur für fremde Posts geladen, nicht für post-1.
+    expect(state.chains.generated_posts[1].in).toHaveBeenCalledWith('id', ['post-gestern', 'post-morgen'])
+
+    const lists = totalScoreListsByK(inputs.pool, [10])
+    expect(lists['10']).not.toContain(USED_YESTERDAY)
+    expect(lists['10']).not.toContain(TM_EXPIRED)
   })
 
   it('Member-Nachladen läuft in Scheiben à 200', async () => {
@@ -761,12 +801,56 @@ describe('Messlogik — Metriken und Aggregation', () => {
 
   it('handMetricsOf: P/R über die volle Liste und Dubletten-Rate; leere Handauswahl → null (keine 0 in der Gate-Referenz)', () => {
     const A = unit('A', [U1]); const B = unit('B', [U2])
-    const h = handMetricsOf([U1, U3, NIGHT, HAND_OLD], [A, B], [A, B], new Map([[NIGHT, 'k'], [HAND_OLD, 'k']]), [2]) as HandMetrics
+    const single = (id: string) => unitKeyOf(id, null, null)
+    const h = handMetricsOf([U1, U3, NIGHT, HAND_OLD], single, [A, B], [A, B], new Map([[NIGHT, 'k'], [HAND_OLD, 'k']]), [2]) as HandMetrics
     expect(h.precision_full).toBeCloseTo(1 / 4)
     expect(h.recall_full).toBeCloseTo(1 / 2)
     expect(h.duplicate_rate).toBeCloseTo(1 / 4)
     expect(h.unit_recall['2']).toBeCloseTo(1 / 2)
-    expect(handMetricsOf([], [A, B], [A, B], new Map(), [2])).toBeNull()
+    expect(handMetricsOf([], single, [A, B], [A, B], new Map(), [2])).toBeNull()
+  })
+
+  // Abschluss-Review I2/I3: Hand-Liste in capByUnits-Reihenfolge (Bündel
+  // zuerst, vollständig). b1–b3 = deep_dive-Bündel aus drei Quellen derselben
+  // Story ('k'); s1/s2 = ungelabelte Singles, s3/s4 = zwei ungelabelte
+  // Quellen derselben Story ('z').
+  const b1 = 'b1'; const b2 = 'b2'; const b3 = 'b3'; const s1 = 's1'; const s2 = 's2'; const s3 = 's3'; const s4 = 's4'
+  const labels = new Map<string, string | null>([[b1, 'deep_dive'], [b2, 'deep_dive'], [b3, 'deep_dive']])
+  const handUnitOf = (id: string) => unitKeyOf(id, labels.get(id) ?? null, null)
+  const storyOf = new Map([[b1, 'k'], [b2, 'k'], [b3, 'k'], [s3, 'z'], [s4, 'z']])
+
+  it('unitKeyOf / unitListsByK: K zählt Einheiten; verstreute Bündel-Mitglieder bleiben vollständig, Listenreihenfolge bleibt', () => {
+    expect(unitKeyOf('x', null, { techmeme_story: 's' })).toBe('id::x')
+    expect(unitKeyOf('x', 'topic', { techmeme_story: 's' })).toBe('topic::s')
+    expect(unitKeyOf('x', 'recap', null)).toBe('recap::')
+    expect(unitListsByK([b1, b2, b3, s1, s2], handUnitOf, [1, 2, 10])).toEqual({
+      '1': [b1, b2, b3], '2': [b1, b2, b3, s1], '10': [b1, b2, b3, s1, s2],
+    })
+    // Zufall: gemischte Reihenfolge, Bündel-Mitglied b3 erst am Ende — gehört trotzdem zur ersten Einheit.
+    expect(unitListsByK([s1, b2, s2, b3], handUnitOf, [2])['2']).toEqual([s1, b2, b3])
+    expect(Object.fromEntries(selectedLabelsOf({ selected_items: [{ id: 'a', bundle_type: 'topic' }, { id: 'b' }] }))).toEqual({ a: 'topic', b: null })
+  })
+
+  it('handMetricsOf mit Bündel: Unit-Recall@K über K Einheiten statt K IDs (I2), Dubletten auf Einheiten-Ebene (I3)', () => {
+    const A = unit('A', [b1]); const B = unit('B', [s1]); const C = unit('C', [s2])
+    const h = handMetricsOf([b1, b2, b3, s1, s2], handUnitOf, [A, B, C], [A, B, C], storyOf, [2]) as HandMetrics
+    // K = 2 Einheiten = Bündel + s1 → A und B getroffen. Der alte ID-Schnitt
+    // [b1, b2] traf nur A (1/3).
+    expect(h.unit_recall['2']).toBeCloseTo(2 / 3)
+    expect(rankedMetricsOf([b1, b2, b3, s1, s2], [A, B, C], [A, B, C], storyOf, [2]).unit_recall['2']).toBeCloseTo(1 / 3)
+    // Gewolltes Mehr-Quellen-Bündel ist KEINE Dublette (ID-Ebene wären es 2/5).
+    expect(h.duplicate_rate).toBe(0)
+    // Zwei ungelabelte Quellen derselben Story sind eine Dublette: 1 von 3 Einheiten.
+    expect(unitDuplicateRate([b1, b2, b3, s3, s4], handUnitOf, storyOf)).toBeCloseTo(1 / 3)
+    expect(unitDuplicateRate([], handUnitOf, storyOf)).toBe(0)
+  })
+
+  it('pairedDiffs an einem Tag mit Bündeln: Hand und total_score beide in Einheiten (I2)', () => {
+    const A = unit('A', [b1]); const B = unit('B', [s1]); const C = unit('C', [s2])
+    const hand = handMetricsOf([b1, b2, b3, s1, s2], handUnitOf, [A, B, C], [A, B, C], storyOf, [2]) as HandMetrics
+    // total_score@2 Einheiten: zwei Singles, eine davon veröffentlicht.
+    const total = unitCappedMetricsOf({ '2': [s2, 'x'] }, [A, B, C], [A, B, C], storyOf, [2])
+    expect(pairedDiffs([{ hand, total }], 2)[0]).toBeCloseTo(2 / 3 - 1 / 3)
   })
 
   it('aggregateRanked: n zählt nur Tage mit Messung (null); unit_recall_covered je K = Treffer auf abgedeckte ÷ abgedeckte, nie > 1', () => {

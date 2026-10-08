@@ -120,6 +120,34 @@ export function duplicateRate(ids: string[], storyOf: Map<string, string>): numb
 }
 
 /**
+ * Dubletten-Rate auf EINHEITEN-Ebene (Spec: „keine zwei Einheiten mit
+ * gleichem story_key"): IDs werden über `unitOf` zu Einheiten gruppiert
+ * (Reihenfolge des ersten Auftretens); gezählt wird der Anteil der
+ * Einheiten, von deren Story-Schlüsseln mindestens einer schon in einer
+ * FRÜHEREN Einheit vorkommt. BEFUND 2026-10-08 (Abschluss-Review I3):
+ * duplicateRate zählte ein gelabeltes Mehr-Quellen-Bündel (deep_dive aus drei
+ * Newslettern derselben Story, ein Abschnitt) als n−1 Dubletten. Ohne Bündel
+ * (jede ID eine Einheit) gleich duplicateRate.
+ */
+export function unitDuplicateRate(ids: string[], unitOf: (id: string) => string, storyOf: Map<string, string>): number {
+  const unitKeys = new Map<string, Set<string>>()
+  for (const id of ids) {
+    const u = unitOf(id)
+    const set = unitKeys.get(u) ?? new Set<string>()
+    set.add(keyOf(id, storyOf))
+    unitKeys.set(u, set)
+  }
+  if (unitKeys.size === 0) return 0
+  const seen = new Set<string>()
+  let dupes = 0
+  for (const keys of unitKeys.values()) {
+    if ([...keys].some((k) => seen.has(k))) dupes++
+    for (const k of keys) seen.add(k)
+  }
+  return dupes / unitKeys.size
+}
+
+/**
  * Seeded PRNG (mulberry32, 32-Bit-Zustand). WARUM kein Math.random: Bootstrap
  * und Zufalls-Baseline müssen bei gleichem Seed dasselbe Baseline-JSON
  * erzeugen, sonst ist jeder Diff in scripts/curation-baseline.json Rauschen.

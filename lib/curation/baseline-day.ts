@@ -17,10 +17,13 @@
 import { computeCostUsd } from '@/lib/ai/usage-cost'
 import { capByUnits } from '@/lib/claude/queue-article'
 import {
-  duplicateRate, idRecallAtK, precisionAtK, quantiles, unitRecallAtK,
+  idRecallAtK, precisionAtK, quantiles, unitDuplicateRate, unitRecallAtK,
 } from '@/lib/curation/baseline-metrics'
 import { isHandItem } from '@/lib/curation/origin'
-import { berlinDay, eventsAsOf, isoDayShift, parseSinceArg, precedentSelectedItems, type PrecedentUnit } from '@/lib/curation/precedents'
+import {
+  berlinDay, eventsAsOf, isoDayShift, loadPostPublishTimes, parseSinceArg, poolExclusionAsOf, precedentSelectedItems,
+  type PoolExclusion, type PrecedentUnit,
+} from '@/lib/curation/precedents'
 import { loadEventsForItems, type SupabaseAdmin } from '@/lib/news-queue/events'
 import { isJunkTitle } from '@/lib/news-queue/service'
 import { parseEmbedding } from '@/lib/news-queue/semantic-dedup'
@@ -122,9 +125,22 @@ export interface DayInputs {
   poolFrom: string
   pool: PoolItem[]
   poolTruncated: boolean
+  /**
+   * Zeilen des 48-h-Fensters, die bei asOf nicht (mehr) wählbar waren und
+   * VOR allen anderen Filtern verworfen wurden (poolExclusionAsOf, Abschluss-
+   * Review I1): in einem anderen, vor asOf veröffentlichten Post verbraucht
+   * bzw. abgelaufen. Ins JSON je Tag als pool_excluded_as_of.
+   */
+  poolExcludedAsOf: Record<Exclude<PoolExclusion, 'selected_earlier'>, number>
   techmemeItems: TechmemeItem[]
   /** Alle selected_items des manuellen Jobs in Reihenfolge, dedupliziert (Zusatzzeile hand_all_selected). */
   selectedIds: string[]
+  /**
+   * Label je gewähltem Item zum Auswahlzeitpunkt (selected_items[].bundle_type,
+   * fehlend/null → null) — Einheitenbildung der Hand-Liste (handUnitKeyOf,
+   * Abschluss-Review I2/I3).
+   */
+  selectedLabels: Map<string, string | null>
   /**
    * Hand-Items = isHandItem-Teilmenge von selectedIds, Reihenfolge erhalten —
    * dieselbe Menge wie in curation_precedents (Task 15 Entscheidung 24). Kann
@@ -333,6 +349,15 @@ export function selectedIdsOf(job: BaselineJobRow): string[] {
 }
 
 /**
+ * Label je gewähltem Item zum Auswahlzeitpunkt (selected_items[].bundle_type;
+ * fehlender Schlüssel oder null → null). Für die Einheitenbildung der Hand-
+ * und Nachtlauf-Liste (unitKeyOf, Abschluss-Review I2/I3).
+ */
+export function selectedLabelsOf(job: Pick<BaselineJobRow, 'selected_items'>): Map<string, string | null> {
+  return new Map(precedentSelectedItems(job.selected_items).map((s) => [s.id, s.bundle_type ?? null]))
+}
+
+/**
  * Write-Units = written_sections.length. Bündel + Einzelfassung zählen doppelt
  * (buildBundleWriteUnits in lib/claude/ghostwriter-pipeline.ts erzeugt für
  * topic/deep_dive/cover_story zusätzlich kind 'single') — also ≥ published_units.
@@ -483,7 +508,7 @@ export async function loadDayInputs(
   for (let offset = 0; offset < POOL_LIMIT; offset += POOL_PAGE) {
     const { data, error } = await supabase
       .from('news_queue')
-      .select('id, title, source_identifier, total_score, bundle_type, metadata, content_length, daily_repo_id, queued_at')
+      .select('id, title, source_identifier, total_score, bundle_type, metadata, content_length, daily_repo_id, queued_at, expires_at, used_in_post_id')
       .gte('queued_at', from)
       .lt('queued_at', to)
       .order('id', { ascending: true })
@@ -493,7 +518,35 @@ export async function loadDayInputs(
     raw.push(...page)
     if (page.length < POOL_PAGE) break
   }
-  const pool: PoolItem[] = raw
+
+  // 3b) Status as-of (BEFUND 2026-10-08, Abschluss-Review I1): das Fenster
+  //     ist zeitlich as-of, beim Status nicht — es enthält die komplette
+  //     Vortagscharge (gestern veröffentlicht: markItemsAsUsed setzt
+  //     used_in_post_id) und abgelaufene Techmeme-Themen (TTL 30 h < 48 h),
+  //     die neutralizeHandLabels als 'topic' behält und capByUnits VOR die
+  //     Score-Singles stellt. Beides konnte der Betreiber bei asOf nicht
+  //     wählen; drinnen gelassen senken sie total_score_top20 und Zufall —
+  //     das Gate „+0,10 über total_score" würde zu leicht. Ausgenommen sind
+  //     die selected_items des Jobs selbst (nachweislich wählbar, z. B.
+  //     Neuwahl nach Ablauf).
+  const selectedSet = new Set(selectedIdsOf(job))
+  const otherPostIds = raw
+    .map((r) => (r.used_in_post_id as string | null) ?? null)
+    .filter((id): id is string => !!id && id !== postId)
+  const postTimes = otherPostIds.length > 0 ? await loadPostPublishTimes(supabase, otherPostIds) : new Map<string, string>()
+  const poolExcludedAsOf = { used_earlier: 0, expired: 0 }
+  const rawAsOf = raw.filter((r) => {
+    const id = r.id as string
+    if (selectedSet.has(id)) return true
+    const reason = poolExclusionAsOf(
+      { id, expires_at: (r.expires_at as string | null) ?? null, used_in_post_id: (r.used_in_post_id as string | null) ?? null },
+      asOf, postId, postTimes,
+    )
+    if (reason === 'used_earlier' || reason === 'expired') poolExcludedAsOf[reason]++
+    return reason === null
+  })
+
+  const pool: PoolItem[] = rawAsOf
     .filter((r) => !isJunkTitle((r.title as string | null) ?? '') && (Number(r.content_length) || 0) >= MIN_CONTENT_LENGTH)
     .map((r) => ({
       id: r.id as string,
@@ -509,10 +562,11 @@ export async function loadDayInputs(
       queued_at: r.queued_at as string,
     }))
 
-  // Techmeme-Stories VOR dem Filter (Entscheidung 13): Techmeme-Quellen sind
-  // oft < 500 Zeichen; zählte man nur den gefilterten Pool, fehlten ganze Stories.
+  // Techmeme-Stories VOR dem Junk-/Längenfilter (Entscheidung 13), aber nach
+  // dem as-of-Status (3b): Techmeme-Quellen sind oft < 500 Zeichen; zählte
+  // man nur den gefilterten Pool, fehlten ganze Stories.
   const techmemeItems: TechmemeItem[] = []
-  for (const r of raw) {
+  for (const r of rawAsOf) {
     const md = r.metadata as Record<string, unknown> | null
     if (!md || md.techmeme !== true) continue
     const storyIndex = md.techmeme_story_index
@@ -568,8 +622,10 @@ export async function loadDayInputs(
       poolFrom: from,
       pool,
       poolTruncated: raw.length >= POOL_LIMIT,
+      poolExcludedAsOf,
       techmemeItems,
       selectedIds,
+      selectedLabels: selectedLabelsOf(job),
       handIds,
       units,
       itemRows,
@@ -813,6 +869,45 @@ export function totalScoreListsByK(pool: PoolItem[], ks: readonly number[]): Rec
 }
 
 /**
+ * Schlüssel der Einheit (= Abschnitt), die ein Item im Artikel bildet — dieselbe
+ * Gruppierung wie capByUnits/computeBundleUnits: gelabelt →
+ * `${bundle_type}::${techmeme_story}` (ohne Story ''), ungelabelt → eigene
+ * Einheit je ID.
+ */
+export function unitKeyOf(id: string, bundleType: string | null, metadata: Record<string, unknown> | null): string {
+  if (!bundleType) return `id::${id}`
+  const story = metadata?.techmeme_story
+  return `${bundleType}::${typeof story === 'string' ? story : ''}`
+}
+
+/**
+ * Je K der Teil einer Liste, der genau ihre ersten K EINHEITEN umfasst
+ * (Einheit = unitOf, Reihenfolge des ersten Auftretens), mit ALLEN Mitgliedern
+ * dieser Einheiten, in Listenreihenfolge. Schlüssel String(K).
+ * BEFUND 2026-10-08 (Abschluss-Review I2): Hand, Nachtlauf und Zufall wurden
+ * über die ersten K IDs bewertet, total_score über K Einheiten. selected_items
+ * steht in capByUnits-Reihenfolge (Bündel zuerst, vollständig) — hand@20 deckte
+ * dann deutlich weniger als 20 Einheiten ab, pairedDiffs mischte zwei
+ * Währungen, und die wechselnde Bündelzahl je Tag blähte sd/mde80 auf, an dem
+ * die +0,10-Schwelle kalibriert wird. Ersetzt Plan Anhang A Entscheidung 3,
+ * letzter Satz („Hand-, Nachtlauf- und Zufallslisten bleiben ID-geschnitten").
+ */
+export function unitListsByK(ids: string[], unitOf: (id: string) => string, ks: readonly number[]): Record<string, string[]> {
+  const order: string[] = []
+  const seen = new Set<string>()
+  for (const id of ids) {
+    const u = unitOf(id)
+    if (!seen.has(u)) { seen.add(u); order.push(u) }
+  }
+  const out: Record<string, string[]> = {}
+  for (const k of ks) {
+    const keep = new Set(order.slice(0, k))
+    out[String(k)] = ids.filter((id) => keep.has(unitOf(id)))
+  }
+  return out
+}
+
+/**
  * Pool-Abdeckung (Entscheidung 7, Review-Fokus 1): nur Einheiten mit Markern
  * zählen; techmemeOnly = nicht abgedeckt UND alle Member sind Techmeme-Items
  * des Fensters — die fallen am Stufe-1-Längenfilter (< 500 Zeichen) heraus,
@@ -955,9 +1050,13 @@ export function unitCappedMetricsOf(
  * zöge baselines.hand.precision_full, die Gate-Referenz für Precision@10, ohne
  * Messung nach unten. null wie beim fehlenden Nachtlauf: n zählt nur Tage
  * mit Handauswahl.
+ * Je K auf K EINHEITEN (unitListsByK über `unitOf`, wie total_score) und
+ * Dubletten auf Einheiten-Ebene (unitDuplicateRate) — Abschluss-Review I2/I3.
+ * precision_full/recall_full bewerten weiter die volle Liste.
  */
 export function handMetricsOf(
   handIds: string[],
+  unitOf: (id: string) => string,
   units: BaselineUnit[],
   covered: BaselineUnit[],
   storyOf: Map<string, string>,
@@ -965,10 +1064,10 @@ export function handMetricsOf(
 ): HandMetrics | null {
   if (handIds.length === 0) return null
   return {
-    ...rankedMetricsOf(handIds, units, covered, storyOf, ks),
+    ...unitCappedMetricsOf(unitListsByK(handIds, unitOf, ks), units, covered, storyOf, ks),
     precision_full: precisionAtK(handIds, handIds.length, units, storyOf),
     recall_full: unitRecallAtK(handIds, handIds.length, units, storyOf).recall,
-    duplicate_rate: duplicateRate(handIds, storyOf),
+    duplicate_rate: unitDuplicateRate(handIds, unitOf, storyOf),
   }
 }
 

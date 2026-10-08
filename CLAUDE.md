@@ -169,6 +169,15 @@ RLS ohne Policy = nur Service-Role):**
   `dropped_after_selection` (gewählt, gestrichen) | `pending_never_selected` |
   `merged` (Similarity ≥ 0,8 zu einem veröffentlichten Heading, mit
   `matched_heading`). `unique (day, item_id)`, Tag = Berlin-Datum.
+  Keine Zeile bekommen Hand-Items, die einer markerlosen Einheit (eins-zu-eins)
+  oder einem Altbestand-Bündel mit gleichem Label und ≤ 1 Member-ID (n-zu-1)
+  zugeordnet sind; der Pool „nie gewählt" lässt Items aus, die bei
+  `created_at` schon gewählt, verbraucht oder abgelaufen waren.
+  `bundle_type_selected` fällt nur bei fehlendem Schlüssel in `selected_items`
+  (Jobs vor 2026-07-18) auf `news_queue.bundle_type` zurück. Das Script gibt
+  eine Positivkontrolle der 0,8-Schwelle aus (Cosine published-Item ↔ eigene
+  Einheit, p10/p50/p90) — liegt p50 darunter, Schwelle vor Nutzung des
+  Negativblocks mit dem Betreiber klären.
 - `queue_item_events` — jede Statusänderung der News-Queue mit Akteur
   (`operator` | `techmeme` | `agent` | `pipeline`), `from/to_status`,
   `from/to_role`, `reason`. Geschrieben best-effort über `recordQueueEvents`
@@ -217,7 +226,10 @@ live ist (die alte `BUNDLE_MARKER_RE` erkennt den Typ nur am Zeilenende).
   bei `no_units` / `no_attributable_units` / `no_selected`; Abgleich mit den
   gespeicherten Präzedenzfällen in `precedents_agreement`): Pool = `news_queue` mit `queued_at`
   in `[asOf−48h, asOf)`, `asOf` = `article_jobs.created_at`, seitenweise à
-  1000 bis 2000 (PostgREST `max_rows = 1000` kappt `.limit()` still);
+  1000 bis 2000 (PostgREST `max_rows = 1000` kappt `.limit()` still), ohne
+  Zeilen, die bei `asOf` nicht mehr wählbar waren (`poolExclusionAsOf`: in
+  einem anderen, vorher veröffentlichten Post verbraucht oder abgelaufen —
+  `pool_excluded_as_of` je Tag);
   Baselines `total_score`-Top-20 (`capByUnits` nach `totalScoreCandidates`,
   je K auf K Einheiten gekappt — ein Techmeme-Bündel zählt einmal, auch mit
   bis zu 5 IDs; Hand-Items mit `metadata.manual` auf Score 0, Labels auf null außer
@@ -226,7 +238,10 @@ live ist (die alte `BUNDLE_MARKER_RE` erkennt den Typ nur am Zeilenende).
   Nachtlauf-Ist (`selected_items` des Auto-Jobs mit `status='done'`),
   Handauswahl (`isHandItem` mit Events as-of Job wie `curation_precedents` —
   unberührte Techmeme-Themen zählen nicht; P/R; alle `selected_items`
-  zusätzlich als `hand_all_selected`), Zufall (seeded);
+  zusätzlich als `hand_all_selected`), Zufall (seeded); Hand, Nachtlauf und
+  Zufall wie `total_score` je K auf K **Einheiten** (`unitListsByK`, Einheit
+  wie `capByUnits`), Dubletten-Rate auf Einheiten-Ebene (`unitDuplicateRate`:
+  ein gelabeltes Mehr-Quellen-Bündel ist keine Dublette);
   Story-Ebene (`assignStoryKeys`, 0,8) und ID-Ebene bei K=10/15/20, Recall
   zusätzlich je K auf die Pool-Abdeckung normiert (`unit_recall_covered`);
   Pool-Abdeckung, `content_length`-Quantile, Techmeme-Übernahmequote je
