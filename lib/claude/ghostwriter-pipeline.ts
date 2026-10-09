@@ -892,9 +892,18 @@ export function ensureBundleMarker(section: string, bundleType: BundleType): str
 // solcher Rest bis zum nächsten `<` bzw. Zeilenende entfernt und ein
 // vollständiger Marker gesetzt. Seit jede H2 einen Kommentar trägt, ist das
 // kein Randfall mehr.
+//
+// CodeQL js/polynomial-redos, PR #13, 2026-10-09: Rest- und Typ-Regex begannen
+// unverankert mit `\s*` (die Typ-Regex endete zusätzlich auf `\s*$`). Auf einer
+// langen Leerraum-Folge setzte die Suche an jeder Position neu an und lief die
+// Folge erneut ab — quadratisch, 50 000 Leerzeichen kosteten ~1,4 s je Regex.
+// Beide beginnen jetzt mit dem Literal `<!--`; den Leerraum davor bzw. am
+// Zeilenende entfernt trimEnd() (dieselbe Zeichenmenge wie `\s`). Das Ergebnis
+// ist identisch (Tests „nimmt beliebigen Leerraum …" und „läuft linear …" in
+// tests/lib/write-bundle-section.test.ts).
 const COMPLETE_QUEUE_ID_MARKER_RE = /<!--\s*data-queue-item-ids:[^<>]*?-->/
-const BROKEN_QUEUE_ID_MARKER_RE = /\s*<!--\s*data-queue-item-ids:[^<]*/
-const BUNDLE_TYPE_TAIL_RE = /\s*<!--\s*data-bundle-type:[a-z_]+\s*-->\s*$/
+const BROKEN_QUEUE_ID_MARKER_RE = /<!--\s*data-queue-item-ids:[^<]*/
+const BUNDLE_TYPE_TAIL_RE = /<!--\s*data-bundle-type:[a-z_]+\s*-->$/
 
 export function ensureQueueIdMarker(section: string, ids: string[]): string {
   const clean = ids.filter((id) => typeof id === 'string' && id.length > 0)
@@ -902,14 +911,18 @@ export function ensureQueueIdMarker(section: string, ids: string[]): string {
   const marker = `<!-- data-queue-item-ids:${clean.join(',')} -->`
   return section.replace(/^(\s*#{1,6}[^\n]*)/, (line) => {
     if (COMPLETE_QUEUE_ID_MARKER_RE.test(line)) return line
-    const repaired = line.replace(BROKEN_QUEUE_ID_MARKER_RE, '')
-    const typeTail = repaired.match(BUNDLE_TYPE_TAIL_RE)
+    const broken = BROKEN_QUEUE_ID_MARKER_RE.exec(line)
+    const repaired = broken
+      ? line.slice(0, broken.index).trimEnd() + line.slice(broken.index + broken[0].length)
+      : line
+    const trimmed = repaired.trimEnd()
+    const typeTail = trimmed.match(BUNDLE_TYPE_TAIL_RE)
     if (typeTail && typeTail.index !== undefined) {
-      // trim() statt typeTail[0] wörtlich: Nach dem Entfernen eines Rests direkt
-      // vor dem Typ fehlt sonst das Leerzeichen zwischen den beiden Kommentaren.
-      return `${repaired.slice(0, typeTail.index).trimEnd()} ${marker} ${typeTail[0].trim()}`
+      // Leerzeichen explizit setzen: Nach dem Entfernen eines Rests direkt vor
+      // dem Typ stünde sonst keins zwischen den beiden Kommentaren.
+      return `${trimmed.slice(0, typeTail.index).trimEnd()} ${marker} ${typeTail[0]}`
     }
-    return `${repaired.trimEnd()} ${marker}`
+    return `${trimmed} ${marker}`
   })
 }
 

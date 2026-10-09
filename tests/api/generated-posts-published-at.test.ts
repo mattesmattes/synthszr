@@ -147,7 +147,21 @@ describe('PATCH /api/admin/generated-posts: published_at', () => {
     const saved = savedPayload()
     expect(saved.status).toBe('published')
     expect(saved).not.toHaveProperty('published_at')
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[Curation]'), 'boom')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[Curation]'), 'p1', 'boom')
+  })
+
+  it('loggt die Client-ID ohne Zeilenumbrüche und nie im Format-String', async () => {
+    // CodeQL js/log-injection + js/tainted-format-string, PR #13, 2026-10-09:
+    // id kommt aus dem Request-Body. Ein \r\n darin erzeugte eine gefälschte
+    // Logzeile, ein %s/%o im ersten console-Argument steuerte die Formatierung.
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
+    state.queues = { generated_posts: [READ_ERROR] }
+    const { PATCH } = await import('@/app/api/admin/generated-posts/route')
+    await PATCH(req('PATCH', { id: 'p1\r\n[Curation] gefälscht %s', status: 'published' }))
+
+    const [format, ...args] = warn.mock.calls[0]
+    expect(format).not.toContain('p1')
+    expect(args).toEqual(['p1[Curation] gefälscht %s', 'boom'])
   })
 })
 
@@ -222,7 +236,7 @@ describe('PUT /api/admin/generated-posts: published_at', () => {
     expect(saved.status).toBe('published')
     expect(saved).not.toHaveProperty('published_at')
     expect(mocks.queueTranslations).toHaveBeenCalledWith('generated_post', 'p1', 10)
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[Curation]'), 'boom')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[Curation]'), 'p1', 'boom')
   })
 })
 
@@ -253,7 +267,7 @@ describe('published_at-Spalte fehlt (Migration noch nicht angewendet)', () => {
     expect(first.published_at).toBe(NOW)
     expect(second).toEqual({ status: 'published', title: 'Neu' })
     expect(updatePayloads()).toHaveLength(2)
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[Curation] published_at-Spalte fehlt'), MISSING_COLUMN.error.message)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[Curation] published_at-Spalte fehlt'), 'p1', MISSING_COLUMN.error.message)
   })
 
   it('PUT: wiederholt den Update einmal ohne published_at, Erst-Publish-Nebenwirkungen laufen weiter', async () => {

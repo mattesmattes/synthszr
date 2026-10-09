@@ -155,6 +155,35 @@ describe('ensureQueueIdMarker', () => {
     expect(ensureQueueIdMarker(withType, ['c'])).toBe(withType)
   })
 
+  it('nimmt beliebigen Leerraum vor Rest und Typ-Kommentar mit (Verhalten vor dem ReDoS-Fix)', () => {
+    expect(ensureQueueIdMarker('## Thema \t <!-- data-queue-item-ids:a\n\nInhalt.', ['a', 'b'])).toBe(
+      '## Thema <!-- data-queue-item-ids:a,b -->\n\nInhalt.',
+    )
+    expect(ensureQueueIdMarker('## Thema   <!-- data-bundle-type:topic -->  \t\n\nInhalt.', ['a'])).toBe(
+      '## Thema <!-- data-queue-item-ids:a --> <!-- data-bundle-type:topic -->\n\nInhalt.',
+    )
+    expect(
+      ensureQueueIdMarker('## Thema  <!-- data-queue-item-ids:a  \t<!-- data-bundle-type:topic -->\n\nInhalt.', ['a']),
+    ).toBe('## Thema <!-- data-queue-item-ids:a --> <!-- data-bundle-type:topic -->\n\nInhalt.')
+  })
+
+  it('läuft linear auf langen Leerraum-Folgen (ReDoS-Regression)', () => {
+    // CodeQL js/polynomial-redos, PR #13, 2026-10-09: Das führende `\s*` der
+    // Rest- und der Typ-Regex setzte an jeder Position einer Leerraum-Folge neu
+    // an — 50 000 Leerzeichen kosteten je Regex ~1,4 s (gemessen mit node).
+    const inputs = [
+      '## H' + ' '.repeat(50_000) + 'x',
+      '## H <!-- data-queue-item-ids:' + ' '.repeat(50_000),
+      '## H <!-- data-bundle-type:a' + ' '.repeat(50_000),
+    ]
+    for (const input of inputs) {
+      const t0 = performance.now()
+      const out = ensureQueueIdMarker(input, ['a'])
+      expect(performance.now() - t0).toBeLessThan(200)
+      expect(out).toContain('<!-- data-queue-item-ids:a -->')
+    }
+  })
+
   it('fasst nur die erste Heading-Zeile an — weitere H2 und Kommentare im Body bleiben unverändert', () => {
     const section = '## Eins\n\nText.\n\n## Zwei\n\n<!-- frei -->'
     expect(ensureQueueIdMarker(section, ['a'])).toBe(

@@ -28,6 +28,21 @@ describe('stripHtmlComments', () => {
     const md = 'Absatz eins.\n\n<!-- category: AI & Tech -->\nAbsatz zwei.'
     expect(stripHtmlComments(md)).toBe('Absatz eins.\n\n\nAbsatz zwei.')
   })
+
+  it('entfernt verschachtelte Kommentare vollständig — aus den Resten entsteht kein neues `<!--`', () => {
+    // CodeQL js/incomplete-multi-character-sanitization, PR #13, 2026-10-09:
+    // Ein einmaliges replace machte aus `<!<!-- x -->-- y -->` den Rest
+    // `<!-- y -->`, also wieder einen Kommentar.
+    expect(stripHtmlComments('Text <!<!-- x -->-- y --> Ende')).toBe('Text Ende')
+    // Ungeschlossener Anfang und ein Anfang, der erst durch das Entfernen entsteht.
+    for (const md of ['## Titel <!-- data-queue-item-ids:abc', 'a <!<!---- b', '<!<!--<!---->-- -->']) {
+      expect(stripHtmlComments(md)).not.toContain('<!--')
+    }
+  })
+
+  it('lässt einen Pfeil `-->` im Fließtext stehen (kein Kommentaranfang, kein Sanitizing-Ziel)', () => {
+    expect(stripHtmlComments('Input --> Output')).toBe('Input --> Output')
+  })
 })
 
 describe('parseArticleContent — Excerpt-Auffüllung aus H2-Titeln', () => {

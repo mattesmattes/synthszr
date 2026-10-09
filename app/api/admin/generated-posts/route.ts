@@ -39,6 +39,20 @@ function isMissingPublishedAtColumn(error: { code?: string; message?: string } |
 }
 
 /**
+ * Wert für console-Ausgaben entschärfen: CR/LF raus, auf 200 Zeichen gekürzt.
+ *
+ * CodeQL js/log-injection + js/tainted-format-string, PR #13, 2026-10-09:
+ * `id` stammt aus dem Request-Body und stand per Template-Literal im ERSTEN
+ * console-Argument — ein \r\n darin fälschte Logzeilen, ein %s/%o steuerte
+ * die Formatierung. Deshalb konstanter Format-String, Werte als weitere
+ * Argumente durch diese Funktion. Auch PostgREST-Fehlertexte laufen hindurch:
+ * Postgres zitiert ungültige Eingaben wörtlich (z. B. bei uuid-Fehlern).
+ */
+function logSafe(v: unknown): string {
+  return String(v).replace(/\n|\r/g, '').slice(0, 200)
+}
+
+/**
  * Setzt `alreadyPublished` in der Kandidatenliste eines Artikels auf den
  * AKTUELLEN Stand. Das Freigabe-Panel blendet damit alles aus, was schon im
  * Lexikon steht (Betreiber-Wunsch 2026-08-07).
@@ -293,7 +307,7 @@ export async function PATCH(request: NextRequest) {
       // in Task 10/15 sichtbar) als ein falsches. Das Speichern selbst
       // scheitert daran nicht.
       if (readError) {
-        console.error(`[Curation] published_at für Post ${id} nicht gesetzt — Vorzustand-Read fehlgeschlagen:`, readError.message)
+        console.error('[Curation] published_at für Post %s nicht gesetzt — Vorzustand-Read fehlgeschlagen:', logSafe(id), logSafe(readError.message))
       } else if (currentPost?.status !== 'published') {
         updateData.published_at = new Date().toISOString()
       }
@@ -376,7 +390,7 @@ export async function PATCH(request: NextRequest) {
 
     // Rückfall ohne published_at, solange die Migration fehlt (isMissingPublishedAtColumn).
     if ('published_at' in updateData && isMissingPublishedAtColumn(error)) {
-      console.error(`[Curation] published_at-Spalte fehlt (Migration 20261006090000 nicht angewendet) — Post ${id} ohne published_at gespeichert:`, error?.message)
+      console.error('[Curation] published_at-Spalte fehlt (Migration 20261006090000 nicht angewendet) — Post %s ohne published_at gespeichert:', logSafe(id), logSafe(error?.message))
       const { published_at: _omit, ...withoutPublishedAt } = updateData
       ;({ error } = await supabase
         .from('generated_posts')
@@ -452,7 +466,7 @@ export async function PUT(request: NextRequest) {
       // bei Fehler false wie bisher — Pregenerate und Translations sind
       // wiederholbar, ein falscher Zeitstempel nicht.
       if (readError) {
-        console.error(`[Curation] published_at für Post ${id} nicht gesetzt — Vorzustand-Read fehlgeschlagen:`, readError.message)
+        console.error('[Curation] published_at für Post %s nicht gesetzt — Vorzustand-Read fehlgeschlagen:', logSafe(id), logSafe(readError.message))
       } else if (!wasPublished) {
         updateData.published_at = new Date().toISOString()
       }
@@ -467,7 +481,7 @@ export async function PUT(request: NextRequest) {
 
     // Rückfall ohne published_at, solange die Migration fehlt (isMissingPublishedAtColumn).
     if ('published_at' in updateData && isMissingPublishedAtColumn(error)) {
-      console.error(`[Curation] published_at-Spalte fehlt (Migration 20261006090000 nicht angewendet) — Post ${id} ohne published_at gespeichert:`, error?.message)
+      console.error('[Curation] published_at-Spalte fehlt (Migration 20261006090000 nicht angewendet) — Post %s ohne published_at gespeichert:', logSafe(id), logSafe(error?.message))
       const { published_at: _omit, ...withoutPublishedAt } = updateData
       ;({ data, error } = await supabase
         .from('generated_posts')

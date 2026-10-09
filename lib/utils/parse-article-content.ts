@@ -48,8 +48,21 @@ export function generateSlug(title: string): string {
 // Nur Leerzeichen/Tabs vor dem Kommentar mitnehmen, KEINE Zeilenumbrüche:
 // sonst verschmölze eine eigenständige Kommentarzeile die Absätze davor und
 // danach (Prüferlauf 2026-10-06, Test in parse-article-content.test.ts).
+// CodeQL js/incomplete-multi-character-sanitization, PR #13, 2026-10-09: Ein
+// einziger Durchlauf ließ aus `<!<!-- x -->-- y -->` wieder `<!-- y -->`
+// entstehen. Deshalb bis zum Fixpunkt ersetzen; die zweite Alternative nimmt
+// ungeschlossene Anfänge `<!--` mit, sodass am Ende keiner übrig bleibt (auch
+// keiner, der erst durch das Entfernen zusammengesetzt wird). Ein einzelnes
+// `-->` bleibt stehen: es eröffnet keinen Kommentar und ist im Fließtext oft
+// ein Pfeil (Test „lässt einen Pfeil `-->` … stehen").
 export function stripHtmlComments(markdown: string): string {
-  return markdown.replace(/[ \t]*<!--[\s\S]*?-->/g, '')
+  let result = markdown
+  let previous: string
+  do {
+    previous = result
+    result = result.replace(/[ \t]*<!--[\s\S]*?-->|<!--/g, '')
+  } while (result !== previous)
+  return result
 }
 
 // Parse frontmatter from generated content
