@@ -37,6 +37,10 @@ export interface EnrichSectionResult {
    *  landen mehrere Abschnitte ohne queueItemId im selben Artikel beim
    *  Splicen alle am ERSTEN von ihnen (bestaetigter Praxisfall). */
   nullIndex: number
+  /** Vorkommen der queueItemId — s. EnrichSection.occurrence. Ohne dieses
+   *  Feld landeten Buendel und Einzelfassung mit gleicher erster ID beide am
+   *  Buendel (BEFUND 2026-10-08, B1). */
+  occurrence: number
   nodes: TiptapNode[]
 }
 
@@ -44,6 +48,7 @@ export interface EnrichSectionError {
   queueItemId: string | null
   isTake: boolean
   nullIndex: number
+  occurrence: number
   headingText: string
   error: string
 }
@@ -53,7 +58,7 @@ export interface RunEnrichOptions {
   onStatus?: (msg: string) => void
   /** Wird sofort bei jedem fertigen Abschnitt aufgerufen — Aufrufer sollte
    *  applySectionResult (lib/enrich/sections.ts) nutzen, um die Knoten anhand
-   *  von queueItemId/isTake (NICHT eines Index) in sein Dokument zu splicen. */
+   *  von queueItemId/occurrence/isTake (NICHT eines Index) in sein Dokument zu splicen. */
   onSectionDone?: (result: EnrichSectionResult) => void
   /** Abschnitt bleibt im Dokument unveraendert; nur zur Anzeige/Log. */
   onSectionError?: (err: EnrichSectionError) => void
@@ -131,15 +136,17 @@ async function runOneRound(
         const queueItemId = (evt.queueItemId as string) ?? null
         const isTake = Boolean(evt.isTake)
         const nullIndex = typeof evt.nullIndex === 'number' ? evt.nullIndex : -1
-        newExcludeKeys.push({ queueItemId, isTake, nullIndex })
-        onSectionDone?.({ queueItemId, isTake, nullIndex, nodes: evt.nodes as TiptapNode[] })
+        const occurrence = typeof evt.occurrence === 'number' ? evt.occurrence : 0
+        newExcludeKeys.push({ queueItemId, isTake, nullIndex, occurrence })
+        onSectionDone?.({ queueItemId, isTake, nullIndex, occurrence, nodes: evt.nodes as TiptapNode[] })
       }
       if (evt.sectionError) {
         const queueItemId = (evt.queueItemId as string) ?? null
         const isTake = Boolean(evt.isTake)
         const nullIndex = typeof evt.nullIndex === 'number' ? evt.nullIndex : -1
-        newExcludeKeys.push({ queueItemId, isTake, nullIndex })
-        onSectionError?.({ queueItemId, isTake, nullIndex, headingText: (evt.headingText as string) || '', error: evt.error as string })
+        const occurrence = typeof evt.occurrence === 'number' ? evt.occurrence : 0
+        newExcludeKeys.push({ queueItemId, isTake, nullIndex, occurrence })
+        onSectionError?.({ queueItemId, isTake, nullIndex, occurrence, headingText: (evt.headingText as string) || '', error: evt.error as string })
       }
       if (evt.done) {
         result = {

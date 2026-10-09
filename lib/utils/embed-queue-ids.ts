@@ -100,9 +100,25 @@ function findBestQueueItemMatch(
 }
 
 /**
+ * true, wenn das Heading bereits eine verbindliche queueItemId traegt (vom
+ * Konverter aus dem data-queue-item-ids-Marker gesetzt, s.
+ * lib/utils/markdown-to-tiptap.ts) — dann hat die Text-Heuristik dort nichts
+ * mehr zu suchen.
+ */
+function hasMarkedQueueItemId(node: TiptapNode): boolean {
+  const id = node.attrs?.queueItemId
+  return typeof id === 'string' && id.length > 0
+}
+
+/**
  * Embed queue item IDs into H2 headings in TipTap content
  *
  * This mutates the content in-place and also returns it for convenience.
+ *
+ * Betreiber-Vorgabe 2026-10-05 (Spec Heading-Marker): Headings, die aus dem
+ * Konverter bereits eine queueItemId tragen, werden uebersprungen — der
+ * Marker der Pipeline ist verbindlich, die Heuristik nur noch Fallback fuer
+ * unmarkierte Headings (Alt-Posts, manuell eingefuegte Abschnitte).
  *
  * @param content - TipTap JSON content (will be mutated)
  * @param queueItems - Array of queue items with id and title
@@ -120,6 +136,39 @@ export function embedQueueItemIds(
   const usedIds = new Set<string>()
   let matchCount = 0
 
+  // Vorlauf VOR dem Matching: IDs markierter Headings — inklusive aller
+  // Buendel-Mitglieder aus queueItemIds — gelten als vergeben. Sonst vergibt
+  // das Fuzzy-Matching dieselbe ID ein zweites Mal an ein unmarkiertes
+  // Heading, z. B. an die Einzelfassung eines Buendels, die denselben Stoff
+  // traegt (BEFUND 2026-10-06). Eigener Durchlauf, weil ein markiertes Heading
+  // auch NACH einem unmarkierten stehen kann.
+  // Bewusst JEDE Heading-Ebene, waehrend traverse nur H2 matcht: der Konverter
+  // setzt Marker auf jede Top-Level-Heading-Zeile (HEADING_LINE_RE `#{1,6}` in
+  // lib/utils/markdown-to-tiptap.ts). Auch die ID eines markierten H3 gehoert
+  // verbindlich diesem Abschnitt und darf an kein unmarkiertes H2 gehen.
+  // Leere Eintraege aus queueItemIds ('id-2, ,id-3' oder ein Komma am Ende)
+  // fallen weg, die uebrigen werden getrimmt.
+  function collectMarkedIds(node: TiptapNode): void {
+    if (!node) return
+
+    if (node.type === 'heading' && hasMarkedQueueItemId(node)) {
+      usedIds.add(node.attrs!.queueItemId as string)
+      const ids = node.attrs?.queueItemIds
+      if (typeof ids === 'string') {
+        for (const id of ids.split(',')) {
+          const trimmed = id.trim()
+          if (trimmed) usedIds.add(trimmed)
+        }
+      }
+    }
+
+    if (node.content && Array.isArray(node.content)) {
+      for (const child of node.content) {
+        collectMarkedIds(child)
+      }
+    }
+  }
+
   function traverse(node: TiptapNode): void {
     if (!node) return
 
@@ -129,10 +178,13 @@ export function embedQueueItemIds(
       const lowerText = headingText.toLowerCase()
 
       // Skip "Mattes Synthese" and "Synthszr Take" headings
-      if (!lowerText.includes('mattes synthese') &&
-          !lowerText.includes("mattes' synthese") &&
-          !lowerText.includes('synthszr take')) {
+      const isTakeHeading = lowerText.includes('mattes synthese') ||
+        lowerText.includes("mattes' synthese") ||
+        lowerText.includes('synthszr take')
 
+      if (hasMarkedQueueItemId(node)) {
+        console.log(`[embedQueueItemIds] H2 "${headingText.slice(0, 40)}..." traegt bereits queue item ${(node.attrs!.queueItemId as string).slice(0, 8)} — uebersprungen`)
+      } else if (!isTakeHeading) {
         const queueItemId = findBestQueueItemMatch(headingText, queueItems, usedIds)
 
         if (queueItemId) {
@@ -156,6 +208,7 @@ export function embedQueueItemIds(
     }
   }
 
+  collectMarkedIds(content as unknown as TiptapNode)
   traverse(content as unknown as TiptapNode)
 
   console.log(`[embedQueueItemIds] Matched ${matchCount}/${queueItems.length} queue items to H2 headings`)

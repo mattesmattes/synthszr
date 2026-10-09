@@ -141,6 +141,194 @@ The news queue system manages article selection for Ghostwriter blog post genera
   verzerrt (Positionsbias). Ein fairer künftiger Test ist online: Modell-
   Vorschläge in das Panel mischen und die Annahmequote messen.
 
+### Curation Phase 0 — Messgrundlage (2026-10-06)
+Vorarbeit für das Agenten-Team „Morgenkonferenz" (Spec
+`docs/superpowers/specs/2026-10-05-news-curation-team-design.md`). Kein
+LLM-Textaufruf in Phase 0; nur Embeddings (`gemini-embedding-001`, 768 Dim.).
+
+**Merge-Bedingung (hart):** `feat/curation-phase0` erst nach `main` mergen, wenn
+die Migration `20261006090000_curation_phase0.sql` auf Prod angewendet UND
+verifiziert ist (Plan Task 1 Steps 4/5; anwenden NUR per
+`cd /Users/mattes/dev/synthszr && npx -y supabase@2.84.1 db query --linked --file <absoluter Pfad>`,
+niemals `supabase db push` — Remote-Registry und Migrationsordner laufen
+auseinander). Vercel deployt `main` automatisch. Ohne Spalte fallen PATCH/PUT
+beim ersten Publish zwar auf einen Update ohne `published_at` zurück
+(`isMissingPublishedAtColumn`, Log `[Curation] published_at-Spalte fehlt`),
+diese Posts bekommen ihren Zeitstempel dann erst aus dem Backfill der
+Migration (`updated_at`-Näherung), und die Event-Hooks loggen nur Fehler.
+
+**Tabellen (Migration `supabase/migrations/20261006090000_curation_phase0.sql`,
+RLS ohne Policy = nur Service-Role):**
+- `generated_posts.published_at` — gesetzt beim Übergang auf `published`
+  (PATCH/PUT `app/api/admin/generated-posts/route.ts`); Bestand backgefüllt.
+  Fehlt die Spalte (PGRST204/42703), speichern beide Routen einmal ohne sie.
+- `published_units` — eine Zeile je Top-Level-H2 eines veröffentlichten Posts
+  (`position`, `heading`, `bundle_type`, `member_ids uuid[]`, `embedding`).
+  Ground Truth für Recall/Precision und Archivbrief.
+- `curation_precedents` — Stufen je Tag und Item: `published` |
+  `dropped_after_selection` (gewählt, gestrichen) | `pending_never_selected` |
+  `merged` (Similarity ≥ 0,8 zu einem veröffentlichten Heading, mit
+  `matched_heading`). `unique (day, item_id)`, Tag = Berlin-Datum.
+  Keine Zeile bekommen Hand-Items, die einer markerlosen Einheit (eins-zu-eins)
+  oder einem Altbestand-Bündel mit gleichem Label und ≤ 1 Member-ID (n-zu-1)
+  zugeordnet sind; der Pool „nie gewählt" lässt Items aus, die bei
+  `created_at` schon gewählt, verbraucht oder abgelaufen waren.
+  `bundle_type_selected` fällt nur bei fehlendem Schlüssel in `selected_items`
+  (Jobs vor 2026-07-18) auf `news_queue.bundle_type` zurück. Das Script gibt
+  eine Positivkontrolle der 0,8-Schwelle aus (Cosine published-Item ↔ eigene
+  Einheit, p10/p50/p90) — liegt p50 darunter, Schwelle vor Nutzung des
+  Negativblocks mit dem Betreiber klären.
+- `queue_item_events` — jede Statusänderung der News-Queue mit Akteur
+  (`operator` | `techmeme` | `agent` | `pipeline`), `from/to_status`,
+  `from/to_role`, `reason`. Geschrieben best-effort über `recordQueueEvents`
+  (`lib/news-queue/events.ts`) aus allen Status-Setzern in
+  `lib/news-queue/service.ts`, `suggestions.ts`, `lib/claude/queue-article.ts`
+  (Dedup-Verlierer), `lib/techmeme/job.ts` und den Admin-Routen `reset-item`
+  / `bundle-type`. `selectItemsForArticle(ids, { actor })` — `actor` ist Pflicht.
+  Herkunft und Hand-Begriff: `lib/curation/origin.ts` (`originOf`, `isHandItem`;
+  Fallback ohne Events: `metadata.curation.run_id` → agent,
+  `metadata.techmeme` → techmeme, sonst operator).
+
+**Heading-Marker (mehrere je Zeile, am Zeilenende):**
+`<!-- data-queue-item-ids:<uuid>,<uuid> --> <!-- data-bundle-type:topic -->`
+(Phase 0, Pipeline); ab Phase 1 mit Rang und Tier VOR dem Typ:
+`<!-- data-queue-item-ids:<uuid> --> <!-- data-curation-rank:3 --> <!-- data-curation-tier:bench --> <!-- data-bundle-type:topic -->` →
+TipTap-Attrs `queueItemId` (= erste ID, Kompatibilität), `bundleType`,
+`queueItemIds`, `curationRank`, `curationTier` (alle String;
+`lib/utils/markdown-to-tiptap.ts`, `lib/tiptap/heading-with-queue-id.ts`,
+Pipeline `ensureQueueIdMarker` in `lib/claude/ghostwriter-pipeline.ts`).
+Schreiber (Pipeline `ensureQueueIdMarker`/`ensureBundleMarker`, künftige
+Heading-Serializer und ein Reinject nach dem Metaphern-Dedup) setzen
+`data-queue-item-ids` vor `data-bundle-type` und den Typ als LETZTEN
+Kommentar, auch hinter `data-curation-rank`/`data-curation-tier`. Der
+Extraktor (`extractBundleMarkers`) liest jede Reihenfolge; die feste Position schützt den Fall, dass die Pipeline ohne den neuen Extraktor
+live ist (die alte `BUNDLE_MARKER_RE` erkennt den Typ nur am Zeilenende).
+`embedQueueItemIds` überspringt markierte Headings; `/api/enrich` erhält die Attrs.
+
+**Scripts (`tsx`, Env `~/.synthszr.env.prod` vor `.env.local`; Flags `--dry-run`,
+`--since YYYY-MM-DD`):**
+- `pnpm curation:units` — `scripts/build-published-units.ts`: Backfill
+  `published_units` (erzeugt Embeddings → nur mit Freigabe; idempotent je Post).
+  Wird beim Publish NICHT nachgeführt — vor jeder Baseline-Messung mit
+  `--since <UTC-Datum des letzten Units-Laufs, (max(published_units.created_at) at time zone 'UTC')::date>`
+  auffrischen (UTC, weil `--since` als 00:00 UTC filtert), danach `curation:precedents`
+  (beides Prod-Writes, nur mit Freigabe).
+- `pnpm curation:precedents` — `scripts/build-curation-precedents.ts`:
+  Backfill `curation_precedents` aus manuellen `article_jobs` × `published_units`
+  (`classifyPrecedents` in `lib/curation/precedents.ts`).
+- `pnpm curation:baseline` — `scripts/measure-curation-baseline.ts` →
+  `scripts/curation-baseline.json` (git-tracked, lese-only, 5–10 min; Egress
+  Größenordnung 100–150 MB — Job-Payloads `selected_items` tragen Volltext,
+  gemessen 2026-10-06 im Mittel ~240 KB je manuellem Job, und werden nur für
+  manuelle Jobs + Nachtlauf je Tag in Scheiben à 10 geladen). Je Berlin-Tag der Job aus `pickPrecedentJobs`
+  (`lib/curation/precedents.ts`, dieselbe Funktion wie `curation_precedents`:
+  jüngster manueller Job mit veröffentlichtem Post, ohne Rückfall übersprungen
+  bei `no_units` / `no_attributable_units` / `no_selected`; Abgleich mit den
+  gespeicherten Präzedenzfällen in `precedents_agreement`): Pool = `news_queue` mit `queued_at`
+  in `[asOf−48h, asOf)`, `asOf` = `article_jobs.created_at`, seitenweise à
+  1000 bis 2000 (PostgREST `max_rows = 1000` kappt `.limit()` still), ohne
+  Zeilen, die bei `asOf` nicht mehr wählbar waren (`poolExclusionAsOf`: in
+  einem anderen, vorher veröffentlichten Post verbraucht oder abgelaufen —
+  `pool_excluded_as_of` je Tag);
+  Baselines `total_score`-Top-20 (`capByUnits` nach `totalScoreCandidates`,
+  je K auf K Einheiten gekappt — ein Techmeme-Bündel zählt einmal, auch mit
+  bis zu 5 IDs; Hand-Items mit `metadata.manual` auf Score 0, Labels auf null außer
+  `topic` auf Techmeme-Items; beide würden sonst die veröffentlichten
+  Einheiten vorziehen),
+  Nachtlauf-Ist (`selected_items` des Auto-Jobs mit `status='done'`),
+  Handauswahl (`isHandItem` mit Events as-of Job wie `curation_precedents` —
+  unberührte Techmeme-Themen zählen nicht; P/R; alle `selected_items`
+  zusätzlich als `hand_all_selected`), Zufall (seeded); Hand, Nachtlauf und
+  Zufall wie `total_score` je K auf K **Einheiten** (`unitListsByK`, Einheit
+  wie `capByUnits`), Dubletten-Rate auf Einheiten-Ebene (`unitDuplicateRate`:
+  ein gelabeltes Mehr-Quellen-Bündel ist keine Dublette);
+  Story-Ebene (`assignStoryKeys`, 0,8) und ID-Ebene bei K=10/15/20, Recall
+  zusätzlich je K auf die Pool-Abdeckung normiert (`unit_recall_covered`);
+  Pool-Abdeckung, `content_length`-Quantile, Techmeme-Übernahmequote je
+  `techmeme_story_index` (ungefilterte Zeilen, je Story dedupliziert),
+  Draft-Kosten und Schreibdurchsatz der manuellen `done`-Jobs, Techmeme-Läufe
+  je UTC-Tag aus `llm_usage`, Zeitkette (`schedule_config`, Analyse-Ende je
+  Tag, Newsletter-Eingang je `source_email` als Vorlauf vor dem Slot),
+  Streuung/MDE (n=20/30, je 50 % und 80 % Power), Negativ-Block. Zufalls-Seed
+  je Kalendertag (`daySeed`), also stabil bei `--since`. Kosten und Durchsatz sind je **Write-Unit**
+  (`written_sections.length`; Bündel + Einzelfassung zählen doppelt →
+  Obergrenze je veröffentlichter Einheit). Metriken:
+  `lib/curation/baseline-metrics.ts`; Laden, Helfer und Messlogik:
+  `lib/curation/baseline-day.ts`. Logs mit Prefix `[Curation]`.
+- **Lesehinweis Abdeckung:** Abdeckung und Recall von `total_score`/`random`
+  messen gegen den Stufe-1-gefilterten Pool (Junk raus, `content_length ≥ 500`).
+  Techmeme-Quellen sind oft kürzer — Einheiten nur aus Techmeme-Items stehen
+  separat in `coverage.units_techmeme_only` und sind kein Backfill-Fehler.
+  `unit_recall_covered` = Treffer auf abgedeckte ÷ abgedeckte Einheiten
+  (Zähler und Nenner pool-beschränkt, daher ≤ 1 auch für Hand/Nachtlauf).
+- **Lesehinweis Hand-Leaks:** Artikel, die über `add-from-repo` mit
+  `daily_repo.source_type = 'article'` in die Queue kommen, tragen Scores 9,0
+  ohne Marker (`queueFromDailyRepo` in `lib/news-queue/service.ts`) und
+  sind in `total_score_top20` NICHT neutralisiert — leichte Verzerrung nach oben.
+  Ebenso bleibt `bundle_type = 'topic'` auf Techmeme-Items stehen (automatisch
+  gesetzt von `lib/techmeme/queue-items.ts` / `promoteExistingTopicSources`);
+  hat der Betreiber ein Techmeme-Item über die `bundle-type`-Route von null auf
+  `topic` gelabelt, ist das historisch nicht unterscheidbar und zieht das Item
+  über `capByUnits` vor die Score-Singles (Rest-Leak; andere Labels auf
+  Techmeme-Items werden neutralisiert).
+  Außerdem kann die Handauswahl (Hand-Items der `selected_items` des
+  manuellen Jobs) Füll-Items aus `getBalancedSelection` enthalten (ohne Event
+  und mit `metadata: {}` fallen sie auf `operator` zurück): `selectAndEnrichItems`
+  (`lib/claude/queue-article.ts`) füllt auf, wenn nach dem
+  Published-Filter weniger Items als `maxItems` übrig sind oder der Slider über
+  der Auswahl steht, und nimmt ohne Auswahl ganz die Balanced-Auswahl.
+  Historisch nicht erkennbar — `baselines.hand.precision_full` ist dann eine
+  Untergrenze, `duplicate_rate_mean` und die Differenz Hand − total_score
+  enthalten Pipeline-Picks.
+- **Lesehinweis Kosten:** `llm_usage` gibt es erst seit 2026-09-20, bis
+  2026-09-22 konnten Zeilen verloren gehen (Fix `dd1dead0`). Im Draft-Pfad
+  loggt nur der Anthropic-Zweig von `callModelNonStreaming`, Gemini-Aufrufe
+  fehlen. Jobs ohne `llm_usage`-Zeile im Fenster stehen nicht in `per_job`,
+  sondern in `costs.draft_jobs.jobs_without_usage` (nicht als 0 $ gemittelt).
+  `usage_first_at` zeigt den Datenbeginn. Zeilen mit `cost_usd = NULL`
+  (Modell fehlte beim Schreiben in `MODEL_PRICING`, z. B. Opus 5.5 vor dem
+  Pricing-Nachtrag) rechnet `llmRowOf` aus den Token-Spalten mit der heutigen
+  Preistabelle nach (`repriced_calls`); nur was danach ohne Preis bleibt,
+  steht in `unpriced_calls` (0 $, Untergrenze). Die DB bleibt unverändert.
+  Die Lexikon-Phase des Jobs (use_case `glossary_candidate_identification`,
+  `lib/article-jobs/service.ts:515-578`) fehlt in den Draft-Kosten bewusst:
+  derselbe use_case läuft parallel im Artikel-Crawl und ist im Zeitfenster
+  des Jobs nicht trennbar. Der Schreibdurchsatz enthält sie (Wanduhr), die
+  Kosten nicht. Die beiden Zahlen beziehen sich also auf leicht verschiedene
+  Mengen, die Kosten sind eine bekannte Untergrenze.
+- **Lesehinweis Nachtlauf:** `nightly_actual` ist das Ist (`selected_items`
+  des Auto-Jobs). Ein Replay, wie es die Spec für Phase 0 nennt, fehlt —
+  `getBalancedSelection` liest den heutigen DB-Zustand und ist nicht
+  as-of-fähig (offene Abweichung von der Spec, dem Betreiber gemeldet).
+- **Lesehinweis Newsletter:** `newsletter_arrival_by_source` misst den Vorlauf
+  in Minuten vor dem nächsten Analyse-Slot (Berlin), kritischste Quelle zuerst
+  (`lead_p10_minutes` aufsteigend). Wer den Slot um X Minuten vorzieht, verliert
+  Quellen mit `lead_p10_minutes < X`.
+- **Lesehinweis Analyse-Ende:** `daily_repo_id IS NOT NULL` trennt die
+  Synthese-Charge nicht ab (Handergänzungen über `add-from-repo` /
+  `add-from-synthesis` und manuelle Synthese-Neuläufe tragen ebenfalls
+  `daily_repo_id`). Gewertet wird je Berlin-Tag das Ende des ersten
+  `queued_at`-Laufs (Lücke 15 min) ab `schedule_config.dailyAnalysis`;
+  spätere Zeilen stehen als `later_rows`, Tage ohne solchen Lauf in
+  `timeline.analysis_end_days_without_scheduled_run`. Nur volle Berlin-Tage
+  der letzten 30 (angeschnittener erster und laufender Tag fallen weg).
+
+**Gate-Referenz (Spec „Entscheidungsregel", Schwellen final nach Phase 0):**
+Shadow → Assist, wenn Unit-Recall@20 ≥ `baselines.total_score_top20.unit_recall["20"]`
++ 0,10 (gepaarter Bootstrap, 90 % > 0), Boden 0,5 / Setzlisten-Recall@10 ≥ 0,35
+(pool-normiert daneben: `unit_recall_covered["10"]` / `["20"]`),
+Precision@10 ≥ `baselines.hand.precision_full` (n = `baselines.hand.n`; Untergrenze, siehe Lesehinweis Hand-Leaks), Dubletten-Rate 0
+(Referenz: `baselines.hand.duplicate_rate_mean`, nur gemessener Job je Tag).
+`stats.diff_hand_minus_total_score_unit_recall_20` liefert `sd`, `mde50_n20`/`mde50_n30`
+(z = 1,645, 50 % Power) und `mde80_n20`/`mde80_n30` (z = 1,645 + 0,8416, 80 % Power).
+**Die +0,10-Schwelle wird am 80-%-Wert kalibriert:** liegt `mde80_n20` über 0,10, ist
+ein Effekt von +0,10 bei 20 Gate-Tagen nicht verlässlich nachweisbar (Task 14 Entscheidung 7).
+
+**Negativ-Block** „Gewählt, aber gestrichen" (`lib/curation/negatives.ts`,
+`loadNegativeBlock(supabase, { days: 14 })`): Stufe-2-Einheiten, ≤ 20, ≤ 8 je
+Rolle, mit Kontrast-Heading (0,65–0,8); Tokenzahl steht in
+`curation-baseline.json → negative_block.approx_tokens`.
+
 ## Recent Changes (2026-01-14)
 
 ### Ghostwriter Queue Fix

@@ -635,7 +635,13 @@ export default function NewsQueuePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'reset-item',
-          itemId
+          itemId,
+          // Abwaehlen in der Queue-Ansicht kenntlich machen (Vertrag 2.4,
+          // source 'queue'): Die Route leitet daraus reason 'queue_remove' ab.
+          // Ohne source saehe dieses Abwaehlen im Event aus wie ein Aufruf
+          // eines alten Clients (reason null) und waere vom Final Cut im Draft
+          // ('draft_remove') nicht zu trennen.
+          source: 'queue'
         })
       })
       const data = await res.json()

@@ -19,11 +19,13 @@
  * Wrap-up-Route sie ebenfalls brauchte: eine Markdown-Konvertierung gehört
  * nicht in ein Artikel-Job-Modul, und der Wrap-up hat mit Jobs nichts zu tun.
  *
- * Marker-Behandlung spiegelt die Client-Fassung: `<!-- data-bundle-type:X -->`
- * wird vor `marked()` aus der Überschriftenzeile gelöst (HTML-Kommentare
- * überleben das DOM-Parsen nicht) und danach als `bundleType`-Attribut am
- * passenden Heading-Knoten nachgetragen — über dieselben extract/apply-Helfer,
- * damit beide Wege denselben Baum erzeugen.
+ * Marker-Behandlung spiegelt die Client-Fassung: alle `<!-- data-*:… -->`-
+ * Kommentare einer Überschriftenzeile (bundle-type, queue-item-ids,
+ * curation-rank, curation-tier — seit 2026-10-06 beliebig viele je Zeile)
+ * werden vor `marked()` aus der Zeile gelöst (HTML-Kommentare überleben das
+ * DOM-Parsen nicht) und danach als Heading-Attribute (bundleType, queueItemId,
+ * queueItemIds, curationRank, curationTier) am passenden Knoten nachgetragen —
+ * über dieselben extract/apply-Helfer, damit beide Wege denselben Baum erzeugen.
  */
 export async function markdownToTiptapServer(markdown: string): Promise<Record<string, unknown>> {
   const { marked } = await import('marked')

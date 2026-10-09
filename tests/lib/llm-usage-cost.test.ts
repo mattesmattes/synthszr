@@ -65,4 +65,20 @@ describe('computeCostUsd', () => {
       inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0,
     })).toBeGreaterThan(0)
   })
+
+  // Betreiber-Vorgabe 2026-10-05 (Spec Morgenkonferenz, „Kosten"): Draft-Kosten
+  // werden in Phase 0 aus llm_usage gelesen. Für die drei Modelle, die der
+  // Betreiber im Admin einstellt bzw. als Ablation fährt, stand bis dahin
+  // cost_usd = NULL — die Summe hätte sie als 0 geführt. Preise siehe
+  // model-pricing.ts (gelesen 2026-10-07).
+  it.each(['claude-opus-5-5', 'claude-fable-5-1', 'claude-mythos-5-1'])(
+    'liefert für %s einen Preis statt null',
+    (model) => {
+      const cost = computeCostUsd(model, {
+        inputTokens: 1_000_000, outputTokens: 1_000_000, cacheWriteTokens: 0, cacheReadTokens: 0,
+      })
+      expect(cost).not.toBeNull()
+      expect(cost).toBeGreaterThan(0)
+    },
+  )
 })

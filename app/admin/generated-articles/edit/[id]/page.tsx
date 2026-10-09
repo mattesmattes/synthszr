@@ -493,6 +493,11 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
         body: JSON.stringify({
           action: 'reset-item',
           itemId,
+          // Final Cut kenntlich machen (Betreiber-Vorgabe 2026-10-05): Die Route
+          // schreibt daraus das remove-Event — die einzige Spur, dass dieses Item
+          // gewaehlt und dann aus dem Draft gestrichen wurde.
+          reason: 'draft_remove',
+          source: 'draft',
         }),
       })
 

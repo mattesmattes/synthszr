@@ -32,6 +32,7 @@ import { findDuplicateMetaphors, streamMetaphorDeduplication, type AIModel } fro
 import { runGhostwriterPipeline, type PipelineItem } from '@/lib/claude/ghostwriter-pipeline'
 import { isLikelyTruncated } from '@/lib/claude/rewrite-truncation'
 import { getBalancedSelection, getSelectedItems, selectItemsForArticle, deriveSourceUrl } from '@/lib/news-queue/service'
+import { recordQueueEvents, type QueueEvent } from '@/lib/news-queue/events'
 import { sanitizeUrl, sanitizeContentUrls } from '@/lib/utils/url-sanitizer'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import type { BundleType } from '@/lib/i18n/bundle-labels'
@@ -242,7 +243,7 @@ export async function selectAndEnrichItems(opts: {
 
   if (queueItemIds && queueItemIds.length > 0) {
     // Use specified items
-    const result = await selectItemsForArticle(queueItemIds)
+    const result = await selectItemsForArticle(queueItemIds, { actor: 'operator' }) // explizite IDs = Handauswahl (s. :370-372), kein Pipeline-Pick
     if (result.error) throw new Error(result.error)
     selectedItems = result.items
   } else if (useSelected) {
@@ -276,7 +277,7 @@ export async function selectAndEnrichItems(opts: {
 
           if (additionalItems.length > 0) {
             const itemIds = additionalItems.map(s => s.id)
-            const result = await selectItemsForArticle(itemIds)
+            const result = await selectItemsForArticle(itemIds, { actor: 'pipeline' })
             console.log(`[Ghostwriter-Queue] selectItemsForArticle returned ${result.items.length} items (error: ${result.error || 'none'})`)
 
             if (!result.error && result.items.length > 0) {
@@ -302,7 +303,7 @@ export async function selectAndEnrichItems(opts: {
 
       const itemIds = balancedSelection.map(s => s.id)
       console.log(`[Ghostwriter-Queue] Calling selectItemsForArticle with ${itemIds.length} item IDs`)
-      const result = await selectItemsForArticle(itemIds)
+      const result = await selectItemsForArticle(itemIds, { actor: 'pipeline' })
       console.log(`[Ghostwriter-Queue] selectItemsForArticle returned ${result.items.length} items (error: ${result.error || 'none'})`)
 
       if (result.error) throw new Error(result.error)
@@ -319,7 +320,7 @@ export async function selectAndEnrichItems(opts: {
     }
 
     const itemIds = balancedSelection.map(s => s.id)
-    const result = await selectItemsForArticle(itemIds)
+    const result = await selectItemsForArticle(itemIds, { actor: 'pipeline' })
 
     if (result.error) throw new Error(result.error)
 
@@ -404,10 +405,40 @@ export async function selectAndEnrichItems(opts: {
       const droppedIds = einzeln.filter(i => !keptIds.has(i.id)).map(i => i.id)
       // Release dropped items back to 'pending' — selectItemsForArticle already
       // marked them 'selected'; leaving them stuck would hide them for 24h.
-      await supabase
+      const { error: releaseError } = await supabase
         .from('news_queue')
         .update({ status: 'pending', selected_at: null })
         .in('id', droppedIds)
+      if (releaseError) {
+        // BEFUND 2026-10-06: Der Fehler wurde bisher still verworfen. Der Lauf
+        // geht weiter wie bisher (die Verlierer fallen trotzdem aus dem Artikel,
+        // nach 24 h greift resetStuckSelectedItems), aber jetzt sichtbar. KEIN
+        // Event: Die Zeilen stehen weiter auf 'selected', ein dedup_drop
+        // selected→pending wäre falsch — dieselbe Regel wie bei Techmeme-
+        // Promote, reset-item und bundle-type (Event nur nach erfolgreichem Update).
+        console.error('[Ghostwriter-Queue] Dedup-Verlierer nicht freigegeben:', releaseError.message)
+      } else {
+        // Dedup-Verlierer als Event festhalten. BEFUND 2026-10-06: Der Reset
+        // hinterliess keine Spur — ein Item, das der Nachtlauf wählte und wieder
+        // freigab, sah danach aus wie nie gewählt. reason = der Gewinner (Vertrag
+        // 2.4, Korrektur a): bei 'batch' die nackte ID des behaltenen Items; bei
+        // 'recent_coverage' gibt es keine Gewinner-ID, dedupeByTopic liefert den
+        // TITEL des schon veröffentlichten Posts — mit Präfix, damit kein
+        // Auswerter den Wert als UUID liest. Best-effort.
+        // Die Events entstehen direkt aus `dropped`, nicht aus `droppedIds`:
+        // Beide decken dieselben IDs ab (Eingabe von dedupeByTopic ist genau
+        // `einzeln`, clusterByEmbedding legt jedes Item entweder in kept oder in
+        // dropped, semantic-dedup.ts:69-116), aber nur `dropped` traegt den Grund.
+        // So gibt es keinen Lookup und keinen Fall „ID ohne Grund".
+        await recordQueueEvents(supabase, dropped.map((d): QueueEvent => ({
+          queue_item_id: d.id,
+          event: 'dedup_drop',
+          actor: 'pipeline',
+          from_status: 'selected',
+          to_status: 'pending',
+          reason: d.reason === 'batch' ? d.similarTo : `recent_coverage:${d.similarTo}`,
+        })))
+      }
       // Auf die behaltenen reduzieren — die gebündelten unangetastet davor.
       const byId = new Map(einzeln.map(i => [i.id, i]))
       selectedItems = [

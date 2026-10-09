@@ -35,6 +35,20 @@ export interface EnrichSection {
    * mit fremdem Inhalt ueberschrieben wurde.
    */
   nullIndex: number
+  /**
+   * 0-basiertes Vorkommen dieser queueItemId unter den Nicht-Take-
+   * Abschnitten, in Dokumentreihenfolge; -1 fuer Take-Abschnitte und
+   * Abschnitte OHNE queueItemId (die korrelieren ueber nullIndex).
+   * BEFUND 2026-10-08 (Abschluss-Review Curation Phase 0, B1): seit Phase 0
+   * traegt jede H2 einen Pipeline-Marker, und queueItemId = erste ID. Ist
+   * das inhaltsstaerkste Buendel-Item zugleich das erste, tragen Buendel-H2
+   * und Einzelfassungs-H2 DIESELBE queueItemId (ghostwriter-pipeline.ts:
+   * Buendel items.map(id), Einzelfassung [staerkste.item.id]). Ohne
+   * Vorkommens-Index traf applySectionResult per .find() beide Male das
+   * Buendel — die Einzelfassung ueberschrieb es komplett (Datenverlust), und
+   * excludeKeys schloss beide Abschnitte zugleich aus.
+   */
+  occurrence: number
   /** Nur fuer Log-/Status-Zwecke, kein Bestandteil der Auswahllogik. */
   headingText: string
 }
@@ -55,6 +69,7 @@ export function extractSections(doc: TiptapDoc): EnrichSection[] {
   const sections: EnrichSection[] = []
   let current: EnrichSection | null = null
   let nextNullIndex = 0
+  const seenQueueIds = new Map<string, number>()
 
   for (let i = 0; i < content.length; i++) {
     const node = content[i]
@@ -63,6 +78,11 @@ export function extractSections(doc: TiptapDoc): EnrichSection[] {
       const text = headingText(node)
       const queueItemId = (node.attrs?.queueItemId as string) || null
       const isTake = TAKE_HEADING_RE.test(text)
+      let occurrence = -1
+      if (!isTake && queueItemId) {
+        occurrence = seenQueueIds.get(queueItemId) ?? 0
+        seenQueueIds.set(queueItemId, occurrence + 1)
+      }
       current = {
         startIndex: i,
         endIndex: content.length,
@@ -70,6 +90,7 @@ export function extractSections(doc: TiptapDoc): EnrichSection[] {
         bundleType: (node.attrs?.bundleType as BundleType) || null,
         isTake,
         nullIndex: !isTake && !queueItemId ? nextNullIndex++ : -1,
+        occurrence,
         headingText: text,
       }
     }
@@ -79,7 +100,7 @@ export function extractSections(doc: TiptapDoc): EnrichSection[] {
 }
 
 /** Stabile Identitaet eines Abschnitts ueber mehrere Dokument-Stände hinweg
- *  (queueItemId, sonst nullIndex, Take separat) — von applySectionResult zum
+ *  (queueItemId + occurrence, sonst nullIndex, Take separat) — von applySectionResult zum
  *  Wiederfinden genutzt und vom Enrich-Fortsetzungsprotokoll
  *  (app/api/enrich/route.ts, excludeKeys) zum Ausschliessen bereits
  *  verarbeiteter Abschnitte. */
@@ -87,15 +108,22 @@ export interface SectionKey {
   queueItemId: string | null
   isTake: boolean
   nullIndex: number
+  /** s. EnrichSection.occurrence. Optional: ein Schluessel ohne das Feld
+   *  (Client/Server unterschiedlicher Deploy-Stand) zaehlt als 0 — das
+   *  bisherige Verhalten (.find() traf das erste Vorkommen). */
+  occurrence?: number
 }
 
 /** Prueft, ob ein Abschnitt zu einem SectionKey gehoert — dieselbe
  *  Korrelation wie applySectionResult: isTake identifiziert den einen
- *  Take-Abschnitt, sonst queueItemId, sonst (queueItemId null) nullIndex. */
+ *  Take-Abschnitt, sonst queueItemId + occurrence, sonst (queueItemId null)
+ *  nullIndex. */
 export function sectionMatchesKey(section: EnrichSection, key: SectionKey): boolean {
   if (key.isTake) return section.isTake
   if (section.isTake) return false
-  return key.queueItemId ? section.queueItemId === key.queueItemId : section.nullIndex === key.nullIndex
+  return key.queueItemId
+    ? section.queueItemId === key.queueItemId && section.occurrence === (key.occurrence ?? 0)
+    : section.nullIndex === key.nullIndex
 }
 
 /**
@@ -122,4 +150,46 @@ export function applySectionResult(
   const content = doc.content || []
   const newContent = [...content.slice(0, match.startIndex), ...result.nodes, ...content.slice(match.endIndex)]
   return { ...doc, content: newContent }
+}
+
+/**
+ * Heading-Attribute, die den Markdown-Rundgang des Enrich NICHT ueberleben
+ * (convertTiptapToMarkdown schreibt im Heading-Fall keine Attrs mit raus, s.
+ * lib/utils/tiptap-to-markdown.ts) und deshalb vom urspruenglichen H2
+ * zurueckgeschrieben werden. Betreiber-Vorgabe 2026-10-05 (Spec Heading-
+ * Marker): neben queueItemId/bundleType auch die Kurations-Attribute
+ * queueItemIds/curationRank/curationTier — alle fuenf sind Strings
+ * (lib/tiptap/heading-with-queue-id.ts). Fuer den Enrich-Restore muss ein
+ * neues Heading-Attr nur hier ergaenzt werden (EnrichSection bleibt bewusst
+ * schmal). Damit es ueberhaupt im Dokument steht und Editor-Save/HTML-Parse
+ * ueberlebt, muss es zusaetzlich in lib/tiptap/heading-with-queue-id.ts
+ * deklariert und in applyBundleMarkers (lib/utils/markdown-to-tiptap.ts)
+ * gesetzt werden.
+ */
+export const PRESERVED_HEADING_ATTRS = ['queueItemId', 'bundleType', 'queueItemIds', 'curationRank', 'curationTier'] as const
+
+/**
+ * Schreibt die PRESERVED_HEADING_ATTRS vom urspruenglichen H2 (`original`,
+ * in der Enrich-Route sectionNodes[0] — startIndex ist die H2 selbst) auf die
+ * neue erste Heading-Node (`target`). Mutiert `target`. Das Original ist die
+ * EINZIGE Quelle dieser fuenf Attrs: sie werden am Ziel zuerst entfernt, dann
+ * vom Original gesetzt. WARUM: das Modell koennte einen Marker halluzinieren
+ * (`<!-- data-curation-tier:held -->` in der Antwort), den der Konverter in
+ * markdownToTiptapServer als Attr setzt — massgeblich ist aber das H2 VOR dem
+ * Enrich, auch wenn es das Attr gar nicht traegt. Andere Attrs des Ziels
+ * (level) bleiben. Nur nicht-leere Strings werden uebernommen — die fuenf
+ * Attrs sind laut Vertrag Strings, ein leerer Wert waere ein Marker ohne
+ * Inhalt.
+ * BEFUND 2026-10-06: als reine Funktion herausgezogen, damit der Restore ohne
+ * Route (Session, Supabase, Modell-SDK, SSE) in tests/lib geprueft wird —
+ * ein Tippfehler hier machte den Final Cut nach dem ersten Enrich unsichtbar.
+ */
+export function restorePreservedHeadingAttrs(original: TiptapNode | undefined, target: TiptapNode): void {
+  const attrs: Record<string, string | number> = { ...(target.attrs || {}) }
+  for (const key of PRESERVED_HEADING_ATTRS) {
+    delete attrs[key]
+    const value = original?.attrs?.[key]
+    if (typeof value === 'string' && value) attrs[key] = value
+  }
+  target.attrs = attrs
 }

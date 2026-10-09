@@ -247,3 +247,27 @@ describe('advanceArticleJob — Phase lexicon', () => {
     expect(state.updates.some((u) => u.table === 'generated_posts' && 'pending_glossary_terms' in u.payload)).toBe(false)
   })
 })
+
+describe('persistDraftPost — word_count ohne Heading-Marker', () => {
+  it('zählt die HTML-Kommentare der H2-Zeile nicht als Wörter', async () => {
+    // BEFUND 2026-10-06: Ab Task 9 trägt jede H2 `<!-- data-queue-item-ids:… -->`,
+    // Bündel zusätzlich `<!-- data-bundle-type:… -->`. `body.split(/\s+/)` zählte
+    // jeden Kommentar als drei Wörter — z. B. 20 Abschnitte → mindestens 60
+    // Wörter zu viel in generated_posts.word_count.
+    // Fixture-Body ohne Marker: 5 + 3 + 4 = 12 Wörter; die zwei Kommentare
+    // brächten 6 Token dazu (18).
+    mocks.finalizeArticle.mockResolvedValue(
+      FIXTURE_MARKDOWN.replace(
+        '## Erste Überschrift',
+        '## Erste Überschrift <!-- data-queue-item-ids:a,b --> <!-- data-bundle-type:topic -->',
+      ),
+    )
+    state.job = makeJob({ phase: 'finalizing' })
+    const { advanceArticleJob } = await import('@/lib/article-jobs/service')
+    const result = await advanceArticleJob('job-1')
+
+    expect(result).toBe('finalized')
+    const insert = state.updates.find((u) => u.table === 'generated_posts' && 'word_count' in u.payload)
+    expect(insert?.payload.word_count).toBe(12)
+  })
+})

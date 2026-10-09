@@ -43,6 +43,52 @@ describe('markdownToTiptapServer', () => {
     expect((heading.attrs as Record<string, unknown>).bundleType).toBe('topic')
   })
 
+  it('liefert bei mehreren Markern je Heading-Zeile dieselben Attrs wie der Client-Helfer', async () => {
+    // Vertrag 2.5: Pipeline schreibt mehrere data-*-Kommentare in EINE H2-Zeile.
+    // Der Server-Konverter nutzt extract/apply aus markdown-to-tiptap.ts; hier
+    // wird der echte Weg (normalizeQuotes → extract → marked → jsdom → apply)
+    // einmal durchgespielt, damit beide Konverter denselben Baum erzeugen.
+    const u1 = '11111111-1111-4111-8111-111111111111'
+    const u2 = '22222222-2222-4222-8222-222222222222'
+    const md = `## Thema <!-- data-queue-item-ids:${u1},${u2} --> <!-- data-bundle-type:topic --> <!-- data-curation-rank:2 --> <!-- data-curation-tier:recommended -->\n\nText.`
+    const json = await markdownToTiptapServer(md)
+    const heading = (json.content as Array<Record<string, unknown>>)[0]
+    expect(heading.type).toBe('heading')
+    const attrs = heading.attrs as Record<string, unknown>
+    expect(attrs.bundleType).toBe('topic')
+    expect(attrs.queueItemId).toBe(u1)
+    expect(attrs.queueItemIds).toBe(`${u1},${u2}`)
+    expect(attrs.curationRank).toBe('2')
+    expect(attrs.curationTier).toBe('recommended')
+    const text = ((heading.content ?? []) as Array<{ text?: string }>).map((t) => t.text).join('')
+    expect(text).toBe('Thema')
+  })
+
+  it('legt Marker nach einem Code-Fence mit #-Zeile auf das richtige Heading', async () => {
+    // Ende-zu-Ende-Gegenprobe zum Fence-Fall im Helfer-Test: marked macht aus
+    // `# shell comment` im Fence einen codeBlock, KEIN Heading. Zählte der
+    // Extraktor die Zeile mit, landeten die IDs von „Zwei“ auf „Drei“.
+    const u1 = '11111111-1111-4111-8111-111111111111'
+    const u2 = '22222222-2222-4222-8222-222222222222'
+    const md = [
+      `## Eins <!-- data-queue-item-ids:${u1} -->`,
+      '',
+      '```bash',
+      '# shell comment',
+      '```',
+      '',
+      `## Zwei <!-- data-queue-item-ids:${u2} -->`,
+      '',
+      '## Drei',
+    ].join('\n')
+    const json = await markdownToTiptapServer(md)
+    const nodes = json.content as Array<Record<string, unknown>>
+    expect(nodes.map((n) => n.type)).toEqual(['heading', 'codeBlock', 'heading', 'heading'])
+    const headings = nodes.filter((n) => n.type === 'heading')
+    const ids = headings.map((h) => (h.attrs as Record<string, unknown>).queueItemId)
+    expect(ids).toEqual([u1, u2, null])
+  })
+
   it('normalisiert Anfuehrungszeichen auf deutsche Typografie', async () => {
     const json = await markdownToTiptapServer('Er sagte "Hallo".')
     const para = (json.content as Array<Record<string, unknown>>)[0]

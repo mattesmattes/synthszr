@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     // "Behalten" / manually added → put the item into the selected queue so the
     // Ghostwriter has its basis. (selectItemsForArticle only flips pending→selected.)
     if (action === 'accepted' || action === 'added') {
-      await selectItemsForArticle([queueItemId])
+      await selectItemsForArticle([queueItemId], { actor: 'operator' })
     }
 
     return NextResponse.json({ ok: true })

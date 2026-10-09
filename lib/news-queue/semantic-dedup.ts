@@ -117,7 +117,7 @@ export function clusterByEmbedding<T extends { id: string; title: string }>(
 }
 
 /** A pgvector column arrives from PostgREST as a JSON string or a number[]. */
-function parseEmbedding(raw: unknown): number[] {
+export function parseEmbedding(raw: unknown): number[] {
   if (Array.isArray(raw)) return raw as number[]
   if (typeof raw === 'string') {
     try {

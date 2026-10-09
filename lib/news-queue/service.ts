@@ -11,6 +11,8 @@ import type {
   NewsQueueSelectableItem,
   BalancedQueueSelection
 } from '@/lib/supabase/types'
+import { recordQueueEvents, readStatusSnapshot } from '@/lib/news-queue/events'
+import type { QueueEvent, QueueEventActor } from '@/lib/news-queue/events'
 
 const SOURCE_LIMIT_PERCENTAGE = 1.0 // No source limit — all items pass through
 
@@ -365,6 +367,46 @@ export async function addToQueue(
     }
   })
 
+  // Items, die auf 'selected' STARTEN, bekommen ein select-Event — sonst
+  // hätte die Herkunft (origin.ts) für sie nur den metadata-Fallback.
+  // Techmeme-Themen (buildQueueItem: status 'selected', metadata.techmeme=true)
+  // sind KEINE Handauswahl (Betreiber-Vorgabe 2026-10-05: unberührtes Techmeme
+  // ist kein Hand-Item) → actor 'techmeme'; alle anderen → 'operator'.
+  // Zuordnung Rückgabezeile ↔ Eingabe-Item über daily_repo_id (Newsletter)
+  // bzw. source_url (Techmeme hat kein daily_repo_id); ohne beides gibt es
+  // keinen Schlüssel und stillschweigend kein Event (bewusste Lücke).
+  // source_url ist im selben Lauf nicht eindeutig (BEFUND 2026-10-06: dieselbe
+  // Quelle kann in zwei Techmeme-Stories stehen, einmal selected, einmal
+  // pending) — deshalb zählt zusätzlich der zurückgegebene Status der Zeile.
+  // from_status: null ist nur für Neuanlagen exakt. Trifft ein selected-Item
+  // per onConflict 'daily_repo_id' auf eine bestehende Zeile, wird deren
+  // Status überschrieben, das Event sagt trotzdem null — heute unerreichbar
+  // (einziger selected-Erzeuger ist Techmeme mit daily_repo_id null); ein
+  // Snapshot-Roundtrip je 100er-Batch nur dafür lohnt nicht.
+  const selectedActorByKey = new Map<string, QueueEventActor>()
+  for (const item of items) {
+    if (item.status !== 'selected') continue
+    const key = item.dailyRepoId || item.sourceUrl
+    if (!key) continue
+    selectedActorByKey.set(key, item.metadata?.techmeme === true ? 'techmeme' : 'operator')
+  }
+  const selectEvents: QueueEvent[] = []
+  const noteSelected = (row: { id: string; daily_repo_id: string | null; source_url: string | null; bundle_type: string | null; status: string }) => {
+    if (row.status !== 'selected') return
+    const actor = selectedActorByKey.get(row.daily_repo_id || row.source_url || '')
+    if (!actor) return
+    selectEvents.push({
+      queue_item_id: row.id,
+      event: 'select',
+      actor,
+      from_status: null,
+      to_status: 'selected',
+      from_role: null,
+      to_role: row.bundle_type,
+    })
+  }
+  const RETURNING = 'id, daily_repo_id, source_url, bundle_type, status'
+
   // Batch upsert: insert all at once, update scores on conflict
   const UPSERT_BATCH = 100
   for (let i = 0; i < records.length; i += UPSERT_BATCH) {
@@ -376,13 +418,16 @@ export async function addToQueue(
           onConflict: 'daily_repo_id',
           ignoreDuplicates: false,
         })
-        .select('id')
+        .select(RETURNING)
 
       if (upsertError) {
         // Fallback to individual inserts for this batch
         for (const record of batch) {
           try {
-            const { error: insertError } = await supabase.from('news_queue').insert(record)
+            const { data: inserted, error: insertError } = await supabase
+              .from('news_queue')
+              .insert(record)
+              .select(RETURNING)
             if (insertError) {
               if (insertError.code === '23505') {
                 skipped++
@@ -391,6 +436,7 @@ export async function addToQueue(
               }
             } else {
               added++
+              for (const row of inserted || []) noteSelected(row)
             }
           } catch (err) {
             errors.push(`Error: "${record.title.slice(0, 30)}...": ${err}`)
@@ -398,11 +444,14 @@ export async function addToQueue(
         }
       } else {
         added += data?.length || batch.length
+        for (const row of data || []) noteSelected(row)
       }
     } catch (err) {
       errors.push(`Batch upsert error at offset ${i}: ${err}`)
     }
   }
+
+  await recordQueueEvents(supabase, selectEvents)
 
   return { added, skipped, errors }
 }
@@ -645,9 +694,17 @@ export async function getSelectedItems(): Promise<NewsQueueItem[]> {
  * Select items for article generation
  * Marks items as 'selected' and returns them
  * Note: Source limit validation is handled by getBalancedSelection() algorithm
+ *
+ * Betreiber-Vorgabe 2026-10-05: Wer 'selected' setzt, muss sich nennen — vier
+ * Akteure (Admin-Route, Panel, Techmeme, Nachtlauf) setzen denselben Status,
+ * und die Zeile kennt keinen davon. Deshalb ist `actor` Pflicht, kein Default:
+ * ein stiller 'operator' würde Pipeline-Selects als Handauswahl verbuchen.
+ * Hook ist best-effort: readStatusSnapshot und recordQueueEvents werfen nie
+ * (Task 3), der Statuswechsel selbst bleibt davon unberührt.
  */
 export async function selectItemsForArticle(
-  itemIds: string[]
+  itemIds: string[],
+  opts: { actor: QueueEventActor }
 ): Promise<{ items: NewsQueueItem[]; error?: string }> {
   const supabase = createAdminClient()
 
@@ -657,6 +714,12 @@ export async function selectItemsForArticle(
   // 1. getBalancedSelection() already handles this intelligently (35% rule after 4 items)
   // 2. Manual selection explicitly chooses items regardless of source
   // The previous check against news_queue_selectable was too restrictive for small queues
+
+  // Label VOR dem Update lesen — nach dem Update ist from_role nicht mehr
+  // ablesbar (BEFUND 2026-10-06). from_status ist durch den Filter
+  // .eq('status','pending') ohnehin 'pending'; bei leerem Snapshot
+  // (Lesefehler) bleibt es dabei.
+  const vorher = await readStatusSnapshot(supabase, itemIds)
 
   // Mark items as selected
   const { data, error } = await supabase
@@ -679,17 +742,36 @@ export async function selectItemsForArticle(
     console.warn(`[NewsQueue] WARNING: Only ${data.length}/${itemIds.length} items were updated - some may not be in 'pending' status`)
   }
 
-  return { items: data || [] }
+  const updated = (data || []) as NewsQueueItem[]
+  await recordQueueEvents(supabase, updated.map((row): QueueEvent => ({
+    queue_item_id: row.id,
+    event: 'select',
+    actor: opts.actor,
+    from_status: vorher.get(row.id)?.status ?? 'pending',
+    to_status: 'selected',
+    from_role: vorher.get(row.id)?.bundle_type ?? null,
+    to_role: row.bundle_type ?? null,
+  })))
+
+  return { items: updated }
 }
 
 /**
  * Mark items as used (after article generation)
  * Returns the count of items actually updated
+ *
+ * Event 'use' je getroffener Zeile. Default-Akteur 'pipeline', weil die
+ * Masse der Aufrufe aus Cron/Sync kommt (syncPublishedPostsQueueItems);
+ * die Admin-Route 'use' (Publish der Edit-Seite) übergibt 'operator'.
+ * `reason` unterscheidet die Pipeline-Pfade ('sync' vs. Generierung).
  */
 export async function markItemsAsUsed(
   itemIds: string[],
-  postId: string
+  postId: string,
+  opts: { actor?: QueueEventActor; reason?: string } = {}
 ): Promise<{ updated: number; error?: string }> {
+  const { actor = 'pipeline', reason } = opts
+
   if (!itemIds || itemIds.length === 0) {
     console.log('[NewsQueue] markItemsAsUsed called with empty itemIds')
     return { updated: 0 }
@@ -699,6 +781,11 @@ export async function markItemsAsUsed(
   console.log('[NewsQueue] Item IDs:', itemIds.slice(0, 5).join(', '), itemIds.length > 5 ? `... and ${itemIds.length - 5} more` : '')
 
   const supabase = createAdminClient()
+
+  // Kein Status-Filter im Update (jede ID wird 'used', egal ob pending/selected/
+  // expired) — deshalb muss from_status VOR dem Update gelesen werden.
+  // readStatusSnapshot wirft nie (Task 3); Lesefehler → from_status null.
+  const vorher = await readStatusSnapshot(supabase, itemIds)
 
   const { data, error } = await supabase
     .from('news_queue')
@@ -721,32 +808,114 @@ export async function markItemsAsUsed(
     console.warn(`[NewsQueue] Warning: Only ${updatedCount}/${itemIds.length} items were updated. Some IDs may not exist in the queue.`)
   }
 
+  const rows = (data || []) as Array<{ id: string }>
+  await recordQueueEvents(supabase, rows.map((row): QueueEvent => ({
+    queue_item_id: row.id,
+    event: 'use',
+    actor,
+    from_status: vorher.get(row.id)?.status ?? null,
+    to_status: 'used',
+    from_role: vorher.get(row.id)?.bundle_type ?? null,
+    to_role: vorher.get(row.id)?.bundle_type ?? null,
+    reason: reason ?? null,
+  })))
+
   return { updated: updatedCount }
 }
 
 /**
  * Skip items with reason
+ *
+ * `.select('id')` neu, damit nur tatsächlich getroffene Zeilen ein Event
+ * bekommen — ein Event für eine nicht existierende ID wäre Rauschen in der
+ * Herkunftsableitung (BEFUND 2026-10-06).
  */
 export async function skipItems(
   itemIds: string[],
-  reason: string
+  reason: string,
+  opts: { actor?: QueueEventActor } = {}
 ): Promise<void> {
+  const { actor = 'operator' } = opts
   const supabase = createAdminClient()
 
-  await supabase
+  const vorher = await readStatusSnapshot(supabase, itemIds)
+
+  const { data } = await supabase
     .from('news_queue')
     .update({
       status: 'skipped',
       skip_reason: reason
     })
     .in('id', itemIds)
+    .select('id')
+
+  const rows = (data || []) as Array<{ id: string }>
+  await recordQueueEvents(supabase, rows.map((row): QueueEvent => ({
+    queue_item_id: row.id,
+    event: 'skip',
+    actor,
+    from_status: vorher.get(row.id)?.status ?? null,
+    to_status: 'skipped',
+    from_role: vorher.get(row.id)?.bundle_type ?? null,
+    to_role: vorher.get(row.id)?.bundle_type ?? null,
+    reason,
+  })))
 }
 
 /**
  * Expire old queue items (called by cron)
+ *
+ * Die Postgres-Funktion expire_old_queue_items liefert nur den Zähler, keine
+ * IDs (Migration 20260127100000_reduce_queue_expiry.sql:58-71). Für die
+ * Events deshalb drei Schritte:
+ * 1. Kandidaten VORHER mit demselben Prädikat lesen: status='pending' AND
+ *    expires_at < now(). Schmale Zeilen → Seiten à 1000 (PostgREST-Cap),
+ *    .order('id') für eine stabile Reihenfolge über Seiten.
+ * 2. RPC.
+ * 3. Nachkontrolle: Status der Kandidaten NACH dem RPC lesen; ein Event
+ *    bekommt nur, wer jetzt 'expired' ist (BEFUND 2026-10-06, Review Focus 5:
+ *    zwischen Select und RPC kann ein Kandidat selected/skipped werden, und
+ *    die RPC-Definition in Prod kann von der Repo-Migration abweichen).
+ *    Einziger Setzer von 'expired' ist dieser RPC, und er nimmt nur
+ *    pending-Zeilen — from_status 'pending' ist damit exakt.
+ *
+ * Bewusste Restlücke (best-effort, Vertrag 2.4), nur noch Verfall ohne Event:
+ * - `jetzt` ist JS-Zeit, der RPC vergleicht mit Server-NOW(); Zeilen, die
+ *   dazwischen fällig werden oder ein abweichendes Prod-Prädikat zusätzlich
+ *   trifft, stehen nicht in der Kandidatenliste.
+ * - Scheitert eine Seite des Vorab-Selects, werden ALLE Kandidaten verworfen
+ *   (kein Teil-Event-Satz); der RPC läuft trotzdem — der Hook darf den
+ *   Verfall nie blockieren.
+ * - Scheitert die Nachkontrolle (ganz oder für eine Scheibe), fehlen die
+ *   Events dieser IDs: lieber ein fehlendes Event als ein falsches.
+ * Laufen Cron und Admin-Action 'expire' gleichzeitig, kann ein Item zwei
+ * expire-Events bekommen (beide Nachkontrollen sehen 'expired').
+ * Exakt wäre nur ein RPC mit RETURNING id — das braucht eine Migration und
+ * ist nicht Teil von Phase 0.
  */
 export async function expireOldItems(): Promise<number> {
   const supabase = createAdminClient()
+
+  const jetzt = new Date().toISOString()
+  let kandidaten: string[] = []
+  const PAGE = 1000
+  for (let from = 0; ; from += PAGE) {
+    const { data: seite, error: readError } = await supabase
+      .from('news_queue')
+      .select('id')
+      .eq('status', 'pending')
+      .lt('expires_at', jetzt)
+      .order('id')
+      .range(from, from + PAGE - 1)
+    if (readError) {
+      console.error('[NewsQueue] Verfalls-Kandidaten nicht lesbar, keine expire-Events:', readError)
+      kandidaten = []
+      break
+    }
+    const rows = (seite ?? []) as Array<{ id: string }>
+    kandidaten.push(...rows.map((r) => r.id))
+    if (rows.length < PAGE) break
+  }
 
   const { data, error } = await supabase.rpc('expire_old_queue_items')
 
@@ -754,6 +923,29 @@ export async function expireOldItems(): Promise<number> {
     console.error('[NewsQueue] Failed to expire items:', error)
     return 0
   }
+
+  // Nachkontrolle: nur wer jetzt wirklich 'expired' ist, bekommt ein Event.
+  // readStatusSnapshot wirft nie und schneidet selbst in Scheiben à 200
+  // (Task 3); bei leerer Kandidatenliste macht es keinen DB-Zugriff.
+  const nachher = await readStatusSnapshot(supabase, kandidaten)
+  const verfallen = kandidaten.filter((id) => nachher.get(id)?.status === 'expired')
+  if (verfallen.length < kandidaten.length) {
+    console.warn(`[NewsQueue] expireOldItems: ${kandidaten.length - verfallen.length}/${kandidaten.length} Kandidaten nach dem RPC nicht 'expired' (Statuswechsel dazwischen oder Nachkontrolle nicht lesbar) — ohne Event`)
+  }
+
+  // reason spiegelt skip_reason der Postgres-Funktion (Repo-Migration :65),
+  // damit Event und Zeile dieselbe Geschichte erzählen. bundle_type ändert
+  // der RPC nicht — das Label nach dem Verfall ist auch das davor.
+  await recordQueueEvents(supabase, verfallen.map((id): QueueEvent => ({
+    queue_item_id: id,
+    event: 'expire',
+    actor: 'pipeline',
+    from_status: 'pending',
+    to_status: 'expired',
+    from_role: nachher.get(id)?.bundle_type ?? null,
+    to_role: nachher.get(id)?.bundle_type ?? null,
+    reason: 'Auto-expired after 2 days',
+  })))
 
   return data || 0
 }
@@ -931,8 +1123,16 @@ export async function clearPendingQueue(): Promise<number> {
 /**
  * Reset selected items back to pending
  * Use this when generated articles were not saved/published
+ *
+ * from_status ist durch .eq('status','selected') bekannt; das Label kommt aus
+ * dem erweiterten .select() derselben Abfrage — kein zweiter Roundtrip.
+ * Kein ids-Parameter: der einzige Aufrufer (Route 'reset-selected') setzt
+ * per Design alle selected-Zeilen zurück; reset-item hookt in der Route (Task 6).
  */
-export async function resetSelectedToPending(): Promise<number> {
+export async function resetSelectedToPending(
+  opts: { actor?: QueueEventActor } = {}
+): Promise<number> {
+  const { actor = 'operator' } = opts
   const supabase = createAdminClient()
 
   const { data, error } = await supabase
@@ -942,7 +1142,7 @@ export async function resetSelectedToPending(): Promise<number> {
       selected_at: null
     })
     .eq('status', 'selected')
-    .select('id')
+    .select('id, bundle_type')
 
   if (error) {
     console.error('[NewsQueue] Failed to reset selected items:', error)
@@ -950,6 +1150,18 @@ export async function resetSelectedToPending(): Promise<number> {
   }
 
   console.log(`[NewsQueue] Reset ${data?.length || 0} selected items to pending`)
+
+  const rows = (data || []) as Array<{ id: string; bundle_type: string | null }>
+  await recordQueueEvents(supabase, rows.map((row): QueueEvent => ({
+    queue_item_id: row.id,
+    event: 'reset',
+    actor,
+    from_status: 'selected',
+    to_status: 'pending',
+    from_role: row.bundle_type,
+    to_role: row.bundle_type,
+  })))
+
   return data?.length || 0
 }
 
@@ -963,6 +1175,9 @@ export async function resetSelectedToPending(): Promise<number> {
  * them made them reappear in the queue and suggestions the next day. They are
  * excluded here and stay selected until used or explicitly removed
  * (resetSelectedToPending / the per-item "Remove" action still reset them).
+ *
+ * Event 'stuck_reset' (actor 'pipeline') je zurückgesetzter Zeile — der
+ * Kandidaten-Select liefert das Label gleich mit.
  */
 export async function resetStuckSelectedItems(maxHours: number = 24): Promise<number> {
   const supabase = createAdminClient()
@@ -972,7 +1187,7 @@ export async function resetStuckSelectedItems(maxHours: number = 24): Promise<nu
   // Candidate stuck items first, so we can exclude deliberately-accepted ones.
   const { data: stuck, error: selError } = await supabase
     .from('news_queue')
-    .select('id')
+    .select('id, bundle_type')
     .eq('status', 'selected')
     .lt('selected_at', cutoffTime)
 
@@ -981,6 +1196,11 @@ export async function resetStuckSelectedItems(maxHours: number = 24): Promise<nu
     return 0
   }
   if (!stuck || stuck.length === 0) return 0
+
+  // Label je Kandidat für from_role/to_role des Events (Zeile ist nach dem
+  // Update noch da, aber ein zweiter Roundtrip wäre unnötig).
+  const labelOf = new Map<string, string | null>()
+  for (const r of stuck) labelOf.set(r.id, r.bundle_type ?? null)
 
   // Protect items accepted via the ranking panel from auto-recycling.
   const candidateIds = stuck.map((r) => r.id)
@@ -1011,6 +1231,17 @@ export async function resetStuckSelectedItems(maxHours: number = 24): Promise<nu
   if (data && data.length > 0) {
     console.log(`[NewsQueue] Reset ${data.length} stuck selected items (older than ${maxHours}h) to pending` + (protectedIds.size > 0 ? ` (${protectedIds.size} ranking-accepted protected)` : ''))
   }
+
+  const rows = (data || []) as Array<{ id: string }>
+  await recordQueueEvents(supabase, rows.map((row): QueueEvent => ({
+    queue_item_id: row.id,
+    event: 'stuck_reset',
+    actor: 'pipeline',
+    from_status: 'selected',
+    to_status: 'pending',
+    from_role: labelOf.get(row.id) ?? null,
+    to_role: labelOf.get(row.id) ?? null,
+  })))
 
   return data?.length || 0
 }
@@ -1049,7 +1280,9 @@ export async function syncPublishedPostsQueueItems(): Promise<{ processed: numbe
 
   for (const post of postsWithItems) {
     const itemIds = post.pending_queue_item_ids as string[]
-    const result = await markItemsAsUsed(itemIds, post.id)
+    // Cron-Nachzügler, kein Betreiber-Klick: actor 'pipeline', reason 'sync'
+    // (Vertrag 2.4), damit der Publish-Pfad der Edit-Seite davon unterscheidbar bleibt.
+    const result = await markItemsAsUsed(itemIds, post.id, { actor: 'pipeline', reason: 'sync' })
     totalMarked += result.updated
 
     // Clear the pending_queue_item_ids on the post

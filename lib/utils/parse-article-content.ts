@@ -37,6 +37,34 @@ export function generateSlug(title: string): string {
     .slice(0, 80)
 }
 
+// HTML-Kommentare (samt Leerraum davor) aus Markdown entfernen. BEFUND
+// 2026-10-06: Ab Task 9 markiert die Pipeline JEDE H2-Zeile mit
+// `<!-- data-queue-item-ids:… -->` (Bündel zusätzlich `<!-- data-bundle-type:… -->`,
+// Spec 2026-10-05 „Heading-Marker"). Gespeichert werden müssen sie (der
+// Konverter liest sie, Task 7), aber wo rohes Markdown als TEXT weiterverwendet
+// wird, sind sie Müll: im Excerpt (nach dem 65-Zeichen-Schnitt oft
+// ungeschlossen, landet in Meta-Description/JSON-LD/RSS) und in word_count
+// (jeder Kommentar zählte drei Wörter).
+// Nur Leerzeichen/Tabs vor dem Kommentar mitnehmen, KEINE Zeilenumbrüche:
+// sonst verschmölze eine eigenständige Kommentarzeile die Absätze davor und
+// danach (Prüferlauf 2026-10-06, Test in parse-article-content.test.ts).
+// CodeQL js/incomplete-multi-character-sanitization, PR #13, 2026-10-09: Ein
+// einziger Durchlauf ließ aus `<!<!-- x -->-- y -->` wieder `<!-- y -->`
+// entstehen. Deshalb bis zum Fixpunkt ersetzen; die zweite Alternative nimmt
+// ungeschlossene Anfänge `<!--` mit, sodass am Ende keiner übrig bleibt (auch
+// keiner, der erst durch das Entfernen zusammengesetzt wird). Ein einzelnes
+// `-->` bleibt stehen: es eröffnet keinen Kommentar und ist im Fließtext oft
+// ein Pfeil (Test „lässt einen Pfeil `-->` … stehen").
+export function stripHtmlComments(markdown: string): string {
+  let result = markdown
+  let previous: string
+  do {
+    previous = result
+    result = result.replace(/[ \t]*<!--[\s\S]*?-->|<!--/g, '')
+  } while (result !== previous)
+  return result
+}
+
 // Parse frontmatter from generated content
 export function parseArticleContent(content: string): { metadata: ArticleMetadata; body: string } {
   const defaultMetadata: ArticleMetadata = {
@@ -80,7 +108,9 @@ export function parseArticleContent(content: string): { metadata: ArticleMetadat
   const existingBullets = metadata.excerpt.split('\n').filter(l => l.trim().startsWith('•'))
   if (existingBullets.length < 3) {
     const h2Matches = body.match(/^##\s+(.+)$/gm) || []
-    const h2Titles = h2Matches.map(h => h.replace(/^##\s+/, '').trim())
+    // Heading-Marker aus den Titeln nehmen, bevor sie zu Excerpt-Bullets werden
+    // (BEFUND 2026-10-06, s. Kommentar über der Bereinigungsfunktion oben).
+    const h2Titles = h2Matches.map(h => stripHtmlComments(h.replace(/^##\s+/, '')).trim())
     const bullets = [...existingBullets]
     for (const h2 of h2Titles) {
       if (bullets.length >= 3) break

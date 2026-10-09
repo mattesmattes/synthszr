@@ -1,6 +1,6 @@
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { isJunkTitle } from '@/lib/news-queue/service'
-
+import { parseTipTapContent } from '@/lib/utils/safe-json'
 type AdminClient = ReturnType<typeof createAdminClient>
 
 const PAGE = 200 // generated_posts-Pagination
@@ -120,4 +120,103 @@ export async function loadDayCandidates<T extends DayCandidateRow>(
   const raw = (data ?? []) as unknown as T[]
   const rows = raw.filter((r) => !isJunkTitle(r.title) && (r.content_length ?? 0) >= MIN_CONTENT_LENGTH)
   return { rows, truncated: raw.length === DAY_LIMIT, error: null }
+}
+
+/**
+ * Eine veröffentlichte Einheit = ein Top-Level-H2 des Posts (Spec
+ * „Präzedenzfälle", Vertrag 2.6). `position` ist der 0-basierte Index unter
+ * den H2-Einheiten des Posts (wie headingIndex in applyBundleMarkers),
+ * `memberIds` die Queue-Items, aus denen der Abschnitt geschrieben wurde.
+ */
+export interface PublishedUnit {
+  position: number
+  heading: string
+  bundleType: string | null
+  memberIds: string[]
+  firstParagraph: string
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+type TiptapNodeLike = {
+  type?: unknown
+  attrs?: Record<string, unknown> | null
+  content?: unknown
+  text?: unknown
+}
+
+/** Alle Textknoten eines Teilbaums konkateniert (Marks sind egal, hardBreak hat keinen Text). */
+function textOf(node: unknown): string {
+  if (!node || typeof node !== 'object') return ''
+  const n = node as TiptapNodeLike
+  if (typeof n.text === 'string') return n.text
+  if (Array.isArray(n.content)) return n.content.map(textOf).join('')
+  return ''
+}
+
+/**
+ * Member-IDs eines Headings: `queueItemIds` (kommagetrennt, Vertrag 2.5)
+ * hat Vorrang, sonst `queueItemId` (Bestand vor Phase 0). Nur echte UUIDs —
+ * BEFUND 2026-10-06 (assisted_ranking.sql:63): queueItemId steht im Bestand
+ * teils als String 'null' in den Attrs; extractQueueItemIds lässt das
+ * durch (truthy), hier darf es keine Member-ID werden. Nicht-String-Werte
+ * (Array, Zahl) ergeben [].
+ */
+function memberIdsOf(attrs: Record<string, unknown> | null | undefined): string[] {
+  if (!attrs) return []
+  const fromList = typeof attrs.queueItemIds === 'string'
+    ? attrs.queueItemIds.split(',').map((s) => s.trim()).filter((s) => UUID_RE.test(s))
+    : []
+  if (fromList.length > 0) return [...new Set(fromList)]
+  const single = attrs.queueItemId
+  return typeof single === 'string' && UUID_RE.test(single) ? [single] : []
+}
+
+/**
+ * Top-Level-H2-Einheiten eines veröffentlichten Posts.
+ *
+ * WARUM nicht extractQueueItemIds erweitern: das läuft rekursiv über alle
+ * Tiefen und liefert nur IDs — Phase 0 braucht je Abschnitt Heading-Text
+ * (Embedding), Rolle (`bundleType`) und Position, und zwar NUR für
+ * Top-Level-H2, weil applyBundleMarkers bundleType ausschließlich auf
+ * Top-Level-Headings schreibt (markdown-to-tiptap.ts:55-67) und H1/H3 keine
+ * Abschnitte sind. firstParagraph = Text des ersten paragraph-Knotens nach dem
+ * Heading (Suche endet am nächsten Heading), '' wenn keiner — zusammen mit
+ * dem Heading der Embedding-Text der Einheit.
+ *
+ * Kaputtes JSON, null, {} oder eine Nicht-Array-Wurzel ergeben [] (Vertrag 0:
+ * immer über parseTipTapContent, kaputte Zeilen überspringen).
+ */
+export function extractPublishedUnits(content: unknown): PublishedUnit[] {
+  const root = parseTipTapContent(content as string | Record<string, unknown>)
+  const rootContent = (root as { content?: unknown }).content
+  const nodes: unknown[] = Array.isArray(root) ? root : Array.isArray(rootContent) ? rootContent : []
+  const units: PublishedUnit[] = []
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i] as TiptapNodeLike | null
+    if (!n || typeof n !== 'object' || n.type !== 'heading') continue
+    const attrs = n.attrs ?? undefined
+    if (Number(attrs?.level) !== 2) continue
+
+    let firstParagraph = ''
+    for (let j = i + 1; j < nodes.length; j++) {
+      const m = nodes[j] as TiptapNodeLike | null
+      if (!m || typeof m !== 'object') continue
+      if (m.type === 'heading') break
+      if (m.type === 'paragraph') {
+        firstParagraph = textOf(m).trim()
+        break
+      }
+    }
+
+    const bundleType = typeof attrs?.bundleType === 'string' && attrs.bundleType.length > 0 ? attrs.bundleType : null
+    units.push({
+      position: units.length,
+      heading: textOf(n).trim(),
+      bundleType,
+      memberIds: memberIdsOf(attrs),
+      firstParagraph,
+    })
+  }
+  return units
 }

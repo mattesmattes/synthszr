@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { readStatusSnapshot, recordQueueEvents } from '@/lib/news-queue/events'
 
 /**
  * Setzt das Label (bundle_type) einer News.
@@ -25,7 +26,26 @@ export async function PATCH(request: NextRequest) {
   }
 
   const supabase = createAdminClient()
-  const { error } = await supabase.from('news_queue').update({ bundle_type }).eq('id', id)
+  // from_role VOR dem Update lesen — danach steht nur noch der neue Wert in der
+  // Zeile. readStatusSnapshot wirft nie (Task 3); ein Lesefehler kostet nur
+  // from_role, nicht das Label.
+  const vorher = await readStatusSnapshot(supabase, [id])
+  // .select('id') nur fuer die Trefferzahl: queue_item_events hat keinen FK auf
+  // news_queue (Vertrag 2.1), ein Event fuer eine unbekannte id waere eine
+  // Waise. Die Response bleibt wie bisher { ok: true }, auch ohne Treffer.
+  const { data, error } = await supabase.from('news_queue').update({ bundle_type }).eq('id', id).select('id')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (data && data.length > 0) {
+    // relabel-Event (Betreiber-Vorgabe 2026-10-05, Spec „Herkunft und Hand-Begriff"):
+    // Ein Label vom Betreiber macht ein Techmeme- oder Agent-Item zum bestaetigten
+    // Hand-Item — isConfirmedByOperator liest genau dieses Event. Best-effort.
+    await recordQueueEvents(supabase, [{
+      queue_item_id: id,
+      event: 'relabel',
+      actor: 'operator',
+      from_role: vorher.get(id)?.bundle_type ?? null,
+      to_role: bundle_type,
+    }])
+  }
   return NextResponse.json({ ok: true })
 }

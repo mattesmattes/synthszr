@@ -669,7 +669,11 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   // Analog zu enforceHeadingLength: nur angestoßen, wenn der Regex anschlägt.
   trimmed = await enforceTakeEnding(trimmed, (take) => rewriteWerEnding(take))
 
-  return trimmed
+  // Queue-ID-Marker als LETZTER Schritt — nach enforceHeadingLength (sonst
+  // zählte die ≤90-Zeichen-Prüfung den Kommentar mit) und nach allen Satz-Caps.
+  // Einzelabschnitt = genau ein Item (Spec 2026-10-05 „Heading-Marker": jede
+  // H2 trägt die IDs ihrer Quellen, nicht nur Bündel).
+  return ensureQueueIdMarker(trimmed, [item.id])
 }
 
 // Formt den Schluss eines Takes um, dessen letzter/vorletzter Satz mit der
@@ -843,7 +847,9 @@ function insertBeforeTake(section: string, block: string): string {
 // Der HTML-Kommentar bleibt im gerenderten Output unsichtbar, überlebt
 // splitHeading (`#{1,6}[^\n]*`) und die startsWith('##')-Prüfung; die Assembly
 // (Task 7) liest ihn aus und schreibt daraus das TipTap-Heading-Attribut
-// `data-bundle-type`. Zweifach genutzt: einmal deterministisch direkt nach der
+// `data-bundle-type` (Schwester: ensureQueueIdMarker für die Queue-IDs, die
+// seit 2026-10-06 JEDE H2 trägt; der Typ bleibt immer der LETZTE Kommentar der
+// Zeile, s. dort). Zweifach genutzt: einmal deterministisch direkt nach der
 // Generierung (writeBundleSection), einmal als Backstop NACH dem Proofread —
 // PROOFREADING_PROMPT Regel 9 bittet das Modell, den Kommentar zu erhalten,
 // das ist aber nur eine Prompt-Bitte, keine Code-Garantie (analog zu
@@ -855,31 +861,133 @@ export function ensureBundleMarker(section: string, bundleType: BundleType): str
   )
 }
 
+// Queue-ID-Marker für JEDEN Abschnitt (Einzel UND Bündel), Schwester von
+// ensureBundleMarker. Die Kuration (Spec 2026-10-05, „Heading-Marker") braucht
+// je H2 die VOLLSTÄNDIGE Liste der Queue-Items, aus denen der Abschnitt
+// geschrieben wurde: embedQueueItemIds (Wort-Overlap, Schwelle 0,15) rät die
+// Zuordnung nachträglich aus der Überschrift und trifft bei einem Bündel nur
+// EIN Item, bei frei umformulierten Überschriften gar keins (BEFUND
+// 2026-10-06 — die Ground Truth für published_units stand deshalb bisher auf
+// einer Heuristik). Der Konverter (Task 7) liest den Kommentar in die
+// Heading-Attrs `queueItemIds` (alle) und `queueItemId` (erste ID,
+// Kompatibilität). Idempotent über den eigenen Namen, damit Backstops ihn nie
+// doppelt setzen; leere Liste = no-op, damit nie ein Kommentar ohne Wert
+// entsteht. ID-Reihenfolge = Reihenfolge der Quellen (Bündel: Unit-Items in
+// Reihenfolge; Einzel: genau eine ID).
+//
+// Position: VOR einem bereits vorhandenen data-bundle-type-Kommentar, damit der
+// Typ immer der letzte Kommentar der Zeile bleibt, egal in welcher Reihenfolge
+// die Helfer gerufen werden. Der Extraktor in markdown-to-tiptap.ts liest seit
+// Task 7 jede Reihenfolge (Vertrag 2.5); die feste Position ist Rückfallschutz:
+// Die Fassung vor Task 7 (BUNDLE_MARKER_RE, am Zeilenende verankert mit
+// `-->\s*$`) erkennt den Typ nur als letzten Kommentar. Läuft dieser Code also
+// je ohne Task 7 (getrennter Deploy, Revert), verlöre sonst jedes Bündel sein
+// Label (BEFUND 2026-10-06).
+//
+// Idempotenz nur bei VOLLSTÄNDIGEM Kommentar (gleiche Form wie DATA_MARKER_RE
+// in markdown-to-tiptap.ts, Task 7): Kürzt der Proofread den Kommentar entgegen
+// Regel 9 (z. B. `<!-- data-queue-item-ids:3f2a…` ohne `-->`), bestünde ein
+// reiner includes-Check, der Extraktor läse den Rest aber nicht und er bliebe
+// als Text in der Überschrift stehen (Prüferlauf 2026-10-06). Deshalb wird ein
+// solcher Rest bis zum nächsten `<` bzw. Zeilenende entfernt und ein
+// vollständiger Marker gesetzt. Seit jede H2 einen Kommentar trägt, ist das
+// kein Randfall mehr.
+//
+// CodeQL js/polynomial-redos, PR #13, 2026-10-09: Rest- und Typ-Regex begannen
+// unverankert mit `\s*` (die Typ-Regex endete zusätzlich auf `\s*$`). Auf einer
+// langen Leerraum-Folge setzte die Suche an jeder Position neu an und lief die
+// Folge erneut ab — quadratisch, 50 000 Leerzeichen kosteten ~1,4 s je Regex.
+// Beide beginnen jetzt mit dem Literal `<!--`; den Leerraum davor bzw. am
+// Zeilenende entfernt trimEnd() (dieselbe Zeichenmenge wie `\s`). Das Ergebnis
+// ist identisch (Tests „nimmt beliebigen Leerraum …" und „läuft linear …" in
+// tests/lib/write-bundle-section.test.ts).
+const COMPLETE_QUEUE_ID_MARKER_RE = /<!--\s*data-queue-item-ids:[^<>]*?-->/
+const BROKEN_QUEUE_ID_MARKER_RE = /<!--\s*data-queue-item-ids:[^<]*/
+const BUNDLE_TYPE_TAIL_RE = /<!--\s*data-bundle-type:[a-z_]+\s*-->$/
+
+export function ensureQueueIdMarker(section: string, ids: string[]): string {
+  const clean = ids.filter((id) => typeof id === 'string' && id.length > 0)
+  if (clean.length === 0) return section
+  const marker = `<!-- data-queue-item-ids:${clean.join(',')} -->`
+  return section.replace(/^(\s*#{1,6}[^\n]*)/, (line) => {
+    if (COMPLETE_QUEUE_ID_MARKER_RE.test(line)) return line
+    const broken = BROKEN_QUEUE_ID_MARKER_RE.exec(line)
+    const repaired = broken
+      ? line.slice(0, broken.index).trimEnd() + line.slice(broken.index + broken[0].length)
+      : line
+    const trimmed = repaired.trimEnd()
+    const typeTail = trimmed.match(BUNDLE_TYPE_TAIL_RE)
+    if (typeTail && typeTail.index !== undefined) {
+      // Leerzeichen explizit setzen: Nach dem Entfernen eines Rests direkt vor
+      // dem Typ stünde sonst keins zwischen den beiden Kommentaren.
+      return `${trimmed.slice(0, typeTail.index).trimEnd()} ${marker} ${typeTail[0]}`
+    }
+    return `${trimmed} ${marker}`
+  })
+}
+
+// Minimale Form einer Write-Unit, die die Marker-Backstops brauchen.
+// BundleWriteUnit (unten) ist strukturell zuweisbar; Tests können schlanke
+// Fixtures übergeben, ohne PipelineItems zu bauen.
+export type MarkerUnit =
+  | { kind: 'bundle'; bundleType: BundleType; items: ReadonlyArray<{ id: string }> }
+  | { kind: 'single'; item: { id: string } }
+
+// Beide Marker einer Unit auf ihren Abschnitt setzen (idempotent). Ein Helfer
+// für beide Proofread-Backstops (writeSectionsBatch pro Section,
+// reinjectBundleMarkers pro Chunk), damit die Regel „Bündel = IDs + Typ,
+// Einzel = IDs" nur an EINER Stelle steht und die zwei Pfade nicht
+// auseinanderlaufen — genau das war bei data-bundle-type passiert (s. BEFUND
+// bei reinjectBundleMarkers). IDs zuerst, Typ zuletzt: Rückfallschutz für den
+// Extraktor vor Task 7, der den Typ nur am Zeilenende liest (s. ensureQueueIdMarker).
+function ensureUnitMarkers(section: string, unit: MarkerUnit): string {
+  if (unit.kind === 'bundle') {
+    return ensureBundleMarker(
+      ensureQueueIdMarker(section, unit.items.map((it) => it.id)),
+      unit.bundleType,
+    )
+  }
+  return ensureQueueIdMarker(section, [unit.item.id])
+}
+
 // Backstop für den Whole-Text-Proofread in runGhostwriterPipeline (im Gegensatz
 // zum Per-Section-Proofread in writeSectionsBatch gibt es dort keine einzelne
-// `section`-Variable mehr, auf die ensureBundleMarker direkt angewendet werden
-// könnte). buildBundleWriteUnits ordnet Bündel-Units IMMER zuerst ein (topic,
-// dann recap, vor allen Einzel-Sections — siehe dortiger Kommentar), und
-// `results`/`fullText` werden in exakt dieser Unit-Reihenfolge zusammengesetzt.
-// Der proofreadete Volltext wird deshalb an den `## `-Heading-Grenzen in
-// Chunks zerlegt und positionsgenau (Ordinal) den ersten `bundleUnits.length`
-// Chunks zugeordnet — dieselbe Ordinal-Matching-Idiomatik wie
+// `section`-Variable mehr, auf die ensureUnitMarkers direkt angewendet werden
+// könnte). `results`/`fullText` werden in exakt der Unit-Reihenfolge von
+// buildBundleWriteUnits zusammengesetzt; der proofreadete Volltext wird deshalb
+// an den `## `-Heading-Grenzen in Chunks zerlegt und Chunk i positionsgenau
+// (Ordinal) units[i] zugeordnet — dieselbe Ordinal-Matching-Idiomatik wie
 // reapplyBundleTypeAttrs (translation-service.ts) und applyBundleMarkers
-// (markdown-to-tiptap.ts).
-export function reinjectBundleMarkers(
-  fullText: string,
-  bundleUnits: Array<{ bundleType: BundleType }>,
-): string {
-  if (bundleUnits.length === 0) return fullText
+// (markdown-to-tiptap.ts). Ein Vorspann ohne `## ` (falls das Modell Text
+// voranstellt) verbraucht keine Unit.
+//
+// Stimmt die Anzahl der `## `-Chunks nicht mit units.length überein (Modell
+// oder Proofread hat eine H2 eingefügt oder entfernt, ein Result war leer),
+// wäre JEDE Zuordnung ab der Abweichung falsch — und falsche Queue-IDs würden
+// über Task 10 zur Ground Truth für published_units.member_ids. Dann wird der
+// Backstop übersprungen und gewarnt: Marker fehlen nur, wenn der Proofread sie
+// wirklich entfernt hat (writeSection/writeBundleSection haben sie gesetzt).
+//
+// BEFUND 2026-10-06: Bis hierhin bekam die Funktion nur die GEFILTERTEN
+// Bündel-Units und setzte sie auf die ersten N `## `-Chunks. Seit der
+// Einzelfassung (Betreiber-Vorgabe 2026-08-14, buildBundleWriteUnits) steht
+// aber zwischen topic-Bündel und recap-Bündel ein single-Chunk; hatte der
+// Proofread die Kommentare entfernt, landete `data-bundle-type:recap` auf der
+// Einzelfassung. Jetzt kommen ALLE Units in Reihenfolge, und jede Unit kennt
+// ihre eigenen Marker (Bündel: Queue-IDs + Typ, Einzel: Queue-IDs).
+export function reinjectBundleMarkers(fullText: string, units: ReadonlyArray<MarkerUnit>): string {
+  if (units.length === 0) return fullText
   const chunks = fullText.split(/(?=^## )/m)
-  let bundleIdx = 0
+  const headingChunks = chunks.filter((chunk) => /^## /.test(chunk)).length
+  if (headingChunks !== units.length) {
+    console.warn(
+      `[Pipeline] reinjectBundleMarkers: ${headingChunks} H2-Chunks vs. ${units.length} Units — Backstop übersprungen, Marker bleiben wie vom Proofread geliefert`,
+    )
+    return fullText
+  }
+  let unitIdx = 0
   return chunks
-    .map((chunk) => {
-      if (bundleIdx < bundleUnits.length && /^## /.test(chunk)) {
-        return ensureBundleMarker(chunk, bundleUnits[bundleIdx++].bundleType)
-      }
-      return chunk
-    })
+    .map((chunk) => (/^## /.test(chunk) ? ensureUnitMarkers(chunk, units[unitIdx++]) : chunk))
     .join('')
 }
 
@@ -1010,7 +1118,12 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   // danebenstehend mitwachsen, trotz ausdrücklicher Anweisung im Prompt.
   withSources = sanitizeLexTags(capTake(withSources))
 
-  return ensureBundleMarker(withSources, bundleType)
+  // Beide Marker in EINER Heading-Zeile: zuerst die IDs ALLER Member in
+  // Quellen-Reihenfolge (so bekommt published_units.member_ids das komplette
+  // Bündel, nicht nur das eine Item, das embedQueueItemIds per Wort-Overlap
+  // erraten hätte — BEFUND 2026-10-06), dann der Typ als LETZTER Kommentar —
+  // Rückfallschutz für den Extraktor vor Task 7 (s. ensureQueueIdMarker).
+  return ensureBundleMarker(ensureQueueIdMarker(withSources, items.map((it) => it.id)), bundleType)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1534,15 +1647,20 @@ export async function writeSectionsBatch(
         section = await withTimeout(proofreadText(section, proofreadModel), SECTION_PROOFREAD_TIMEOUT_MS, section)
           .catch(() => section)
       }
-      // Deterministischer Backstop: falls der Proofread den data-bundle-type-
-      // Kommentar entgegen PROOFREADING_PROMPT Regel 9 doch entfernt hat,
-      // hier erzwungen wieder einsetzen (idempotent, no-op wenn er noch da ist).
-      if (unit.kind === 'bundle') {
-        section = ensureBundleMarker(section, unit.bundleType)
-      }
+      // Deterministischer Backstop: falls der Proofread die HTML-Kommentare
+      // (data-bundle-type, data-queue-item-ids) entgegen PROOFREADING_PROMPT
+      // Regel 9 doch entfernt hat, hier erzwungen wieder einsetzen (idempotent,
+      // no-op wenn sie noch da sind). Seit 2026-10-06 für Bündel UND Einzel —
+      // jede H2 trägt ihre Queue-IDs. Trifft auch die Timeout-/Fehler-
+      // Platzhalter oben: die tragen dann die IDs ihrer Unit, was beim
+      // Nachschreiben hilft und beim Löschen nicht stört (Test: „Fehler-
+      // Platzhalter" in ghostwriter-queue-id-marker.test.ts).
+      section = ensureUnitMarkers(section, unit)
       // Kompensation: bei aktiven Bündeln wird jeder NORMALE Abschnitt (nicht die
       // Bündel-Section selbst) um genau einen Satz gekürzt (Zusammenfassung + Take),
       // damit der Artikel durch die zusätzliche Bündel-Section nicht insgesamt länger wird.
+      // shortenBySentences erhält die Heading-Zeile samt Kommentaren (splitHeading
+      // in bundle-length.ts nimmt `#{1,6}[^\n]*`), die Marker überleben also.
       if (unit.kind === 'single' && bundlesActive) {
         section = shortenBySentences(section, 2)
       }
@@ -1740,12 +1858,11 @@ export async function* runGhostwriterPipeline(
     console.log(`[Pipeline] Proofreading model: ${proofreadingModel}`)
     let corrected = await proofreadText(fullText, proofreadingModel)
     // Deterministischer Backstop (wie im writeSectionsBatch-Pfad oben): dieser
-    // Proofread läuft als EIN Whole-Text-Call statt pro Section, kann den
-    // data-bundle-type-Kommentar also ebenso verlieren.
-    const bundleUnits = units.filter(
-      (u): u is Extract<BundleWriteUnit, { kind: 'bundle' }> => u.kind === 'bundle',
-    )
-    if (bundleUnits.length > 0) corrected = reinjectBundleMarkers(corrected, bundleUnits)
+    // Proofread läuft als EIN Whole-Text-Call statt pro Section, kann die
+    // HTML-Kommentare (data-bundle-type, data-queue-item-ids) also ebenso
+    // verlieren. ALLE Units in Reihenfolge, nicht nur die Bündel — s. BEFUND
+    // 2026-10-06 bei reinjectBundleMarkers.
+    corrected = reinjectBundleMarkers(corrected, units)
     yield { type: 'proofread', text: corrected }
   } catch (err) {
     console.error('[Pipeline] Proofreading failed:', err)
@@ -1775,7 +1892,7 @@ AI-TELLS UMSCHREIBEN (nur diese, minimal-invasiv, Aussage erhalten — NICHT den
 
 NICHT VERÄNDERN:
 8. Englische Fachbegriffe (Token, Reasoning, API, Fine-Tuning, Open Source, Benchmark, Model, Inference, Training) NICHT eindeutschen. Firmen-, Produkt- und Eigennamen unverändert lassen.
-9. Markdown-Formatierung (##, **, {Company}, {lex:...}, →, Synthszr Take:) unverändert lassen. Auch die Absatzstruktur — die Leerzeilen zwischen Absätzen — WÖRTLICH belassen: mehrere Absätze NICHT zu einem Block zusammenziehen und keine neuen Absätze einfügen. HTML-Kommentare — insbesondere "<!-- data-bundle-type:topic -->" bzw. "<!-- data-bundle-type:recap -->" in einer Überschriftszeile — WÖRTLICH und an exakt derselben Stelle belassen: niemals löschen, verschieben, umbrechen oder verändern. Sie tragen ein strukturelles Signal und dürfen nicht verloren gehen.
+9. Markdown-Formatierung (##, **, {Company}, {lex:...}, →, Synthszr Take:) unverändert lassen. Auch die Absatzstruktur — die Leerzeilen zwischen Absätzen — WÖRTLICH belassen: mehrere Absätze NICHT zu einem Block zusammenziehen und keine neuen Absätze einfügen. HTML-Kommentare am Ende von Überschriftszeilen — "<!-- data-queue-item-ids:… -->" (kommagetrennte IDs) und "<!-- data-bundle-type:… -->" (Werte wie topic, recap, deep_dive, cover_story), einzeln oder beide nebeneinander in derselben Zeile und in genau dieser Reihenfolge — ZEICHENGENAU und an exakt derselben Stelle belassen: niemals löschen, verschieben, umbrechen, kürzen, zusammenfassen oder verändern, auch nicht einzelne IDs darin. Sie tragen ein strukturelles Signal und dürfen nicht verloren gehen.
 10. Ansonsten Stil, Ton, Argument und Inhalt LASSEN — greife nur die oben gelisteten Tells an.
 
 Gib NUR den korrigierten Text zurück, keine Erklärungen oder Kommentare.`
