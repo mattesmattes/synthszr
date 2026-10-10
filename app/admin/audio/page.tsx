@@ -255,6 +255,25 @@ const PHASE_LABELS: Record<string, string> = {
   close_friends: 'Enge Freunde',
 }
 
+/**
+ * Antwort von /api/podcast/translate-metadata lesen. Ein Fehlerstatus (502)
+ * wird zur Exception — PROD-BEFUND 2026-10-10: `res.json()` ohne Statusprüfung
+ * plus `data.title || post.title` setzte bei jedem Modellfehler still den
+ * deutschen Titel und Auszug in die Felder „(EN)".
+ */
+async function readTranslatedMetadata(res: Response): Promise<{ title: string; subtitle: string; description: string }> {
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || !data.title) {
+    throw new Error(typeof data.error === 'string' ? data.error : `HTTP ${res.status}`)
+  }
+  return { title: data.title, subtitle: data.subtitle || '', description: data.description || '' }
+}
+
+function translationErrorText(err: unknown): string {
+  const detail = err instanceof Error ? err.message : String(err)
+  return `Englische Übersetzung fehlgeschlagen — Titel und Show Notes sind noch deutsch. (${detail})`
+}
+
 // ---------------------------------------------------------------------------
 // PersonalityMap Component
 // ---------------------------------------------------------------------------
@@ -743,16 +762,18 @@ function AudioPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: post.title, excerpt: post.excerpt || '', script: podcastScript }),
     })
-      .then(res => res.json())
+      .then(readTranslatedMetadata)
       .then(data => {
-        setPodigeeTitle(data.title || post.title)
-        setPodigeeSubtitle(data.subtitle || '')
-        setPodigeeDescription(data.description || post.excerpt || '')
+        setPodigeeTitle(data.title)
+        setPodigeeSubtitle(data.subtitle)
+        setPodigeeDescription(data.description)
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        // Deutsche Werte nur noch als sichtbar markierter Notbehelf.
         setPodigeeTitle(post.title)
         setPodigeeSubtitle('')
         setPodigeeDescription(post.excerpt || '')
+        setPodigeeError(translationErrorText(err))
       })
       .finally(() => setPodigeeTranslating(false))
   }, [podcastAudioUrl])
@@ -770,15 +791,16 @@ function AudioPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title, excerpt: '', script: latestEpisode.script }),
     })
-      .then(res => res.json())
+      .then(readTranslatedMetadata)
       .then(data => {
-        setPodigeeTitle(data.title || title)
-        setPodigeeSubtitle(data.subtitle || '')
-        setPodigeeDescription(data.description || '')
+        setPodigeeTitle(data.title)
+        setPodigeeSubtitle(data.subtitle)
+        setPodigeeDescription(data.description)
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         setPodigeeTitle(title)
         setPodigeeSubtitle('')
+        setPodigeeError(translationErrorText(err))
       })
       .finally(() => setPodigeeTranslating(false))
   }, [latestEpisode])
