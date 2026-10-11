@@ -53,6 +53,13 @@ describe('production CSP', () => {
 
   it('keeps the sources the app actually needs', () => {
     expect(directive(prod, 'connect-src')).toContain('https://*.supabase.co')
+    // Admin-Bild-Uploads (ad-promos, cover-animation, audio-files) laufen
+    // über @vercel/blob/client upload(): der Browser PUTtet die Datei direkt
+    // an https://vercel.com/api/blob — nicht an *.public.blob.vercel-storage.com,
+    // das nur die Download-Hosts abdeckt. Ohne diese Quelle blockiert der
+    // Browser den PUT, die Library wiederholt den Netzwerkfehler 10x mit
+    // Backoff und der Upload-Spinner hängt minutenlang (Bug 2026-10-11).
+    expect(directive(prod, 'connect-src')).toContain('https://vercel.com/api/blob/')
     expect(directive(prod, 'media-src')).toContain('https://*.public.blob.vercel-storage.com')
     expect(directive(prod, 'frame-src')).toContain('https://vercel.live')
     expect(directive(prod, 'img-src')).toContain('data:')
