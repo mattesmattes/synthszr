@@ -1,0 +1,701 @@
+/**
+ * Rekonziliation der Morgenkonferenz (Task 11, Anhang A §3.10): ein fertiger
+ * Shadow-Run wird dem Post zugeordnet, den der Betreiber tatsächlich
+ * veröffentlicht hat; jede Plan-Einheit bekommt ein Outcome, der Tag seine
+ * Metriken, und aggregateRuns mittelt die Tage gegen das Gate (Spec
+ * „Evaluation und Gate", Betreiber-Vorgabe 2026-10-05).
+ *
+ * Aufbau wie precedents.ts / baseline-day.ts: pickMatchingPost,
+ * reconcileOutcomes, metricsOf und aggregateRuns sind rein (kein Supabase,
+ * keine Embedding-Erzeugung); loadMatchCandidates und die load*-Helfer
+ * bekommen den Client als ersten Parameter (Vertrag 0); reconcileRun
+ * verdrahtet beides und ist der einzige Schreibzugriff (published_units über
+ * processPost, curation_units, curation_runs).
+ *
+ * Treffer-Währung (Spec „Treffer-Währung"): Story-Ebene für Plan und
+ * Baseline gleichermaßen — dieselbe Clusterung (assignStoryKeys, 0,8) über
+ * Plan-, Post- und Baseline-IDs. Zusätzlich zählen für den Plan die Outcomes:
+ * ein `merged` (nur per Similarity gegen das Heading-Embedding) trifft auch
+ * einen Abschnitt ohne Queue-Marker, den die Story-Ebene nie erreicht.
+ */
+import {
+  coverageOf, meanFinite, neutralizeHandLabels, unitCappedMetricsOf, unitKeyOf, unitListsByK,
+  type BaselineUnit,
+} from '@/lib/curation/baseline-day'
+import { assignStoryKeys, pairedBootstrap, unitDuplicateRate } from '@/lib/curation/baseline-metrics'
+import { loadPoolEmbeddings } from '@/lib/curation/pool'
+import { berlinDay, precedentSelectedItems } from '@/lib/curation/precedents'
+import { getRunUnits, markReconciled, updateUnitOutcomes } from '@/lib/curation/service'
+import { cosineSimilarity } from '@/lib/embeddings/generator'
+import type { SupabaseAdmin } from '@/lib/news-queue/events'
+import { DEFAULT_DEDUP_THRESHOLD, parseEmbedding } from '@/lib/news-queue/semantic-dedup'
+import { processPost, type EmbedTexts, type PostRow } from '@/scripts/lib/published-units-backfill'
+import {
+  CURATION_ROLES,
+  type BaselineLists, type ClusterResult, type CurationRole, type CurationTier, type PoolSnapshot,
+  type RunMetrics, type RunRow, type UnitInsert, type UnitOutcome, type UnitRow,
+} from '@/lib/curation/types'
+
+const HOUR_MS = 3600 * 1000
+/** Ein Tages-Job darf bis zu 2 h vor dem Kickoff angelegt sein (Anhang A §3.10). */
+const JOB_LEAD_MS = 2 * HOUR_MS
+/** Spec „Rekonziliation": der nächste veröffentlichte Post nach dem Run, same-day, ≤ 24 h — nicht 48 h. */
+const MATCH_WINDOW_MS = 24 * HOUR_MS
+/** Kandidaten-Fenster auf generated_posts.created_at (Anhang A §3.10), deckt den Tag-Fallback ab. */
+const POST_CREATED_WINDOW_MS = 36 * HOUR_MS
+const POST_COLUMNS = 'id, status, created_at, published_at'
+/** Setzlisten-Recall/-Precision@10 (Spec „Metriken je Tag"). */
+const SETZLISTE_K = 10
+/** Baseline je K in Einheiten wie totalScoreListsByK in run.ts (BASELINE_KS). */
+const BASELINE_KS = [10, 20] as const
+
+/** Gate (Spec „Entscheidungsregel", Betreiber-Vorgabe 2026-10-05). */
+const GATE_RECALL_GAIN = 0.10
+const GATE_FLOOR_UNIT_RECALL_20 = 0.5
+const GATE_FLOOR_SETZLISTE_RECALL_10 = 0.35
+/** Anhang A §3.10: recall_gain null bei n < 5 — unter 5 Tagesdifferenzen trägt das Bootstrap-Intervall keine Aussage. */
+const GATE_MIN_DAYS = 5
+
+const HIT_OUTCOMES = new Set<UnitOutcome>(['kept', 'relabeled', 'merged'])
+const ID_HIT_OUTCOMES = new Set<UnitOutcome>(['kept', 'relabeled'])
+const TIER_ORDER: Record<CurationTier, number> = { recommended: 0, bench: 1, held: 2 }
+/** Zeilen ohne Tier (outcome 'added') stehen hinter allen Plan-Tiers. */
+const NO_TIER_ORDER = 3
+
+// ── Attribution ───────────────────────────────────────────────────────────
+
+export interface MatchJob { id: string; created_at: string; generated_post_id: string | null; selected_items: unknown; source: string }
+export interface MatchPost { id: string; status: string; created_at: string; published_at: string | null }
+export interface MatchCandidates { jobs: MatchJob[]; posts: MatchPost[] }
+export interface MatchResult { post_id: string; job_id: string | null; attribution: 'job' | 'published_at' | 'created_at_day' }
+
+/** Jüngster manueller Job im Fenster [asOf − 2 h, asOf + 24 h], dessen Post veröffentlicht ist. */
+function newestManualJob(asOfMs: number, jobs: MatchJob[], publishedIds: Set<string>): { id: string; postId: string } | null {
+  let best: { id: string; postId: string; at: number } | null = null
+  for (const job of jobs) {
+    if (job.source !== 'manual') continue
+    if (!job.generated_post_id || !publishedIds.has(job.generated_post_id)) continue
+    const at = Date.parse(job.created_at)
+    if (at < asOfMs - JOB_LEAD_MS || at > asOfMs + MATCH_WINDOW_MS) continue
+    if (!best || at > best.at) best = { id: job.id, postId: job.generated_post_id, at }
+  }
+  return best
+}
+
+/** Frühester veröffentlichter Post mit published_at in (asOf, asOf + 24 h]. */
+function earliestPublishedAfter(asOfMs: number, posts: MatchPost[]): MatchPost | null {
+  let best: { post: MatchPost; at: number } | null = null
+  for (const post of posts) {
+    if (!post.published_at) continue
+    const at = Date.parse(post.published_at)
+    if (at <= asOfMs || at > asOfMs + MATCH_WINDOW_MS) continue
+    if (!best || at < best.at) best = { post, at }
+  }
+  return best?.post ?? null
+}
+
+/** Frühester veröffentlichter Post, dessen created_at auf denselben Berliner Tag fällt wie asOf. */
+function sameDayPost(asOf: string, posts: MatchPost[]): MatchPost | null {
+  const day = berlinDay(asOf)
+  const sameDay = posts.filter((p) => berlinDay(p.created_at) === day)
+  sameDay.sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))
+  return sameDay[0] ?? null
+}
+
+/**
+ * Welcher Post gehört zum Run? Kaskade Job → published_at → created_at-Tag.
+ *
+ * WARUM der Job zuerst: published_at ist für den Bestand rückwirkend aus
+ * updated_at gefüllt (supabase/migrations/20261006090000_curation_phase0.sql:
+ * 29-40) — bei Editor-Publishes der letzte Editor-Save, der Tage nach der
+ * Veröffentlichung liegen kann. Der manuelle Tages-Job zeigt dagegen über
+ * generated_post_id direkt auf den Post des Tages. Nur source = 'manual':
+ * Nachtlauf-Drafts (auto) sind nicht die Auswahl des Betreibers.
+ * WARUM created_at als letzte Stufe: bei Ghostwriter-Posts ist created_at
+ * der gewählte Veröffentlichungstag 07:00 MEZ (dieselbe Migration, Z. 5-11).
+ */
+export function pickMatchingPost(asOf: string, c: MatchCandidates): MatchResult | null {
+  const asOfMs = Date.parse(asOf)
+  const published = c.posts.filter((p) => p.status === 'published')
+  const publishedIds = new Set(published.map((p) => p.id))
+
+  const job = newestManualJob(asOfMs, c.jobs, publishedIds)
+  if (job) return { post_id: job.postId, job_id: job.id, attribution: 'job' }
+
+  const byPublishedAt = earliestPublishedAfter(asOfMs, published)
+  if (byPublishedAt) return { post_id: byPublishedAt.id, job_id: null, attribution: 'published_at' }
+
+  const byDay = sameDayPost(asOf, published)
+  if (byDay) return { post_id: byDay.id, job_id: null, attribution: 'created_at_day' }
+
+  return null
+}
+
+function isoOf(ms: number): string {
+  return new Date(ms).toISOString()
+}
+
+/**
+ * Kandidaten für pickMatchingPost. Zwei Post-Abfragen statt eines or()-Filters
+ * mit verschachteltem and(), dedupliziert über id.
+ * WARUM selected_items hier nicht mitkommt: die Spalte trägt je Item den
+ * Volltext (BEFUND 2026-10-06 in baseline-day.ts JOB_PAYLOAD_CHUNK: bis
+ * 780 KB je Job) — geladen wird sie nur für den einen Treffer (loadSelectedIds).
+ */
+export async function loadMatchCandidates(supabase: SupabaseAdmin, asOf: string): Promise<MatchCandidates> {
+  const asOfMs = Date.parse(asOf)
+
+  const { data: jobRows, error: jobError } = await supabase
+    .from('article_jobs')
+    .select('id, created_at, generated_post_id, source')
+    .gte('created_at', isoOf(asOfMs - JOB_LEAD_MS))
+    .lte('created_at', isoOf(asOfMs + MATCH_WINDOW_MS))
+  if (jobError) throw new Error(`article_jobs: ${jobError.message}`)
+  const jobs = ((jobRows ?? []) as Array<Omit<MatchJob, 'selected_items'>>).map((row) => ({ ...row, selected_items: null }))
+
+  const { data: byCreated, error: createdError } = await supabase
+    .from('generated_posts')
+    .select(POST_COLUMNS)
+    .eq('status', 'published')
+    .gte('created_at', isoOf(asOfMs - POST_CREATED_WINDOW_MS))
+    .lte('created_at', isoOf(asOfMs + POST_CREATED_WINDOW_MS))
+  if (createdError) throw new Error(`generated_posts: ${createdError.message}`)
+
+  const { data: byPublished, error: publishedError } = await supabase
+    .from('generated_posts')
+    .select(POST_COLUMNS)
+    .eq('status', 'published')
+    .gt('published_at', isoOf(asOfMs))
+    .lte('published_at', isoOf(asOfMs + MATCH_WINDOW_MS))
+  if (publishedError) throw new Error(`generated_posts: ${publishedError.message}`)
+
+  const postById = new Map<string, MatchPost>()
+  for (const post of [...(byCreated ?? []), ...(byPublished ?? [])] as MatchPost[]) {
+    if (!postById.has(post.id)) postById.set(post.id, post)
+  }
+  return { jobs, posts: [...postById.values()] }
+}
+
+// ── Outcomes ──────────────────────────────────────────────────────────────
+
+export interface PublishedUnitRow { id: string; position: number; heading: string; bundle_type: string | null; member_ids: string[]; embedding: number[] | null }
+export interface OutcomePatch { unit_key: string; outcome: UnitOutcome; final_role: string | null; final_rank: number | null; matched_post_id: string | null; matched_heading: string | null; similarity: number | null }
+
+interface UnitHit { target: PublishedUnitRow; similarity: number; byId: boolean }
+
+/** Plan-Reihenfolge: recommended → bench → held, je Tier nach Rang; Zeilen ohne Tier (added) zuletzt. */
+function inPlanOrder(units: UnitRow[]): UnitRow[] {
+  const tierOf = (u: UnitRow) => (u.tier ? TIER_ORDER[u.tier] : NO_TIER_ORDER)
+  const rankOf = (u: UnitRow) => u.rank ?? Number.MAX_SAFE_INTEGER
+  return [...units].sort((a, b) => tierOf(a) - tierOf(b) || rankOf(a) - rankOf(b))
+}
+
+/**
+ * Cosine nur für beidseitig nicht-leere, gleich lange Vektoren; sonst oder bei
+ * NaN → null. Derselbe Rumpf wie safeCosine in precedents.ts (dort privat,
+ * Phase-0-Modul bleibt unverändert): cosineSimilarity wirft bei ungleicher
+ * Länge und liefert NaN beim Null-Vektor.
+ */
+function safeCosine(a: number[] | null, b: number[] | null): number | null {
+  if (!a || !b || a.length === 0 || a.length !== b.length) return null
+  const s = cosineSimilarity(a, b)
+  return Number.isFinite(s) ? s : null
+}
+
+/** Ähnlichster Abschnitt zu einer Plan-Einheit: Maximum über ihre Member; Gleichstand → kleinere Position. */
+function bestSimilarityMatch(
+  unit: UnitRow,
+  candidates: PublishedUnitRow[],
+  itemEmbeddings: Map<string, number[]>,
+): { target: PublishedUnitRow; similarity: number } | null {
+  let best: { target: PublishedUnitRow; similarity: number } | null = null
+  for (const target of candidates) {
+    for (const id of unit.member_ids) {
+      const similarity = safeCosine(itemEmbeddings.get(id) ?? null, target.embedding)
+      if (similarity === null) continue
+      if (!best || similarity > best.similarity) best = { target, similarity }
+    }
+  }
+  return best
+}
+
+function roundSimilarity(similarity: number): number {
+  return Number(similarity.toFixed(3))
+}
+
+function outcomeOf(unit: UnitRow, hit: UnitHit | null, selectedIds: Set<string>, postId: string): OutcomePatch {
+  if (!hit) {
+    const selected = unit.member_ids.some((id) => selectedIds.has(id))
+    return {
+      unit_key: unit.unit_key,
+      outcome: selected ? 'dropped_after_selection' : 'dropped_never_selected',
+      final_role: null, final_rank: null, matched_post_id: null, matched_heading: null, similarity: null,
+    }
+  }
+  const sameRole = unit.role === hit.target.bundle_type
+  const outcome: UnitOutcome = !hit.byId ? 'merged' : sameRole ? 'kept' : 'relabeled'
+  return {
+    unit_key: unit.unit_key,
+    outcome,
+    final_role: hit.target.bundle_type,
+    final_rank: hit.target.position + 1,
+    matched_post_id: postId,
+    matched_heading: hit.target.heading,
+    similarity: roundSimilarity(hit.similarity),
+  }
+}
+
+/**
+ * Outcome je Plan-Einheit gegen die veröffentlichten Abschnitte.
+ *
+ * Pass 1 (ID): eine Einheit trifft jeden Abschnitt, der eines ihrer Member
+ * trägt; Ziel für final_rank/matched_heading ist der früheste davon.
+ * WARUM nicht exklusiv (ein Abschnitt nur für EINE Einheit): ein ID-Treffer
+ * ist ein Fakt — das Item steht im Post. Legt der Betreiber zwei
+ * Plan-Einheiten in einen Abschnitt, wäre die zweite sonst
+ * dropped_after_selection, also genau die Falle „Zusammenlegungen als
+ * Ablehnung gelernt" (Spec, Risikotabelle), die das Archiv als Negativ-Paar
+ * weiterreichte.
+ * Pass 2 (Similarity): nur Einheiten ohne ID-Treffer gegen Abschnitte ohne
+ * ID-Treffer, Maximum über die Member, Schwelle 0,8.
+ * WARUM `merged` nur hier entsteht: ein Live-Event dafür gibt es nicht, die
+ * Edit-Seite hat keine Zusammenlegen-Funktion (Spec „Tägliche Korrektur") —
+ * der Betreiber löscht einen Abschnitt und redigiert den anderen. Dieselbe
+ * Regel wie in curation_precedents (Schwelle DEFAULT_DEDUP_THRESHOLD).
+ */
+export function reconcileOutcomes(
+  units: UnitRow[],
+  published: PublishedUnitRow[],
+  itemEmbeddings: Map<string, number[]>,
+  selectedIds: Set<string>,
+  postId: string,
+  threshold: number = DEFAULT_DEDUP_THRESHOLD,
+): { outcomes: OutcomePatch[]; added: PublishedUnitRow[]; matched: Map<string, string> } {
+  const ordered = inPlanOrder(units)
+  const byPosition = [...published].sort((a, b) => a.position - b.position)
+  const hitOf = new Map<string, UnitHit>()
+  const hitPublished = new Set<string>()
+
+  for (const unit of ordered) {
+    const members = new Set(unit.member_ids)
+    const overlapping = byPosition.filter((p) => p.member_ids.some((id) => members.has(id)))
+    if (overlapping.length === 0) continue
+    hitOf.set(unit.unit_key, { target: overlapping[0], similarity: 1, byId: true })
+    for (const p of overlapping) hitPublished.add(p.id)
+  }
+
+  const openPublished = byPosition.filter((p) => !hitPublished.has(p.id))
+  for (const unit of ordered) {
+    if (hitOf.has(unit.unit_key)) continue
+    const best = bestSimilarityMatch(unit, openPublished, itemEmbeddings)
+    if (!best || best.similarity < threshold) continue
+    hitOf.set(unit.unit_key, { target: best.target, similarity: best.similarity, byId: false })
+    hitPublished.add(best.target.id)
+  }
+
+  const outcomes = ordered.map((unit) => outcomeOf(unit, hitOf.get(unit.unit_key) ?? null, selectedIds, postId))
+  const added = byPosition.filter((p) => !hitPublished.has(p.id))
+  const matched = new Map([...hitOf].map(([key, hit]) => [key, hit.target.id] as [string, string]))
+  return { outcomes, added, matched }
+}
+
+// ── Metriken ──────────────────────────────────────────────────────────────
+
+/** Division durch 0 → 0 (Anhang A §3.10): ein Tag ohne Setzliste oder ohne Abschnitte hat keinen Anteil. */
+function ratio(numerator: number, denominator: number): number {
+  return denominator === 0 ? 0 : numerator / denominator
+}
+
+/** Story-Schlüssel einer ID; ohne Eintrag ist die ID selbst der Schlüssel (Konvention baseline-metrics.ts). */
+function storyKeyOf(id: string, storyOf: Map<string, string>): string {
+  return storyOf.get(id) ?? id
+}
+
+/** Der Abschnitt, auf den ein merged-Outcome zeigt: final_rank = position + 1 und dasselbe Heading. */
+function isMergedTarget(outcome: OutcomePatch | undefined, p: PublishedUnitRow): boolean {
+  if (!outcome || outcome.outcome !== 'merged') return false
+  return outcome.final_rank === p.position + 1 && outcome.matched_heading === p.heading
+}
+
+/**
+ * Abschnitte, die eine Plan-Liste trifft: Story-Ebene über die Member (wie
+ * unitRecallAtK für die Baseline) ODER ein merged-Outcome einer ihrer
+ * Einheiten auf genau diesen Abschnitt.
+ */
+function publishedHitsOf(
+  planUnits: UnitRow[],
+  published: PublishedUnitRow[],
+  outcomeByKey: Map<string, OutcomePatch>,
+  storyOf: Map<string, string>,
+): PublishedUnitRow[] {
+  const planKeys = new Set(planUnits.flatMap((u) => u.member_ids).map((id) => storyKeyOf(id, storyOf)))
+  return published.filter((p) => {
+    if (p.member_ids.some((id) => planKeys.has(storyKeyOf(id, storyOf)))) return true
+    return planUnits.some((u) => isMergedTarget(outcomeByKey.get(u.unit_key), p))
+  })
+}
+
+/** Strenge ID-Variante: Abschnitte mit einem Member aus einer Einheit mit ID-Treffer (kept/relabeled). */
+function publishedIdHitsOf(planUnits: UnitRow[], published: PublishedUnitRow[], outcomeByKey: Map<string, OutcomePatch>): PublishedUnitRow[] {
+  const ids = new Set<string>()
+  for (const u of planUnits) {
+    const outcome = outcomeByKey.get(u.unit_key)?.outcome
+    if (!outcome || !ID_HIT_OUTCOMES.has(outcome)) continue
+    for (const id of u.member_ids) ids.add(id)
+  }
+  return published.filter((p) => p.member_ids.some((id) => ids.has(id)))
+}
+
+/** Eine Plan-Einheit hat überlebt: Outcome-Treffer ODER ein Member liegt in der Story eines Abschnitts. */
+function isUnitHit(
+  unit: UnitRow,
+  outcomeByKey: Map<string, OutcomePatch>,
+  publishedKeys: Set<string>,
+  storyOf: Map<string, string>,
+): boolean {
+  const outcome = outcomeByKey.get(unit.unit_key)?.outcome
+  if (outcome && HIT_OUTCOMES.has(outcome)) return true
+  return unit.member_ids.some((id) => publishedKeys.has(storyKeyOf(id, storyOf)))
+}
+
+function zeroOutcomes(): Record<UnitOutcome, number> {
+  return { kept: 0, relabeled: 0, merged: 0, dropped_after_selection: 0, dropped_never_selected: 0, added: 0 }
+}
+
+/** Metriken eines Tages ohne attribuierten Post — „Nullwerte" (Anhang A §3.10), Baseline-Felder null. */
+function emptyMetrics(attribution: RunMetrics['attribution']): RunMetrics {
+  return {
+    attribution,
+    published_units: 0,
+    published_attributable: 0,
+    plan: { recommended: 0, bench: 0, held: 0 },
+    unit_recall_20: 0,
+    unit_recall_id_20: 0,
+    setzlisten_recall_10: 0,
+    setzlisten_precision_10: 0,
+    duplicate_rate_recommended: 0,
+    cut_rate: 0,
+    additions: 0,
+    additions_rate: 0,
+    hand_stories: 0,
+    held_rate: 0,
+    baseline_total_score_unit_recall_20: null,
+    baseline_total_score_recall_10: null,
+    diff_vs_total_score_20: null,
+    outcomes: zeroOutcomes(),
+  }
+}
+
+/**
+ * total_score-Baseline des Runs gegen denselben Post, auf derselben
+ * Story-Ebene. WARUM neutralizeHandLabels vor unitKeyOf: run.ts schneidet die
+ * Liste mit totalScoreListsByK, also capByUnits über neutralisierte Labels
+ * (totalScoreCandidates). Mit den Betreiber-Labels des Snapshots gruppiert,
+ * fielen die Einheitengrenzen anders als beim Schnitt, und K = 10 deckte
+ * andere IDs ab als die Gate-Referenz.
+ */
+function baselineRecallOf(
+  baseline: BaselineLists | null,
+  snapshot: PoolSnapshot,
+  published: PublishedUnitRow[],
+  storyOf: Map<string, string>,
+): { recall20: number; recall10: number } | null {
+  if (!baseline) return null
+  const ids = baseline.total_score['20'] ?? []
+  const itemById = new Map(neutralizeHandLabels(snapshot.items).map((item) => [item.id, item]))
+  const unitOf = (id: string) => unitKeyOf(id, itemById.get(id)?.bundle_type ?? null, itemById.get(id)?.metadata ?? null)
+  const lists = unitListsByK(ids, unitOf, BASELINE_KS)
+  const units: BaselineUnit[] = published.map((p) => ({
+    id: p.id, position: p.position, heading: p.heading, bundleType: p.bundle_type, memberIds: p.member_ids,
+  }))
+  const poolIds = new Set(snapshot.items.map((item) => item.id))
+  const { covered } = coverageOf(units, poolIds, new Set())
+  const metrics = unitCappedMetricsOf(lists, units, covered, storyOf, BASELINE_KS)
+  return { recall20: metrics.unit_recall['20'], recall10: metrics.unit_recall['10'] }
+}
+
+/**
+ * Metriken eines Tages (Spec „Metriken je Tag", RunMetrics in types.ts).
+ * `cluster` bleibt bewusst ungenutzt: die Story-Schlüssel des Runs (Hand
+ * zuerst, Techmeme vorgeclustert) gibt es für die Baseline nicht — mit ihnen
+ * träfe der Plan in einer anderen Währung als total_score. storyOf entsteht
+ * deshalb für alle drei Listen aus derselben assignStoryKeys-Clusterung.
+ */
+export function metricsOf(input: {
+  units: UnitRow[]
+  outcomes: OutcomePatch[]
+  published: PublishedUnitRow[]
+  added: PublishedUnitRow[]
+  baseline: BaselineLists | null
+  snapshot: PoolSnapshot
+  cluster: ClusterResult
+  itemEmbeddings: Map<string, number[]>
+  attribution: RunMetrics['attribution']
+}): RunMetrics {
+  const { units, outcomes, published, added, baseline, snapshot, itemEmbeddings, attribution } = input
+  const outcomeByKey = new Map(outcomes.map((o) => [o.unit_key, o]))
+  const ordered = inPlanOrder(units)
+  const recommended = ordered.filter((u) => u.tier === 'recommended')
+  const bench = ordered.filter((u) => u.tier === 'bench')
+  const held = ordered.filter((u) => u.tier === 'held')
+  // Rang 1–10: validatePlan nummeriert die Ränge je Tier lückenlos neu (compose.ts).
+  const setzliste = recommended.slice(0, SETZLISTE_K)
+  const planAndBench = [...recommended, ...bench]
+
+  const allIds = [
+    ...ordered.flatMap((u) => u.member_ids),
+    ...published.flatMap((p) => p.member_ids),
+    ...(baseline?.total_score['20'] ?? []),
+  ]
+  const storyOf = assignStoryKeys(allIds, itemEmbeddings, DEFAULT_DEDUP_THRESHOLD)
+  const publishedKeys = new Set(published.flatMap((p) => p.member_ids).map((id) => storyKeyOf(id, storyOf)))
+
+  const recall20 = ratio(publishedHitsOf(planAndBench, published, outcomeByKey, storyOf).length, published.length)
+  const recallId20 = ratio(publishedIdHitsOf(planAndBench, published, outcomeByKey).length, published.length)
+  const setzlisteRecall10 = ratio(publishedHitsOf(setzliste, published, outcomeByKey, storyOf).length, published.length)
+  const setzlisteHits = setzliste.filter((u) => isUnitHit(u, outcomeByKey, publishedKeys, storyOf)).length
+  const setzlistePrecision10 = ratio(setzlisteHits, Math.min(SETZLISTE_K, recommended.length))
+
+  const unitKeyById = new Map<string, string>()
+  for (const u of recommended) {
+    for (const id of u.member_ids) {
+      if (!unitKeyById.has(id)) unitKeyById.set(id, u.unit_key)
+    }
+  }
+  const recommendedIds = recommended.flatMap((u) => u.member_ids)
+  const duplicateRate = unitDuplicateRate(recommendedIds, (id) => unitKeyById.get(id) ?? id, storyOf)
+
+  const cut = recommended.filter((u) => outcomeByKey.get(u.unit_key)?.outcome === 'dropped_after_selection').length
+  const handStories = ordered.filter((u) => u.is_hand).length
+
+  const outcomeCounts = zeroOutcomes()
+  for (const o of outcomes) outcomeCounts[o.outcome]++
+  outcomeCounts.added += added.length
+
+  const base = baselineRecallOf(baseline, snapshot, published, storyOf)
+
+  return {
+    attribution,
+    published_units: published.length,
+    published_attributable: published.filter((p) => p.member_ids.length > 0 || (p.embedding?.length ?? 0) > 0).length,
+    plan: { recommended: recommended.length, bench: bench.length, held: held.length },
+    unit_recall_20: recall20,
+    unit_recall_id_20: recallId20,
+    setzlisten_recall_10: setzlisteRecall10,
+    setzlisten_precision_10: setzlistePrecision10,
+    duplicate_rate_recommended: duplicateRate,
+    cut_rate: ratio(cut, recommended.length),
+    additions: added.length,
+    additions_rate: ratio(added.length, published.length),
+    hand_stories: handStories,
+    held_rate: ratio(held.length, handStories),
+    baseline_total_score_unit_recall_20: base ? base.recall20 : null,
+    baseline_total_score_recall_10: base ? base.recall10 : null,
+    diff_vs_total_score_20: base ? recall20 - base.recall20 : null,
+    outcomes: outcomeCounts,
+  }
+}
+
+// ── Lader und Orchestrierung ──────────────────────────────────────────────
+
+async function loadPost(supabase: SupabaseAdmin, postId: string): Promise<PostRow> {
+  const { data, error } = await supabase
+    .from('generated_posts')
+    .select('id, content, published_at')
+    .eq('id', postId)
+    .maybeSingle()
+  if (error) throw new Error(`generated_posts: ${error.message}`)
+  if (!data) throw new Error(`generated_posts: Post ${postId} fehlt`)
+  return data as PostRow
+}
+
+/**
+ * published_units des Posts neu schreiben, bevor abgeglichen wird.
+ * WARUM: beim Publish schreibt kein Hook published_units (Betreiber-
+ * Entscheidung 2026-10-14 Nr. 2 im Plan) — ein neuer Post hat dort noch gar
+ * keine Zeilen, ein redigierter einen veralteten Stand; ohne diesen Schritt
+ * veraltete auch der Archivbrief nach dem ersten Tag. processPost ist
+ * idempotent je post_id (delete + insert).
+ * embed_failed wirft: der alte Stand bliebe stehen (oft: keiner), und ein
+ * Abgleich dagegen schriebe lauter dropped-Outcomes und reconciled_at — der
+ * nächste Tick soll es erneut versuchen. broken (content kein JSON) wirft
+ * NICHT: das heilt kein Retry, und getRunsToReconcile (limit 1, asof
+ * aufsteigend) bliebe dauerhaft an diesem Run hängen; abgeglichen wird gegen
+ * den gespeicherten Stand.
+ */
+async function refreshPublishedUnits(supabase: SupabaseAdmin, embed: EmbedTexts, post: PostRow): Promise<void> {
+  const outcome = await processPost(supabase, embed, post, false)
+  if (outcome.kind === 'embed_failed') {
+    throw new Error(`published_units (${post.id}): Embedding fehlgeschlagen — ${outcome.error}`)
+  }
+  if (outcome.kind === 'broken') {
+    console.warn(`[Curation] Post ${post.id}: content nicht parsebar — Abgleich gegen den gespeicherten published_units-Stand`)
+  }
+}
+
+async function loadPublishedUnits(supabase: SupabaseAdmin, postId: string): Promise<PublishedUnitRow[]> {
+  const { data, error } = await supabase
+    .from('published_units')
+    .select('id, position, heading, bundle_type, member_ids, embedding')
+    .eq('post_id', postId)
+    .order('position')
+  if (error) throw new Error(`published_units: ${error.message}`)
+  const rows = (data ?? []) as Array<Omit<PublishedUnitRow, 'embedding' | 'member_ids'> & { member_ids: string[] | null; embedding: unknown }>
+  return rows.map((row) => {
+    const embedding = parseEmbedding(row.embedding)
+    return { ...row, member_ids: row.member_ids ?? [], embedding: embedding.length > 0 ? embedding : null }
+  })
+}
+
+/** IDs aus selected_items des attribuierten Jobs; ohne Job (Attribution über den Post) leer. */
+async function loadSelectedIds(supabase: SupabaseAdmin, jobId: string | null): Promise<Set<string>> {
+  if (!jobId) return new Set()
+  const { data, error } = await supabase
+    .from('article_jobs')
+    .select('selected_items')
+    .eq('id', jobId)
+    .maybeSingle()
+  if (error) throw new Error(`article_jobs: ${error.message}`)
+  const raw = (data as { selected_items?: unknown } | null)?.selected_items
+  return new Set(precedentSelectedItems(raw).map((item) => item.id))
+}
+
+/**
+ * curation_units.role hat einen CHECK auf die vier Rollen
+ * (20261014090000_curation_phase1.sql:54), published_units.bundle_type ist
+ * frei (Phase-0-Migration: „'story' kommt erst in Phase 2"). Ein fremdes
+ * Label ließe den Insert dauerhaft scheitern — role wird dann null,
+ * final_role behält das Label.
+ */
+function roleOf(bundleType: string | null): CurationRole | null {
+  return CURATION_ROLES.includes(bundleType as CurationRole) ? (bundleType as CurationRole) : null
+}
+
+function addedUnitOf(p: PublishedUnitRow, postId: string): UnitInsert {
+  return {
+    unit_key: `added::${postId}::${p.position}`,
+    member_ids: p.member_ids,
+    story_key: null,
+    role: roleOf(p.bundle_type),
+    rank: null,
+    tier: null,
+    reason: null,
+    alternative: null,
+    precedent_ids: [],
+    is_hand: false,
+    panel_action: null,
+    panel_at: null,
+    outcome: 'added',
+    final_role: p.bundle_type,
+    final_rank: p.position + 1,
+    matched_post_id: postId,
+    matched_heading: p.heading,
+    similarity: null,
+  }
+}
+
+/**
+ * Einen fertigen Run abgleichen: Attribution, published_units nachpflegen,
+ * Outcomes und added schreiben, Metriken am Run. Ohne Post: nur
+ * markReconciled mit attribution 'none' — KEINE Outcomes, damit der Tag in
+ * keiner Aggregation als Recall 0 zählt (Plan, Review Focus 4).
+ */
+export async function reconcileRun(
+  supabase: SupabaseAdmin,
+  run: RunRow,
+  embed: EmbedTexts,
+): Promise<{ matched: MatchResult | null; metrics: RunMetrics }> {
+  const candidates = await loadMatchCandidates(supabase, run.asof)
+  const matched = pickMatchingPost(run.asof, candidates)
+  if (!matched) {
+    const metrics = emptyMetrics('none')
+    await markReconciled(supabase, run.id, { matched_post_id: null, matched_job_id: null, metrics })
+    console.log(`[Curation] Rekonziliation ${run.day}: kein Post — attribution none`)
+    return { matched: null, metrics }
+  }
+  if (!run.pool) throw new Error(`curation_runs: Run ${run.id} ohne Pool-Snapshot`)
+
+  const post = await loadPost(supabase, matched.post_id)
+  await refreshPublishedUnits(supabase, embed, post)
+  const published = await loadPublishedUnits(supabase, matched.post_id)
+  const selectedIds = await loadSelectedIds(supabase, matched.job_id)
+
+  // WARUM Zeilen ohne Tier herausfallen: das sind added-Zeilen eines früheren
+  // Versuchs, der nach updateUnitOutcomes und vor markReconciled abbrach.
+  // Wegen unique (run_id, unit_key) (20261014090000_curation_phase1.sql:71)
+  // schlüge ihr erneuter Insert fehl, und der Run hinge in
+  // getRunsToReconcile fest.
+  const runUnits = await getRunUnits(supabase, run.id)
+  const units = runUnits.filter((u) => u.tier !== null)
+  const existingAdded = new Set(runUnits.filter((u) => u.tier === null).map((u) => u.unit_key))
+
+  const { embeddings } = await loadPoolEmbeddings(supabase, run.pool.items, embed)
+  const { outcomes, added } = reconcileOutcomes(units, published, embeddings, selectedIds, matched.post_id)
+  const addedRows = added.map((p) => addedUnitOf(p, matched.post_id)).filter((row) => !existingAdded.has(row.unit_key))
+  await updateUnitOutcomes(supabase, run.id, outcomes, addedRows)
+
+  const metrics = metricsOf({
+    units,
+    outcomes,
+    published,
+    added,
+    baseline: run.baseline,
+    snapshot: run.pool,
+    cluster: run.story_keys ?? { storyKeyOf: {}, clusters: {}, related: [] },
+    itemEmbeddings: embeddings,
+    attribution: matched.attribution,
+  })
+  await markReconciled(supabase, run.id, { matched_post_id: matched.post_id, matched_job_id: matched.job_id, metrics })
+  console.log(
+    `[Curation] Rekonziliation ${run.day}: Post ${matched.post_id} (${matched.attribution}) · UnitRecall@20 ${metrics.unit_recall_20.toFixed(2)} · ${added.length} Zugaben`,
+  )
+  return { matched, metrics }
+}
+
+// ── Aggregation und Gate ──────────────────────────────────────────────────
+
+const MEAN_FIELDS = [
+  'unit_recall_20', 'setzlisten_recall_10', 'setzlisten_precision_10', 'duplicate_rate_recommended',
+  'cut_rate', 'additions_rate', 'held_rate', 'baseline_total_score_unit_recall_20',
+] as const
+type MeanField = typeof MEAN_FIELDS[number]
+
+export interface AggregateReport {
+  n: number
+  mean: Record<MeanField, number>
+  diff_vs_total_score_20: { n: number; mean: number; bootstrap_90: { mean: number; lo90: number; hi90: number } }
+  gate: { recall_gain: boolean | null; floor: boolean; duplicates_zero: boolean; precision_vs_hand: boolean | null }
+}
+
+/**
+ * Mittel über die attribuierten Tage und die vier Gate-Regeln (Spec
+ * „Entscheidungsregel"). Tage mit attribution 'none' fallen heraus — sie
+ * haben keinen Post, ein Recall 0 dort wäre eine erfundene Messung.
+ * Mittel ohne Daten → NaN (meanFinite, Konvention baseline-metrics.ts: eine 0
+ * sähe wie „Effekt 0, sicher" aus); jede Gate-Regel ist dann false.
+ * recall_gain zählt die Tagesdifferenzen (Tage mit Baseline), nicht alle Tage.
+ */
+export function aggregateRuns(metricsList: RunMetrics[], handPrecisionRef: number | null): AggregateReport {
+  const days = metricsList.filter((m) => m.attribution !== 'none')
+
+  const mean = {} as Record<MeanField, number>
+  for (const field of MEAN_FIELDS) mean[field] = meanFinite(days.map((d) => d[field]))
+
+  const diffs = days
+    .map((d) => d.diff_vs_total_score_20)
+    .filter((d): d is number => d !== null && Number.isFinite(d))
+  const bootstrap_90 = pairedBootstrap(diffs)
+  const diff = { n: diffs.length, mean: bootstrap_90.mean, bootstrap_90 }
+
+  const recallGain = diff.n >= GATE_MIN_DAYS ? diff.mean >= GATE_RECALL_GAIN && bootstrap_90.lo90 > 0 : null
+  const floor = mean.unit_recall_20 >= GATE_FLOOR_UNIT_RECALL_20 && mean.setzlisten_recall_10 >= GATE_FLOOR_SETZLISTE_RECALL_10
+  const duplicatesZero = mean.duplicate_rate_recommended === 0
+  const precisionVsHand = handPrecisionRef == null ? null : mean.setzlisten_precision_10 >= handPrecisionRef
+
+  return {
+    n: days.length,
+    mean,
+    diff_vs_total_score_20: diff,
+    gate: { recall_gain: recallGain, floor, duplicates_zero: duplicatesZero, precision_vs_hand: precisionVsHand },
+  }
+}
