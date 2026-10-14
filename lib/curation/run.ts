@@ -40,19 +40,24 @@ export interface RunDeps {
   now?: () => number
   budgetMs?: number
   log?: (text: string) => void
+  /**
+   * Ende des laufenden Ticks in Epoch-ms (Ruling R11). advanceRun setzt es vor
+   * jedem Phasenaufruf; ohne Wert (direkter Phasenaufruf) gilt keine Grenze.
+   */
+  deadline?: number
 }
 
 /** Arbeitszeit je Cron-Tick. maxDuration der Route ist 800 s (Task 12) — 200 s bleiben für Protokoll und Antwort. */
 export const TICK_BUDGET_MS = 600_000
 
 /**
- * Restzeit, ab der ein Tick die Chefredaktion noch startet. WARUM 420 s: ein
- * compose_day-Aufruf mit 24 000 Output-Tokens und Thinking dauert 5–7 Minuten
- * (Controller-Vorgabe Task 10, 2026-10-14; Plan 2026-10-14, Review Focus 5:
- * Timeout mitten in Compose). Startet er mit weniger Rest, beendet das
- * Function-Timeout den Tick mitten im Call — bezahlt, aber ohne Ergebnis, und
- * der Run hängt bis LEASE_STALE_MS. Besser den Tick hier beenden und compose
- * im nächsten Tick mit vollem Budget beginnen.
+ * Restzeit, ab der ein Tick einen compose-Versuch noch startet — den ersten
+ * wie die Revision. WARUM 420 s: ein compose_day-Aufruf mit 24 000
+ * Output-Tokens und Thinking dauert 5–7 Minuten (Controller-Vorgabe Task 10,
+ * 2026-10-14; Plan 2026-10-14, Review Focus 5: Timeout mitten in Compose).
+ * Startet er mit weniger Rest, beendet das Function-Timeout den Tick mitten im
+ * Call — bezahlt, aber ohne Ergebnis, und der Run hängt bis LEASE_STALE_MS.
+ * Besser den Versuch in den nächsten Tick vertagen, der mit vollem Budget beginnt.
  */
 export const COMPOSE_MIN_REMAINING_MS = 420_000
 
@@ -243,12 +248,30 @@ export async function phaseCompose(deps: RunDeps, run: RunRow): Promise<Partial<
   let attempts = run.compose_attempts
   let degraded = run.degraded
   let outOfBudget = false
+  let plan: ComposePlan | null = null
+
+  // Wiederaufnahme (Ruling R11): ein früherer Tick hat nach einem Versuch mit
+  // harten Verstößen vertagt und dessen Plan + Kritik auf dem Run gesichert —
+  // die Revision setzt genau dort an, statt den bezahlten Versuch zu verwerfen.
+  let lastPlan: ComposePlan | null = run.plan
+  let critique: Critique = run.critique ?? { hard: [], soft: [], model_hard: [], model_soft: [] }
   let hints: string[] | undefined
   let previous: ComposePlan | undefined
-  let plan: ComposePlan | null = null
-  let critique: Critique = { hard: [], soft: [], model_hard: [], model_soft: [] }
+  if (run.plan?.source === 'model' && critique.hard.length > 0) {
+    hints = revisionHints(critique.hard)
+    previous = run.plan
+  }
 
   while (attempts < MAX_COMPOSE_ATTEMPTS) {
+    // Vor JEDEM Versuch, auch der Revision: reicht die Restzeit des Ticks
+    // nicht für einen ganzen Call (COMPOSE_MIN_REMAINING_MS), wird vertagt.
+    // Die Phase bleibt 'compose', der Zwischenstand landet auf dem Run, und
+    // der nächste Tick setzt mit vollem Budget fort — ein Baseline-Fallback
+    // hier würfe einen bezahlten Versuch weg, nur weil die Uhr knapp war.
+    if (remainingMsOf(deps) < COMPOSE_MIN_REMAINING_MS) {
+      return { plan: lastPlan, critique, compose_attempts: attempts, spend_usd: spend, degraded, phase: 'compose' }
+    }
+
     const input: ComposeInput = {
       cards,
       snapshot: pool,
@@ -287,6 +310,7 @@ export async function phaseCompose(deps: RunDeps, run: RunRow): Promise<Partial<
     // bei jeder gescheiterten Reservierung.
     if (second.skipped === 'budget') degraded = withDegradation(degraded, 'budget')
     critique = { hard, soft, model_hard: second.hard, model_soft: second.soft }
+    lastPlan = composed.plan
 
     if (hard.length === 0) {
       plan = composed.plan
@@ -298,8 +322,9 @@ export async function phaseCompose(deps: RunDeps, run: RunRow): Promise<Partial<
     previous = composed.plan
   }
 
-  // Kein gültiger Modellplan (Budget fehlte oder beide Versuche verletzten
-  // harte Regeln): der Tag bekommt trotzdem einen Plan. Die total_score-
+  // Kein gültiger Modellplan, obwohl keine Restzeit-Vertagung mehr möglich ist:
+  // Budget fehlte, oder beide Versuche sind verbraucht — mit harten Verstößen
+  // oder im Timeout gestorben. Der Tag bekommt trotzdem einen Plan. Die total_score-
   // Baseline ist dasselbe Verfahren, mit dem der Run später verglichen wird —
   // ein Fallback, der den Vergleich nicht verfälscht und keinen Call kostet.
   if (!plan) {
@@ -332,12 +357,15 @@ const PHASES: Record<Exclude<RunPhase, 'finished'>, Phase> = {
 export async function advanceRun(deps: RunDeps, run: RunRow): Promise<{ phase: RunPhase; finished: boolean; note: string }> {
   const now = deps.now ?? Date.now
   const budgetMs = deps.budgetMs ?? TICK_BUDGET_MS
-  const startedAt = now()
+  // Das Tick-Ende als absolute Zeit an die Phasen: phaseCompose prüft es vor
+  // JEDEM Versuch selbst (Ruling R11), die Prüfung hier unten deckt nur den
+  // Eintritt in die Phase ab. Bei budgetMs = Infinity ist auch deadline Infinity.
+  const phaseDeps: RunDeps = { ...deps, deadline: now() + budgetMs }
   let current = run
 
   while (current.phase !== 'finished') {
     const phase = current.phase
-    const remainingMs = budgetMs - (now() - startedAt)
+    const remainingMs = remainingMsOf(phaseDeps)
     if (remainingMs <= 0) {
       return { phase, finished: false, note: 'Tick-Budget aufgebraucht' }
     }
@@ -349,7 +377,7 @@ export async function advanceRun(deps: RunDeps, run: RunRow): Promise<{ phase: R
 
     let patch: Partial<RunRow>
     try {
-      patch = await PHASES[phase](deps, current)
+      patch = await PHASES[phase](phaseDeps, current)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       if (!message.startsWith(POOL_SMALL)) throw err
@@ -360,6 +388,17 @@ export async function advanceRun(deps: RunDeps, run: RunRow): Promise<{ phase: R
 
     current = { ...current, ...patch }
     await saveRunState(deps.supabase, current.id, patch)
+
+    // Dieselbe Phase zurück heißt: die Phase hat ihren Zwischenstand gesichert,
+    // aber die Restzeit reicht nicht für ihren nächsten Schritt (phaseCompose
+    // vor einem Versuch, R11). Kein Fortschritt mehr in diesem Tick.
+    if (current.phase === phase) {
+      const note = `Phase ${phase} vertagt (Restzeit ${Math.round(remainingMsOf(phaseDeps) / 1000)} s)`
+      await appendRunLog(deps.supabase, current, [{ at: stamp(), text: note, ok: true }])
+      deps.log?.(`[Curation] ${current.day}: ${note}`)
+      return { phase, finished: false, note }
+    }
+
     const text = `Phase ${phase} fertig (${current.spend_usd.toFixed(2)} USD)`
     await appendRunLog(deps.supabase, current, [{ at: stamp(), text, ok: true }])
     deps.log?.(`[Curation] ${current.day}: ${text}`)
@@ -476,6 +515,12 @@ function scoutEstimateUsd(model: string, batch: PoolSnapshotItem[]): number {
  */
 function composeSeed(asof: string, attempt: number): number {
   return Number(asof.slice(0, 10).replace(/-/g, '')) + attempt
+}
+
+/** Restzeit bis deps.deadline; ohne deadline (direkter Phasenaufruf, runDayInline) unbegrenzt. */
+function remainingMsOf(deps: RunDeps): number {
+  const now = deps.now ?? Date.now
+  return (deps.deadline ?? Number.POSITIVE_INFINITY) - now()
 }
 
 function withDegradation(degraded: Degradation[], reason: Degradation): Degradation[] {

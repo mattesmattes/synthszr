@@ -347,6 +347,81 @@ describe('phaseCompose', () => {
     expect(patch.degraded).toEqual(['critic'])
     expect(patch.plan?.source).toBe('model')
   })
+
+  // Ruling R11: Restzeit vor JEDEM Versuch, Vertagung statt Fallback, Wiederaufnahme aus plan + critique.
+  const savedCritique = () => ({ hard: ['cover_count:2'], soft: [], model_hard: [], model_soft: [] })
+  const resumed = (saved: ReturnType<typeof plan>) => ({ ...ready(), compose_attempts: 1, plan: saved, critique: savedCritique(), spend_usd: 0.7 })
+
+  it('R11 (a): Restzeit 300 s beim Eintritt in compose → kein Call, Phase bleibt compose, finished false', async () => {
+    const r = await advanceRun(deps({ budgetMs: 300_000 }), ready())
+    expect(r).toMatchObject({ phase: 'compose', finished: false })
+    expect(m.composeDay).not.toHaveBeenCalled()
+  })
+
+  it('R11 (a): phaseCompose vertagt selbst vor dem ersten Versuch und behaelt den Zwischenstand des Runs', async () => {
+    const saved = { ...plan(), thesis: 'aus Tick 1' }
+    const patch = await phaseCompose(deps({ deadline: 300_000 }), resumed(saved))
+    expect(m.composeDay).not.toHaveBeenCalled()
+    expect(m.baselinePlan).not.toHaveBeenCalled()
+    expect(patch).toEqual({ plan: saved, critique: savedCritique(), compose_attempts: 1, spend_usd: 0.7, degraded: [], phase: 'compose' })
+  })
+
+  it('R11 (b): Versuch 1 mit Hard-Verstoss, danach < 420 s Rest → vertagt mit Modellplan und Kritik, kein compose_fallback', async () => {
+    let t = 0
+    m.composeDay.mockImplementation(async () => {
+      t += 300_000
+      return { plan: plan(), costUsd: 0.5, model: 'o' }
+    })
+    m.checkHardRules.mockReturnValue(['cover_count:2'])
+    m.critiqueWithModel.mockResolvedValue({ hard: [], soft: [], costUsd: 0.05 })
+    const r = await advanceRun(deps({ now: () => t, budgetMs: 600_000 }), ready())
+    expect(m.composeDay).toHaveBeenCalledTimes(1)
+    expect(r).toMatchObject({ phase: 'compose', finished: false })
+    expect(r.note).toContain('vertagt')
+    const patch = m.saveRunState.mock.calls.at(-1)![2]
+    expect(patch.phase).toBe('compose')
+    expect(patch.plan.source).toBe('model')
+    expect(patch.critique.hard).toEqual(['cover_count:2'])
+    expect(patch.compose_attempts).toBe(1)
+    expect(patch.spend_usd).toBeCloseTo(0.55)
+    expect(patch.degraded).not.toContain('compose_fallback')
+    expect(m.baselinePlan).not.toHaveBeenCalled()
+    expect(m.appendRunLog.mock.calls.at(-1)![2][0].text).toContain('Phase compose vertagt')
+    expect(m.finishRun).not.toHaveBeenCalled()
+  })
+
+  it('R11 (c): Wiederaufnahme — Revision mit gesicherten Hinweisen und Vorplan; erneuter Hard-Verstoss → Baseline + compose_fallback', async () => {
+    const saved = { ...plan(), thesis: 'aus Tick 1' }
+    m.composeDay.mockResolvedValue({ plan: plan(), costUsd: 0.5, model: 'o' })
+    m.checkHardRules.mockReturnValue(['cover_count:2'])
+    m.critiqueWithModel.mockResolvedValue({ hard: [], soft: [], costUsd: 0.05 })
+    const patch = await phaseCompose(deps({ deadline: 600_000 }), resumed(saved))
+    expect(m.composeDay).toHaveBeenCalledTimes(1)
+    const input = m.composeDay.mock.calls[0][1]
+    expect(input.revisionHints).toEqual(['cover_count:2'])
+    expect(input.previousPlan).toBe(saved)
+    expect(input.seed).toBe(20261016)
+    expect(patch.plan?.source).toBe('baseline')
+    expect(patch.degraded).toEqual(['compose_fallback'])
+    expect(patch.compose_attempts).toBe(2)
+    expect(patch.phase).toBe('units')
+  })
+
+  it('R11 (c): Wiederaufnahme mit sauberer Revision → Modellplan, phase units', async () => {
+    const saved = { ...plan(), thesis: 'aus Tick 1' }
+    const revised = { ...plan(), thesis: 'revidiert' }
+    m.composeDay.mockResolvedValue({ plan: revised, costUsd: 0.5, model: 'o' })
+    m.checkHardRules.mockReturnValue([])
+    m.critiqueWithModel.mockResolvedValue({ hard: [], soft: [], costUsd: 0.05 })
+    const patch = await phaseCompose(deps({ deadline: 600_000 }), resumed(saved))
+    expect(m.composeDay).toHaveBeenCalledTimes(1)
+    expect(m.composeDay.mock.calls[0][1].previousPlan).toBe(saved)
+    expect(patch.plan).toBe(revised)
+    expect(patch.critique?.hard).toEqual([])
+    expect(patch.compose_attempts).toBe(2)
+    expect(patch.degraded).toEqual([])
+    expect(patch.phase).toBe('units')
+  })
 })
 
 it('reserveBudget', () => {
