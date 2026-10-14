@@ -59,8 +59,12 @@ export function clusterPool(
   }
 
   // Anfuehrer-Kandidaten in Rangfolge: Hand (ohne schon vergebenen Techmeme-Key) → Techmeme-Anfuehrer → Rest.
+  // WARUM techmemeLeaders sortiert (M1): ohne total_score-Sortierung haenge
+  // die Reihenfolge konkurrierender Techmeme-Anfuehrer (falls sich zwei
+  // Stories embedding-maessig aehneln) von der zufaelligen Reihenfolge in
+  // snapshot.items ab statt von einem nachvollziehbaren Kriterium.
   const handLeaders = snapshot.items.filter((item) => item.hand && !storyKeyOf[item.id]).sort(byScoreDesc)
-  const techmemeLeaders = snapshot.items.filter((item) => leaderIdOfStory.has(item.id))
+  const techmemeLeaders = snapshot.items.filter((item) => leaderIdOfStory.has(item.id)).sort(byScoreDesc)
   const restItems = snapshot.items.filter((item) => !item.hand && !storyKeyOf[item.id]).sort(byScoreDesc)
   const ordered = [...handLeaders, ...techmemeLeaders, ...restItems]
 
@@ -81,9 +85,47 @@ export function clusterPool(
   for (const drop of clustered.dropped) {
     // `similarTo` ist die ID des Anfuehrers, an den clusterByEmbedding
     // angehaengt hat (bereits oben mit seinem story_key versehen).
-    const storyKey = storyKeyOf[drop.similarTo] ?? drop.similarTo
-    storyKeyOf[drop.id] = storyKey
-    ;(clusters[storyKey] ??= []).push(drop.id)
+    const targetKey = storyKeyOf[drop.similarTo] ?? drop.similarTo
+    const ownTechmemeKey = leaderIdOfStory.get(drop.id)
+
+    if (ownTechmemeKey === undefined) {
+      // Normalfall: ein Hand- oder Pipeline-Item haengt an seinem Anfuehrer an.
+      storyKeyOf[drop.id] = targetKey
+      ;(clusters[targetKey] ??= []).push(drop.id)
+      continue
+    }
+
+    // Controller-Ruling R9 (Nachtrag zu Anhang A §3.4, Spec „Merge >= 0,8
+    // inkl. Handselektionen und Techmeme-Stories"): `drop.id` ist selbst ein
+    // Techmeme-Anfuehrer und wird hier von clusterByEmbedding als Duplikat
+    // eines frueher gehaltenen Anfuehrers (`targetKey`) verworfen. Der
+    // Normalfall-Pfad wuerde storyKeyOf[drop.id] stillschweigend auf
+    // targetKey umbiegen und clusters[ownTechmemeKey] (die Techmeme-Story
+    // dieses Anfuehrers) verwaist zuruecklassen: zwei Cluster zeigten dann
+    // auf denselben Member, und kein gueltiger Key verwiese mehr auf die
+    // uebrigen Story-Mitglieder (Review C1). Statt Ueberschreiben: beide
+    // Cluster werden zusammengelegt. Traegt targetKey selbst ein 'tm:'-Praefix
+    // (Techmeme <-> Techmeme), gewinnt der FRUEHER vergebene Key (targetKey,
+    // sein Anfuehrer stand frueher in `ordered`); sonst (Hand- oder
+    // Pipeline-Anfuehrer ohne 'tm:'-Key) gewinnt der Techmeme-Key des gerade
+    // verworfenen Anfuehrers — ein redaktionell vorgeclustertes Techmeme-
+    // Thema darf nicht unter einer gewoehnlichen Item-ID verschwinden. Die
+    // Mitglieder des unterlegenen Clusters haengen an den gewinnenden an
+    // (dessen bisheriger Anfuehrer bleibt Position 0), ihr storyKeyOf wird
+    // auf den gewinnenden Key aktualisiert, der unterlegene Key entfaellt aus
+    // `clusters`. clusters[targetKey] und clusters[ownTechmemeKey] existieren
+    // an dieser Stelle immer (kept-Schleife bzw. Techmeme-Vorcluster-Schleife
+    // haben sie weiter oben angelegt).
+    const targetIsTechmeme = targetKey.startsWith('tm:')
+    const winningKey = targetIsTechmeme ? targetKey : ownTechmemeKey
+    const losingKey = targetIsTechmeme ? ownTechmemeKey : targetKey
+    const winningMembers = clusters[winningKey]
+    const losingMembers = clusters[losingKey]
+    clusters[winningKey] = targetIsTechmeme
+      ? [...winningMembers, ...losingMembers]
+      : [...losingMembers, ...winningMembers]
+    for (const id of losingMembers) storyKeyOf[id] = winningKey
+    delete clusters[losingKey]
   }
 
   // related: Paare zwischen den KEPT-Anfuehrern, die knapp unter der
@@ -96,7 +138,11 @@ export function clusterPool(
     if (!embeddingA?.length) continue
     for (let j = i + 1; j < leaderIds.length; j++) {
       const embeddingB = embeddings.get(leaderIds[j])
-      if (!embeddingB?.length) continue
+      // WARUM Laengencheck vor cosineSimilarity (Vertrag §0, Review I1):
+      // cosineSimilarity wirft bei Dimensionsungleichheit (generator.ts:137)
+      // — ein Altbestands-Embedding mit anderem Modell oder ein korrupter
+      // Cache-Eintrag darf nicht den ganzen clusterPool-Aufruf abbrechen.
+      if (!embeddingB?.length || embeddingB.length !== embeddingA.length) continue
       const similarity = cosineSimilarity(embeddingA, embeddingB)
       if (similarity < RELATED_MIN || similarity >= threshold) continue
       related.push([storyKeyOf[leaderIds[i]], storyKeyOf[leaderIds[j]], Number(similarity.toFixed(3))])
