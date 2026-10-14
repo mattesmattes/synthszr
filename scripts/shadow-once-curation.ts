@@ -15,6 +15,12 @@
  * Modellaufruf (Ruling R12, wie backtest-curation.ts) — zeigt Pool-Groesse,
  * Ausschluesse, Stories und Hand-Anteil, Run endet als `cancelled`.
  *
+ * Rekonziliation (Final-Review 2026-10-14 (R21)): nur, wenn das
+ * Abgleichfenster (24 h nach `asof`) geschlossen ist — sonst fehlt der Post
+ * des Tages meist noch, und ein Abgleich schriebe dauerhaft attribution
+ * 'none'. Den Shadow-Run gleicht dann der Cron am Folgetag ab.
+ * `--force` gleicht trotzdem sofort ab.
+ *
  * Fehler des Laufs (Fix-Runde 1, Review Important #1, "dasselbe Muster wie
  * backtest-curation.ts"): ein Fehler in runDayInline oder der anschliessenden
  * Rekonziliation wird geloggt, der Run per `finishRun(...,'error',message)`
@@ -25,6 +31,7 @@
  * Lauf: pnpm curation:shadow-once -- --dry-run
  *       pnpm curation:shadow-once
  *       pnpm curation:shadow-once -- --asof 2026-10-14T04:25:00.000Z
+ *       pnpm curation:shadow-once -- --asof 2026-10-12T04:25:00.000Z --force
  */
 import { config } from 'dotenv'
 import { existsSync } from 'node:fs'
@@ -53,6 +60,7 @@ async function main(): Promise<number> {
     return 1
   }
   const dryRun = argv.includes('--dry-run')
+  const force = argv.includes('--force')
   const asof = asofArg ?? new Date().toISOString()
 
   const { dryRunPoolLine } = await import('@/lib/curation/backtest')
@@ -62,7 +70,7 @@ async function main(): Promise<number> {
   const { generateEmbeddings } = await import('@/lib/embeddings/generator')
   const { createRun, finishRun, loadCurationSettings } = await import('@/lib/curation/service')
   const { phaseCluster, phasePool, runDayInline } = await import('@/lib/curation/run')
-  const { reconcileRun } = await import('@/lib/curation/reconcile')
+  const { isMatchWindowOpen, reconcileRun } = await import('@/lib/curation/reconcile')
   const supabase = createAdminClient()
 
   const day = berlinDay(asof)
@@ -123,14 +131,20 @@ async function main(): Promise<number> {
       return 1
     }
 
-    // WARUM sofort und nicht ueber getRunsToReconcile (service.ts, 10 min
-    // Vorlauf): ein manuell angestossener Einzellauf soll sein Ergebnis beim
-    // Beenden des Scripts zeigen, nicht erst beim naechsten Cron-Tick.
-    const { matched, metrics } = await reconcileRun(supabase, finished, embed)
-    console.log(
-      `[Curation] ${day}: Rekonziliation — ${matched ? `Post ${matched.post_id} (${matched.attribution})` : 'kein Post (zu frueh?)'} `
-      + `· UnitRecall@20 ${metrics.unit_recall_20.toFixed(2)}`,
-    )
+    // WARUM nur bei geschlossenem Abgleichfenster (Final-Review 2026-10-14
+    // (R21)): ein Lauf mit asof von heute faende den Post des Tages noch
+    // nicht und schriebe reconciled_at mit attribution 'none' — endgueltig.
+    // Dann uebernimmt der Cron am Folgetag (getRunsToReconcile). Ein
+    // nachgeholter Lauf fuer einen frueheren Tag (--asof) gleicht sofort ab.
+    if (!force && isMatchWindowOpen(finished.asof, Date.now())) {
+      console.log(`[Curation] ${day}: Abgleichfenster noch offen, Rekonziliation übersprungen`)
+    } else {
+      const { matched, metrics } = await reconcileRun(supabase, finished, embed)
+      console.log(
+        `[Curation] ${day}: Rekonziliation — ${matched ? `Post ${matched.post_id} (${matched.attribution})` : 'kein Post (zu frueh?)'} `
+        + `· UnitRecall@20 ${metrics.unit_recall_20.toFixed(2)}`,
+      )
+    }
   } catch (err) {
     // WARUM hier fangen (Fix-Runde 1, Review Important #1, dasselbe Muster
     // wie backtest-curation.ts): ohne diesen Fang springt ein Fehler aus

@@ -3,7 +3,7 @@
  * Nach-Rekonziliation der Morgenkonferenz, Phase 1 „Shadow" (Task 14):
  * holt alle Laeufe mit status='done' und reconciled_at IS NULL nach — der
  * Normalfall ist der Shadow-Cron selbst (getRunsToReconcile, service.ts,
- * zehn Minuten nach `asof`), dieses Script ist der Nachschlag fuer alles,
+ * 24 h nach `asof`), dieses Script ist der Nachschlag fuer alles,
  * was dabei liegen geblieben ist (ein ausgefallener Tick, ein Lauf, dessen
  * Post erst Tage spaeter veroeffentlicht wurde) oder fuer Backtest-Laeufe,
  * die aus irgendeinem Grund ohne sofortige Rekonziliation endeten.
@@ -15,6 +15,9 @@
  * `--dry-run`: zeigt je offenem Lauf nur das Ergebnis von pickMatchingPost
  * (loadMatchCandidates + pickMatchingPost, beides rein bzw. lesend) — KEIN
  * reconcileRun, also keine Schreibzugriffe.
+ * Laeufe mit offenem Abgleichfenster (asof juenger als 24 h) werden
+ * uebersprungen (Final-Review 2026-10-14 (R21)) — ihr Post fehlt meist noch,
+ * ein Abgleich schriebe dauerhaft attribution 'none'. `--force` uebersteuert.
  * `--report`: zusaetzlich aggregateRuns ueber ALLE bereits rekonziliierten
  * Laeufe (reconciled_at IS NOT NULL) je angefragtem Modus — der aktuelle
  * Gate-Stand, nicht nur die in diesem Lauf frisch abgeglichenen Tage.
@@ -34,9 +37,9 @@ const MODES: readonly RunMode[] = ['shadow', 'backtest']
 /** Seitengroesse fuer .range() (Vertrag 0: Scheiben à 1000/200 — hier die schmale 1000er-Seite, keine Payload-Spalten). */
 const PAGE = 1000
 
-interface ReconcileArgs { mode: RunMode | undefined; since: string | undefined; dryRun: boolean; report: boolean }
+interface ReconcileArgs { mode: RunMode | undefined; since: string | undefined; dryRun: boolean; report: boolean; force: boolean }
 
-/** `--mode shadow|backtest`, `--since YYYY-MM-DD`, `--dry-run`, `--report` — `=`- und Leerzeichen-Form, invalider Wert → null. */
+/** `--mode shadow|backtest`, `--since YYYY-MM-DD`, `--dry-run`, `--report`, `--force` — `=`- und Leerzeichen-Form, invalider Wert → null. */
 function parseReconcileArgs(argv: string[]): ReconcileArgs | null {
   const modeIdx = argv.findIndex((a) => a === '--mode' || a.startsWith('--mode='))
   let mode: RunMode | undefined
@@ -54,7 +57,13 @@ function parseReconcileArgs(argv: string[]): ReconcileArgs | null {
     since = raw
   }
 
-  return { mode, since, dryRun: argv.includes('--dry-run'), report: argv.includes('--report') }
+  return {
+    mode,
+    since,
+    dryRun: argv.includes('--dry-run'),
+    report: argv.includes('--report'),
+    force: argv.includes('--force'),
+  }
 }
 
 async function main(): Promise<number> {
@@ -67,7 +76,7 @@ async function main(): Promise<number> {
   const { BASELINE_FILE, handPrecisionRefOf } = await import('@/lib/curation/backtest')
   const { createAdminClient } = await import('@/lib/supabase/admin')
   const { generateEmbeddings } = await import('@/lib/embeddings/generator')
-  const { aggregateRuns, loadMatchCandidates, pickMatchingPost, reconcileRun } = await import('@/lib/curation/reconcile')
+  const { aggregateRuns, isMatchWindowOpen, loadMatchCandidates, pickMatchingPost, reconcileRun } = await import('@/lib/curation/reconcile')
   const supabase = createAdminClient()
   const embed = (texts: string[]) => generateEmbeddings(texts, { batchSize: 16 })
   const modes = args.mode ? [args.mode] : [...MODES]
@@ -83,7 +92,14 @@ async function main(): Promise<number> {
   const open = await loadOpenRuns(supabase, modes, args.since)
   console.log(`[Curation] ${open.length} offene Laeufe (done, reconciled_at null).`)
 
+  const nowMs = Date.now()
   for (const run of open) {
+    // Final-Review 2026-10-14 (R21): ein junger Run bekaeme jetzt dauerhaft
+    // attribution 'none' — er wartet, bis sein Abgleichfenster zu ist.
+    if (!args.force && isMatchWindowOpen(run.asof, nowMs)) {
+      console.log(`[Curation] ${run.day}: Abgleichfenster noch offen, Rekonziliation übersprungen`)
+      continue
+    }
     if (args.dryRun) {
       const candidates = await loadMatchCandidates(supabase, run.asof)
       const matched = pickMatchingPost(run.asof, candidates)

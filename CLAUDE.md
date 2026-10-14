@@ -391,13 +391,20 @@ die `total_score`-Baseline kommt nur zum Zug, wenn der Compose-Aufruf selbst
 am Budget scheitert oder beide Versuche ohne gültigen Plan enden.
 
 **Rekonziliation** (`lib/curation/reconcile.ts`, `reconcileRun`, über
-`getRunsToReconcile` zehn Minuten nach `asof`): Attribution-Kaskade
+`getRunsToReconcile` erst nach dem Abgleichfenster, `MATCH_WINDOW_MS` = 24 h
+nach `asof` — der Kickoff-Tick des Folgetags gleicht den Vortag ab, bevor der
+neue Run vorankommt; früher fände sie den Post noch nicht und schriebe
+dauerhaft `attribution: 'none'`): Attribution-Kaskade
 (`pickMatchingPost`) — zuerst der jüngste manuell zugeordnete
 `article_jobs`-Eintrag (`job`), sonst der nächste `published_at` danach
 (`published_at`), sonst derselbe Berlin-Tag (`created_at_day`), sonst kein
 Treffer. Pflegt `published_units` über `processPost`
 (`scripts/lib/published-units-backfill.ts`) nach — ohne das veraltet der
 Archivbrief nach dem ersten Tag, weil beim Publish kein Hook schreibt.
+Ein Fehler beim Abgleich blockiert den Advance nicht: der Tick protokolliert
+`reconcile_error` am Run und arbeitet weiter; nach drei Fehlversuchen wird
+der Run mit `reconciled_at`, `metrics: null` und `reconcile_failed`
+abgeschlossen (zählt in keinem Aggregat).
 
 **Admin:** `/admin/curation` (read-only, `app/api/admin/curation/runs/route.ts`)
 — Läufe, drei Tiers, Metriken, Protokoll.
@@ -409,10 +416,13 @@ Archivbrief nach dem ersten Tag, weil beim Publish kein Hook schreibt.
   plus letzte 30 Tage, `runDayInline` je Tag mit sofortiger Rekonziliation;
   u. a. `--last`, `--brief`, `--sequential`, `--max-usd`, `--force`.
 - `pnpm curation:shadow-once` (`scripts/shadow-once-curation.ts`) — ein Lauf
-  in einem Rutsch, von Hand angestoßen; `--asof`.
+  in einem Rutsch, von Hand angestoßen; `--asof`. Gleicht nur ab, wenn das
+  Abgleichfenster (24 h nach `asof`) zu ist, sonst übernimmt der Cron am
+  Folgetag; `--force` gleicht sofort ab.
 - `pnpm curation:reconcile` (`scripts/reconcile-curation.ts`) — Nachschlag für
   liegen gebliebene Läufe; `--mode shadow|backtest`, `--since YYYY-MM-DD`,
-  `--report` (aggregiert alle rekonziliierten Läufe des angefragten Modus).
+  `--report` (aggregiert alle rekonziliierten Läufe des angefragten Modus);
+  überspringt Läufe mit offenem Abgleichfenster, außer mit `--force`.
 
 **Testregel:** Tests laufen mit `SUPABASE_SERVICE_ROLE_KEY=` (leer
 vorangestellt), damit kein Test auf Prod schreibt.
@@ -437,7 +447,8 @@ unter der `total_score`-Baseline liegt.
    insert into settings (key, value) values ('curation_operator_rules', '{"text": ""}'::jsonb) on conflict (key) do nothing;
    ```
 5. Deploy auf `main` (Vercel-Cron `*/1` ist in `vercel.json`); am nächsten
-   Morgen ab 04:26 UTC entsteht der Run, Rekonziliation läuft nach dem Publish.
+   Morgen ab 04:26 UTC entsteht der Run. Am Folgetag ab 04:26 UTC
+   rekonziliiert der Kickoff-Tick den Vortag vor dem neuen Run.
 6. Nach 20 Shadow-Tagen: `aggregateRuns` über `/admin/curation` oder
    `pnpm curation:reconcile -- --report`; Gate-Entscheidung durch den Betreiber.
 

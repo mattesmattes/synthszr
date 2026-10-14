@@ -25,7 +25,7 @@ vi.mock('@/lib/curation/service', async (orig) => ({
 }))
 
 import {
-  aggregateRuns, loadMatchCandidates, metricsOf, pickMatchingPost, reconcileOutcomes, reconcileRun,
+  aggregateRuns, isMatchWindowOpen, loadMatchCandidates, metricsOf, pickMatchingPost, reconcileOutcomes, reconcileRun,
 } from '@/lib/curation/reconcile'
 import type { RunMetrics, RunRow, UnitRow } from '@/lib/curation/types'
 
@@ -355,6 +355,13 @@ describe('aggregateRuns', () => {
     expect(a.gate.precision_vs_hand).toBe(true)
   })
 
+  it('R22: Laeufe mit metrics null (Abgleich fehlgeschlagen) fallen heraus', () => {
+    const list = [...Array.from({ length: 5 }, () => mk(0.6, 0.4)), null]
+    const a = aggregateRuns(list, null)
+    expect(a.n).toBe(5)
+    expect(a.mean.unit_recall_20).toBeCloseTo(0.6)
+  })
+
   it('Tage mit published_units = 0 zaehlen nicht (keine Messung)', () => {
     const list = [...Array.from({ length: 5 }, () => mk(0.6, 0.4)), { ...mk(0, 0), published_units: 0 }]
     const a = aggregateRuns(list, null)
@@ -488,5 +495,15 @@ describe('reconcileRun', () => {
     await expect(reconcileRun(client, RUN, embed)).rejects.toThrow('gemini down')
     expect(m.updateUnitOutcomes).not.toHaveBeenCalled()
     expect(m.markReconciled).not.toHaveBeenCalled()
+  })
+})
+
+describe('isMatchWindowOpen', () => {
+  const now = Date.parse('2026-10-15T05:00:00.000Z')
+  it('R21: offen fuer asof juenger als 24 h, geschlossen ab 24 h', () => {
+    expect(isMatchWindowOpen('2026-10-15T04:25:00.000Z', now)).toBe(true)
+    expect(isMatchWindowOpen(new Date(now - 23 * 3600 * 1000).toISOString(), now)).toBe(true)
+    expect(isMatchWindowOpen(new Date(now - 24 * 3600 * 1000).toISOString(), now)).toBe(false)
+    expect(isMatchWindowOpen(new Date(now - 25 * 3600 * 1000).toISOString(), now)).toBe(false)
   })
 })

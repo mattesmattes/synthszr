@@ -10,6 +10,7 @@
 import type { SupabaseAdmin } from '@/lib/news-queue/events'
 import {
   DEFAULT_CURATION_SETTINGS,
+  MATCH_WINDOW_MS,
   RUN_SUMMARY_COLUMNS,
   type BriefMode,
   type CurationSettings,
@@ -262,13 +263,17 @@ export async function getRunUnits(supabase: SupabaseAdmin, runId: string): Promi
 
 /**
  * Shadow-Laeufe, die fertig sind und noch nicht mit dem tatsaechlich
- * veroeffentlichten Post abgeglichen wurden. 10 Minuten Vorlauf gegen `asof`:
- * der Ghostwriter braucht nach dem Kickoff noch Zeit, der Post existiert bei
- * `asof` selbst in aller Regel noch nicht — ein Abgleich sofort nach 'done'
- * faende systematisch keinen Treffer.
+ * veroeffentlichten Post abgeglichen wurden — erst, wenn ihr Abgleichfenster
+ * (MATCH_WINDOW_MS = 24 h nach `asof`) geschlossen ist.
+ * WARUM nicht frueher (Final-Review 2026-10-14 (R21), C1): der Betreiber
+ * beginnt erst nach dem Kickoff, der Post traegt den Veroeffentlichungstag
+ * 07:00 MEZ. Ein Abgleich kurz nach 'done' faende keinen Post und schriebe
+ * reconciled_at mit attribution 'none' — endgueltig, denn kein Pfad holt
+ * einen abgeglichenen Run nach. So rekonziliiert der Kickoff-Tick des
+ * Folgetags den Vortag, bevor der neue Run vorankommt.
  */
 export async function getRunsToReconcile(supabase: SupabaseAdmin, nowIso: string, limit = 1): Promise<RunRow[]> {
-  const staleBefore = new Date(Date.parse(nowIso) - 600_000).toISOString()
+  const staleBefore = new Date(Date.parse(nowIso) - MATCH_WINDOW_MS).toISOString()
   const { data, error } = await supabase
     .from('curation_runs')
     .select('*')
@@ -282,11 +287,16 @@ export async function getRunsToReconcile(supabase: SupabaseAdmin, nowIso: string
   return ((data ?? []) as Record<string, unknown>[]).map(parseRunRow)
 }
 
-/** Markiert einen Run als abgeglichen: Treffer (oder null) plus Metriken, Zeitstempel mitgesetzt. */
+/**
+ * Markiert einen Run als abgeglichen: Treffer (oder null) plus Metriken,
+ * Zeitstempel mitgesetzt. `metrics: null` heisst „Abgleich nach drei
+ * Fehlversuchen aufgegeben" (Final-Review 2026-10-14 (R22)) — der Run faellt
+ * damit aus getRunsToReconcile und aus aggregateRuns.
+ */
 export async function markReconciled(
   supabase: SupabaseAdmin,
   id: string,
-  patch: { matched_post_id: string | null; matched_job_id: string | null; metrics: RunMetrics },
+  patch: { matched_post_id: string | null; matched_job_id: string | null; metrics: RunMetrics | null },
 ): Promise<void> {
   const { error } = await supabase
     .from('curation_runs')

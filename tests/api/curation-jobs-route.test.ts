@@ -26,6 +26,7 @@ const m = vi.hoisted(() => ({
   appendRunLog: vi.fn(),
   advanceRun: vi.fn(),
   listTodayRuns: vi.fn(),
+  markReconciled: vi.fn(),
 }))
 
 vi.mock('@/lib/security/cron-auth', () => ({ verifyCronAuth: m.verifyCronAuth }))
@@ -42,6 +43,7 @@ vi.mock('@/lib/curation/service', async (orig) => ({
   finishRun: m.finishRun,
   appendRunLog: m.appendRunLog,
   listRuns: m.listTodayRuns,
+  markReconciled: m.markReconciled,
 }))
 // WARUM nicht wie im Brief-Entwurf ein voller Ersatz des Moduls: run.ts
 // exportiert neben advanceRun auch TICK_BUDGET_MS, das die Route live
@@ -104,7 +106,7 @@ describe('GET /api/cron/curation-jobs', () => {
   })
 
   it('Rekonziliation hat Vorrang vor advance; naechster Tick danach idle', async () => {
-    m.getRunsToReconcile.mockResolvedValueOnce([{ id: 'old', asof: '2026-10-14T04:25:00.000Z' }])
+    m.getRunsToReconcile.mockResolvedValueOnce([{ id: 'old', asof: '2026-10-14T04:25:00.000Z', log: [] }])
     m.reconcileRun.mockResolvedValue({ matched: { post_id: 'p', job_id: 'j', attribution: 'job' }, metrics: {} })
     m.listTodayRuns.mockResolvedValue([{ id: 'today', day: '2026-10-15', mode: 'shadow', status: 'done' }])
     const { GET } = await import('@/app/api/cron/curation-jobs/route')
@@ -121,13 +123,59 @@ describe('GET /api/cron/curation-jobs', () => {
   })
 
   it('Rekonziliation: ein Fehler in reconcileRun setzt ok:false zusaetzlich zu reconcile_error', async () => {
-    m.getRunsToReconcile.mockResolvedValueOnce([{ id: 'old', asof: '2026-10-14T04:25:00.000Z' }])
+    m.getRunsToReconcile.mockResolvedValueOnce([{ id: 'old', asof: '2026-10-14T04:25:00.000Z', log: [] }])
     m.reconcileRun.mockRejectedValueOnce(new Error('reconcile kaputt'))
     m.listTodayRuns.mockResolvedValue([{ id: 'today', day: '2026-10-15', mode: 'shadow', status: 'done' }])
     const { GET } = await import('@/app/api/cron/curation-jobs/route')
     const body = await (await GET(req())).json()
     expect(body.ok).toBe(false)
     expect(body.reconcile_error).toBe('reconcile kaputt')
+  })
+
+  it('R22: reconcileRun wirft → reconcile_error am Run, Advance laeuft im selben Tick weiter', async () => {
+    const due = { id: 'old', asof: '2026-10-14T04:25:00.000Z', log: [] }
+    m.getRunsToReconcile.mockResolvedValueOnce([due])
+    m.reconcileRun.mockRejectedValueOnce(new Error('embed_failed'))
+    m.listTodayRuns.mockResolvedValue([{ id: 'r', day: '2026-10-15', mode: 'shadow', status: 'processing' }])
+    m.getNextOpenRun.mockResolvedValueOnce({ id: 'r', attempts: 0, log: [] })
+    m.claimRun.mockResolvedValueOnce(true)
+    m.advanceRun.mockResolvedValueOnce({ phase: 'finished', finished: true, note: 'done' })
+    const { GET } = await import('@/app/api/cron/curation-jobs/route')
+    const body = await (await GET(req())).json()
+    expect(m.appendRunLog).toHaveBeenCalledWith({}, due, [expect.objectContaining({ text: expect.stringContaining('reconcile_error'), ok: false })])
+    expect(m.markReconciled).not.toHaveBeenCalled()
+    expect(m.advanceRun).toHaveBeenCalledTimes(1)
+    expect(body.advanced).toBe('r')
+    expect(body.ok).toBe(false)
+    expect(body.reconcile_error).toBe('embed_failed')
+  })
+
+  it('R22: nach 3 reconcile_error-Eintraegen → markReconciled mit metrics null + reconcile_failed, kein erneuter Versuch, Advance laeuft', async () => {
+    const failed = (n: number) => ({ at: `0${n}`, text: `reconcile_error: embed_failed (${n})`, ok: false })
+    const due = { id: 'old', asof: '2026-10-14T04:25:00.000Z', log: [failed(1), failed(2), failed(3)] }
+    m.getRunsToReconcile.mockResolvedValueOnce([due])
+    m.listTodayRuns.mockResolvedValue([{ id: 'r', day: '2026-10-15', mode: 'shadow', status: 'processing' }])
+    m.getNextOpenRun.mockResolvedValueOnce({ id: 'r', attempts: 0, log: [] })
+    m.claimRun.mockResolvedValueOnce(true)
+    m.advanceRun.mockResolvedValueOnce({ phase: 'finished', finished: true, note: 'done' })
+    const { GET } = await import('@/app/api/cron/curation-jobs/route')
+    const body = await (await GET(req())).json()
+    expect(m.reconcileRun).not.toHaveBeenCalled()
+    expect(m.markReconciled).toHaveBeenCalledWith({}, 'old', { matched_post_id: null, matched_job_id: null, metrics: null })
+    expect(m.appendRunLog).toHaveBeenCalledWith({}, due, [expect.objectContaining({ text: expect.stringContaining('reconcile_failed'), ok: false })])
+    expect(m.advanceRun).toHaveBeenCalledTimes(1)
+    expect(body.reconcile_failed).toBe('old')
+  })
+
+  it('R22: zwei fruehere Fehlversuche + dritter Fehlschlag → nur Log, noch kein Abschluss', async () => {
+    const failed = (n: number) => ({ at: `0${n}`, text: `reconcile_error: x (${n})`, ok: false })
+    m.getRunsToReconcile.mockResolvedValueOnce([{ id: 'old', asof: '2026-10-14T04:25:00.000Z', log: [failed(1), failed(2)] }])
+    m.reconcileRun.mockRejectedValueOnce(new Error('x'))
+    const { GET } = await import('@/app/api/cron/curation-jobs/route')
+    await GET(req())
+    expect(m.reconcileRun).toHaveBeenCalledTimes(1)
+    expect(m.markReconciled).not.toHaveBeenCalled()
+    expect(m.appendRunLog).toHaveBeenCalledTimes(1)
   })
 
   it('advance: attempts >= MAX_ATTEMPTS → error vor der Arbeit; Exception → Log + Lease frei + ok:false', async () => {

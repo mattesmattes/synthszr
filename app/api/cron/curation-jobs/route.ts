@@ -6,7 +6,7 @@ import { generateEmbeddings } from '@/lib/embeddings/generator'
 import { berlinDay } from '@/lib/curation/precedents'
 import {
   appendRunLog, claimRun, createRun, finishRun, getNextOpenRun, getRunsToReconcile,
-  kickoffAsOf, listRuns, loadCurationSettings, releaseLease, spentTodayUsd, stamp, MAX_ATTEMPTS,
+  kickoffAsOf, listRuns, loadCurationSettings, markReconciled, releaseLease, spentTodayUsd, stamp, MAX_ATTEMPTS,
 } from '@/lib/curation/service'
 import { advanceRun, TICK_BUDGET_MS } from '@/lib/curation/run'
 import { reconcileRun } from '@/lib/curation/reconcile'
@@ -15,6 +15,17 @@ import { reconcileRun } from '@/lib/curation/reconcile'
 // (600 s, lib/curation/run.ts) laesst 200 s fuer Protokoll und Antwort.
 export const maxDuration = 800
 export const runtime = 'nodejs'
+
+/** Praefix der Protokollzeile eines gescheiterten Abgleichs — der Zaehler fuer MAX_RECONCILE_FAILURES. */
+const RECONCILE_ERROR = 'reconcile_error'
+
+/**
+ * Fehlversuche, nach denen der Abgleich eines Runs aufgegeben wird
+ * (Final-Review 2026-10-14 (R22)). Ein dauerhafter Fehler (Embedding lehnt
+ * einen Abschnitt ab, Post geloescht) soll nicht jede Minute bezahlte
+ * Embedding-Calls und rund 9 MB Egress wiederholen.
+ */
+const MAX_RECONCILE_FAILURES = 3
 
 /**
  * Minutentick der Morgenkonferenz, Phase 1 „Shadow" (Anhang A §3, Task 12):
@@ -76,20 +87,53 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 2 Rekonziliation des Vortags — eine je Tick, kurz; ein Fehler bleibt
-    // sichtbar im Body, bricht den Tick aber nicht ab (eigener Pfad, kein throw).
+    // 2 Rekonziliation des Vortags — eine je Tick, kurz. Nur ein ERFOLGREICHER
+    // Abgleich beendet den Tick (Vorrang vor Advance). Ein Fehler wird am Run
+    // protokolliert und der Tick faellt zu Schritt 3 durch (Final-Review
+    // 2026-10-14 (R22), I1): getRunsToReconcile liefert per limit 1 / asof asc
+    // immer denselben Run — ein dauerhafter Fehler blockierte sonst jeden
+    // Advance, auch den des heutigen Runs (Spec-Fehlerpfad „Rekonziliation
+    // wirft: best-effort, Log, Run laeuft weiter").
     const [due] = await getRunsToReconcile(supabase, nowIso, 1)
     if (due) {
-      try {
-        const r = await reconcileRun(supabase, due, embed)
-        out.reconciled = due.id
-        out.attribution = r.matched?.attribution ?? 'none'
-      } catch (err) {
-        console.error('[Curation] Rekonziliation fehlgeschlagen:', err)
-        out.ok = false
-        out.reconcile_error = err instanceof Error ? err.message : String(err)
+      const failures = due.log.filter((entry) => entry.text.startsWith(RECONCILE_ERROR)).length
+      if (failures >= MAX_RECONCILE_FAILURES) {
+        // Vor dem erneuten Versuch pruefen, nicht danach: der Run wird
+        // abgeschlossen, ohne noch einmal Embedding-Calls zu bezahlen.
+        // metrics null statt Nullen — aggregateRuns ignoriert ihn, das Panel
+        // zeigt „Abgleich fehlgeschlagen" statt einer Messung mit Ergebnis 0.
+        try {
+          await markReconciled(supabase, due.id, { matched_post_id: null, matched_job_id: null, metrics: null })
+          const text = `reconcile_failed: nach ${failures} Fehlversuchen aufgegeben`
+          await appendRunLog(supabase, due, [{ at: stamp(), text, ok: false }])
+          console.warn(`[Curation] Rekonziliation ${due.day} aufgegeben (${failures} Fehlversuche)`)
+          out.reconcile_failed = due.id
+        } catch (err) {
+          console.error('[Curation] Rekonziliation: Abschluss nach Fehlversuchen fehlgeschlagen:', err)
+          out.ok = false
+          out.reconcile_error = err instanceof Error ? err.message : String(err)
+        }
+      } else {
+        try {
+          const r = await reconcileRun(supabase, due, embed)
+          out.reconciled = due.id
+          out.attribution = r.matched?.attribution ?? 'none'
+          return NextResponse.json(out)
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err)
+          console.error('[Curation] Rekonziliation fehlgeschlagen:', err)
+          out.ok = false
+          out.reconcile_error = message
+          // Eigener Fang: scheitert schon das Protokoll, soll der Advance
+          // trotzdem laufen — der Fehlversuch zaehlt dann eben erst beim
+          // naechsten Tick, der Run bleibt sichtbar offen.
+          try {
+            await appendRunLog(supabase, due, [{ at: stamp(), text: `${RECONCILE_ERROR}: ${message}`, ok: false }])
+          } catch (logErr) {
+            console.error('[Curation] Rekonziliation: Protokoll fehlgeschlagen:', logErr)
+          }
+        }
       }
-      return NextResponse.json(out)
     }
 
     // 3 Advance — eine Arbeitseinheit je Tick (Muster app/api/cron/glossary-jobs/route.ts).

@@ -9,6 +9,15 @@ export type RunPhase = 'pool' | 'scout' | 'cluster' | 'archive' | 'compose' | 'u
 export type BriefMode = 'none' | 'precedents-only' | 'full'
 export type Degradation = 'pool_embeddings' | 'scout_partial' | 'archive' | 'critic' | 'compose_fallback' | 'budget'
 
+/**
+ * Abgleichfenster der Rekonziliation: der Post des Tages zaehlt, wenn er bis
+ * 24 h nach `asof` veroeffentlicht ist (Spec „Rekonziliation": same-day,
+ * ≤ 24 h). Hier statt in reconcile.ts, weil service.ts (getRunsToReconcile)
+ * dieselbe Grenze braucht und reconcile.ts service.ts importiert — eine
+ * Quelle ohne Import-Zyklus (Final-Review 2026-10-14 (R21)).
+ */
+export const MATCH_WINDOW_MS = 24 * 3600 * 1000
+
 /** Ein Item des Tages-Pools, as-of eingefroren (Snapshot auf dem Run). */
 export interface PoolSnapshotItem {
   id: string

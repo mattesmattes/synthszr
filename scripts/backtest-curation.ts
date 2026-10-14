@@ -4,7 +4,7 @@
  * §3.9/3.10): fuehrt runDayInline fuer vergangene Tage in einem Rutsch aus
  * und gleicht jeden Tag SOFORT gegen den historisch veroeffentlichten Post
  * ab (reconcileRun) — der Post ist bei einem Backtest-Tag bereits bekannt,
- * anders als beim Shadow-Betrieb, der zehn Minuten nach `asof` wartet
+ * anders als beim Shadow-Betrieb, der 24 h nach `asof` wartet
  * (getRunsToReconcile, service.ts).
  *
  * Tage: backtestDays (lib/curation/backtest.ts) — Gate-Fenster [from,to]

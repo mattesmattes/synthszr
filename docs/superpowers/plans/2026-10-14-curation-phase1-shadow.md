@@ -484,9 +484,9 @@ export async function listRuns(supabase: SupabaseAdmin, opts: { limit: number; m
   // select(RUN_SUMMARY_COLUMNS).order('day', desc).order('created_at', desc).limit
 export async function getRunUnits(supabase: SupabaseAdmin, runId: string): Promise<UnitRow[]>   // order tier, rank
 export async function getRunsToReconcile(supabase: SupabaseAdmin, nowIso: string, limit = 1): Promise<RunRow[]>
-  // mode shadow, status done, reconciled_at null, asof <= now − 10 min, order asof asc
+  // mode shadow, status done, reconciled_at null, asof <= now − MATCH_WINDOW_MS (24 h, R21), order asof asc
 export async function markReconciled(supabase: SupabaseAdmin, id: string,
-  patch: { matched_post_id: string | null; matched_job_id: string | null; metrics: RunMetrics }): Promise<void>  // + reconciled_at: now
+  patch: { matched_post_id: string | null; matched_job_id: string | null; metrics: RunMetrics | null }): Promise<void>  // + reconciled_at: now; metrics null = Abgleich aufgegeben (R22)
 export async function updateUnitOutcomes(supabase: SupabaseAdmin, runId: string,
   outcomes: Array<Pick<UnitRow, 'unit_key' | 'outcome' | 'final_role' | 'final_rank' | 'matched_post_id' | 'matched_heading' | 'similarity'>>,
   added: UnitInsert[]): Promise<void>                 // je outcome ein update .eq('run_id').eq('unit_key'); added per insert
@@ -807,6 +807,8 @@ Tasks 4, 5, 6, 7 sind untereinander unabhängig (nach 1–3); 8 und 9 nach 5; 10
 - **R18 (I2):** Plan-Listen für Recall werden wie die Baseline auf Einheiten gekappt: `unit_recall_20` über die ersten 20 Einheiten (recommended, dann bench), `setzlisten_recall_10` über recommended Rang 1–10.
 - **R19 (Task 12):** Äußerer try/catch um den Handler-Body der Cron-Route nach der Auth-Prüfung — Antwort `{ ok:false, error }` mit Status 200 plus `console.error`, damit ein DB-Fehler außerhalb der Arbeitseinheit den Cron nicht als fehlgeschlagen markiert.
 - **R20 (Task 14):** `processDay` in `backtest-curation.ts` wirft nie — `createRun` wandert in den try, die Recovery-Aufrufe im catch bekommen ein eigenes verschachteltes try/catch (Sekundärfehler werden geloggt, der Report-Eintrag notfalls lokal mit `spend 0` gebaut statt aus der DB), damit ein fehlschlagender Tag den Backtest nicht abbricht.
+- **R21 (Final C1, Plan-Defekt §3.2):** `getRunsToReconcile` liefert einen Run erst ab `asof + MATCH_WINDOW_MS` (24 h, Konstante in `types.ts`), nicht nach 10 min — der Kickoff-Tick des Folgetags gleicht den Vortag vor dem Advance des neuen Runs ab. `shadow-once` und `reconcile-curation` überspringen jüngere Runs (`isMatchWindowOpen`), `--force` übersteuert; sonst wäre jeder Shadow-Tag dauerhaft `attribution: 'none'`.
+- **R22 (Final I1):** Ein Rekonziliations-Fehler im Cron blockiert den Advance nicht: Log `reconcile_error` am Run, die Route fällt zu Schritt 3 durch; ab drei `reconcile_error`-Einträgen (vor dem nächsten Versuch geprüft) schließt `markReconciled` den Run mit `metrics: null` und Log `reconcile_failed` ab; `aggregateRuns` ignoriert `metrics: null`.
 - **Task 14:** `--force`-Flag für `BacktestArgs` (erlaubt den erneuten Lauf bereits `done`er Tage); Report-Helfer `backtestDayReportOf`/`buildBacktestReport`/`doneRunIdByDay`/`errorDayReportOf` in `lib/curation/backtest.ts`; `scripts/lib/curation-script-runner.ts` garantiert `flushUsageLog()` über `runScript(main)` im `finally`; `BacktestDayReport.run_id` ist `string | null`; `--report` in `reconcile-curation.ts` aggregiert alle rekonziliierten Läufe des angefragten Modus.
 - **Task 10:** Ein beim Kritiker mit Grund `budget` degradierter Lauf bedeutet nicht mehr „Plan ist Baseline" — reicht das Budget nur für den Kritiker-Aufruf nicht, bleibt der Plan des letzten Compose-Versuchs erhalten (sofern er ohne harte Verstöße durchläuft), nur der Kritiker-Durchgang entfällt; die Baseline kommt ausschließlich zum Zug, wenn der Compose-Aufruf selbst am Budget scheitert oder beide Versuche ohne gültigen Plan enden.
 

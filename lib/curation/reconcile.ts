@@ -30,6 +30,7 @@ import { DEFAULT_DEDUP_THRESHOLD, parseEmbedding } from '@/lib/news-queue/semant
 import { processPost, type EmbedTexts, type PostRow } from '@/scripts/lib/published-units-backfill'
 import {
   CURATION_ROLES,
+  MATCH_WINDOW_MS,
   type BaselineLists, type ClusterResult, type CurationRole, type CurationTier, type PoolSnapshot,
   type RunMetrics, type RunRow, type UnitInsert, type UnitOutcome, type UnitRow,
 } from '@/lib/curation/types'
@@ -37,8 +38,6 @@ import {
 const HOUR_MS = 3600 * 1000
 /** Ein Tages-Job darf bis zu 2 h vor dem Kickoff angelegt sein (Anhang A §3.10). */
 const JOB_LEAD_MS = 2 * HOUR_MS
-/** Spec „Rekonziliation": der nächste veröffentlichte Post nach dem Run, same-day, ≤ 24 h — nicht 48 h. */
-const MATCH_WINDOW_MS = 24 * HOUR_MS
 /** Kandidaten-Fenster auf generated_posts.created_at (Anhang A §3.10), deckt den Tag-Fallback ab. */
 const POST_CREATED_WINDOW_MS = 36 * HOUR_MS
 const POST_COLUMNS = 'id, status, created_at, published_at'
@@ -128,6 +127,17 @@ export function pickMatchingPost(asOf: string, c: MatchCandidates): MatchResult 
   if (byDay) return { post_id: byDay.id, job_id: null, attribution: 'created_at_day' }
 
   return null
+}
+
+/**
+ * Steht das Abgleichfenster eines Runs noch offen (asof juenger als
+ * MATCH_WINDOW_MS)? Dann kann der Post des Tages noch fehlen — ein Abgleich
+ * jetzt schriebe dauerhaft attribution 'none' (Final-Review 2026-10-14 (R21)).
+ * Die Scripts ueberspringen solche Runs, der Cron liefert sie erst gar nicht
+ * (getRunsToReconcile, service.ts).
+ */
+export function isMatchWindowOpen(asof: string, nowMs: number): boolean {
+  return Date.parse(asof) > nowMs - MATCH_WINDOW_MS
 }
 
 function isoOf(ms: number): string {
@@ -728,8 +738,11 @@ export interface AggregateReport {
  * sähe wie „Effekt 0, sicher" aus); jede Gate-Regel ist dann false.
  * recall_gain zählt die Tagesdifferenzen (Tage mit Baseline), nicht alle Tage.
  */
-export function aggregateRuns(metricsList: RunMetrics[], handPrecisionRef: number | null): AggregateReport {
-  const days = metricsList.filter((m) => m.attribution !== 'none' && m.published_units > 0)
+export function aggregateRuns(metricsList: ReadonlyArray<RunMetrics | null>, handPrecisionRef: number | null): AggregateReport {
+  // metrics null: der Abgleich ist nach drei Fehlversuchen aufgegeben worden
+  // (Final-Review 2026-10-14 (R22)) — es gibt keine Messung, also auch keinen Tag.
+  const measured = metricsList.filter((m): m is RunMetrics => m !== null)
+  const days = measured.filter((m) => m.attribution !== 'none' && m.published_units > 0)
 
   const mean = {} as Record<MeanField, number>
   for (const field of MEAN_FIELDS) mean[field] = meanFinite(days.map((d) => d[field]))

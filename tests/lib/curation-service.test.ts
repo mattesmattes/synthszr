@@ -276,7 +276,7 @@ describe('getRunUnits', () => {
 })
 
 describe('getRunsToReconcile', () => {
-  it('shadow + done + unreconciled + asof <= now-10min', async () => {
+  it('shadow + done + unreconciled + asof <= now − 24 h (Abgleichfenster, R21)', async () => {
     state.queues.curation_runs = [{ data: [RUN], error: null }]
     const rows = await getRunsToReconcile(client, '2026-10-15T05:00:00.000Z', 3)
     expect(rows[0].id).toBe('run-1')
@@ -284,9 +284,20 @@ describe('getRunsToReconcile', () => {
     expect(c.eq).toHaveBeenCalledWith('mode', 'shadow')
     expect(c.eq).toHaveBeenCalledWith('status', 'done')
     expect(c.is).toHaveBeenCalledWith('reconciled_at', null)
-    expect(c.lte).toHaveBeenCalledWith('asof', '2026-10-15T04:50:00.000Z')
+    expect(c.lte).toHaveBeenCalledWith('asof', '2026-10-14T05:00:00.000Z')
     expect(c.order).toHaveBeenCalledWith('asof', { ascending: true })
     expect(c.limit).toHaveBeenCalledWith(3)
+  })
+
+  it('R21: Run mit asof vor 23 h wird NICHT geliefert, vor 25 h schon', async () => {
+    const now = Date.parse('2026-10-15T05:00:00.000Z')
+    state.queues.curation_runs = [{ data: [], error: null }]
+    await getRunsToReconcile(client, new Date(now).toISOString(), 1)
+    const cutoff = Date.parse(state.chains.curation_runs[0].lte.mock.calls[0][1])
+    const asof23h = now - 23 * 3600 * 1000
+    const asof25h = now - 25 * 3600 * 1000
+    expect(asof23h <= cutoff).toBe(false)
+    expect(asof25h <= cutoff).toBe(true)
   })
 })
 
@@ -298,6 +309,11 @@ describe('markReconciled', () => {
       matched_post_id: 'post-1', matched_job_id: null, reconciled_at: expect.any(String),
     }))
     expect(c.eq).toHaveBeenCalledWith('id', 'run-1')
+  })
+  it('R22: metrics null schliesst einen gescheiterten Abgleich ab', async () => {
+    await markReconciled(client, 'run-1', { matched_post_id: null, matched_job_id: null, metrics: null })
+    const c = state.chains.curation_runs[0]
+    expect(c.update).toHaveBeenCalledWith(expect.objectContaining({ metrics: null, reconciled_at: expect.any(String) }))
   })
 })
 
