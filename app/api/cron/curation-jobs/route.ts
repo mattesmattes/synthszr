@@ -30,109 +30,128 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createAdminClient()
-  const settings = await loadCurationSettings(supabase)
-  const nowIso = new Date().toISOString()
-  const out: Record<string, unknown> = { ok: true }
   const embed = (texts: string[]) => generateEmbeddings(texts, { batchSize: 16 })
 
-  // 1 Kickoff — fester UTC-Slot in Phase 1 (kein Analyse-Trigger, keine
-  // Deadline-Pruefung; beides kommt erst in Phase 2, Anhang A §3 Step 3).
-  if (settings.shadow_enabled) {
-    const asof = kickoffAsOf(nowIso, settings.kickoff_utc)
-    if (asof) {
-      const day = berlinDay(asof)
-      const today = (await listRuns(supabase, { limit: 5, mode: 'shadow' })).filter((r) => r.day === day)
-      const spent = await spentTodayUsd(supabase, day)
-      // Nur anlegen, wenn weder heute schon ein Run existiert noch die
-      // Tageskappe ausgeschoepft ist — sonst legte jeder Minutentick nach dem
-      // Kickoff-Slot einen weiteren Run an (der Unique-Index schuetzt nur vor
-      // ZWEI OFFENEN Runs, nicht vor beliebig vielen fertigen).
-      if (!today.length && spent < settings.daily_budget_usd) {
-        const { modelFor } = createCaller({ runId: 'kickoff', mode: 'shadow' })
-        const run = await createRun(supabase, {
-          day,
-          mode: 'shadow',
-          asof,
-          brief_mode: 'full',
-          budget_usd: settings.budget_usd,
-          models: {
-            scout: await modelFor('curation_scout'),
-            editor: await modelFor('curation_editor'),
-            critic: await modelFor('curation_critic'),
-          },
-        })
-        out.kickoff = run.id
+  try {
+    // R19 (Controller-Ruling, verbindlich): aeusserer try/catch um den
+    // gesamten Tick NACH der Auth-Pruefung. Ohne ihn verliesse eine
+    // DB-Exception AUSSERHALB jeder Arbeitseinheit (loadCurationSettings,
+    // listRuns, spentTodayUsd, createRun, getRunsToReconcile, getNextOpenRun,
+    // claimRun) den Handler ungefangen — Next.js antwortete dann mit 500, und
+    // Vercel fuehrt jede Nicht-200-Antwort als fehlgeschlagenen Cron. Die
+    // inneren try/catch-Bloecke (Rekonziliation, Advance) bleiben zusaetzlich
+    // bestehen: sie behandeln ueber das reine Abfangen hinaus auch Log und Lease.
+    const settings = await loadCurationSettings(supabase)
+    const nowIso = new Date().toISOString()
+    const out: Record<string, unknown> = { ok: true }
+
+    // 1 Kickoff — fester UTC-Slot in Phase 1 (kein Analyse-Trigger, keine
+    // Deadline-Pruefung; beides kommt erst in Phase 2, Anhang A §3 Step 3).
+    if (settings.shadow_enabled) {
+      const asof = kickoffAsOf(nowIso, settings.kickoff_utc)
+      if (asof) {
+        const day = berlinDay(asof)
+        const today = (await listRuns(supabase, { limit: 5, mode: 'shadow' })).filter((r) => r.day === day)
+        const spent = await spentTodayUsd(supabase, day)
+        // Nur anlegen, wenn weder heute schon ein Run existiert noch die
+        // Tageskappe ausgeschoepft ist — sonst legte jeder Minutentick nach dem
+        // Kickoff-Slot einen weiteren Run an (der Unique-Index schuetzt nur vor
+        // ZWEI OFFENEN Runs, nicht vor beliebig vielen fertigen).
+        if (!today.length && spent < settings.daily_budget_usd) {
+          const { modelFor } = createCaller({ runId: 'kickoff', mode: 'shadow' })
+          const run = await createRun(supabase, {
+            day,
+            mode: 'shadow',
+            asof,
+            brief_mode: 'full',
+            budget_usd: settings.budget_usd,
+            models: {
+              scout: await modelFor('curation_scout'),
+              editor: await modelFor('curation_editor'),
+              critic: await modelFor('curation_critic'),
+            },
+          })
+          out.kickoff = run.id
+        }
       }
     }
-  }
 
-  // 2 Rekonziliation des Vortags — eine je Tick, kurz; ein Fehler bleibt
-  // sichtbar im Body, bricht den Tick aber nicht ab (eigener Pfad, kein throw).
-  const [due] = await getRunsToReconcile(supabase, nowIso, 1)
-  if (due) {
-    try {
-      const r = await reconcileRun(supabase, due, embed)
-      out.reconciled = due.id
-      out.attribution = r.matched?.attribution ?? 'none'
-    } catch (err) {
-      console.error('[Curation] Rekonziliation fehlgeschlagen:', err)
-      out.reconcile_error = err instanceof Error ? err.message : String(err)
+    // 2 Rekonziliation des Vortags — eine je Tick, kurz; ein Fehler bleibt
+    // sichtbar im Body, bricht den Tick aber nicht ab (eigener Pfad, kein throw).
+    const [due] = await getRunsToReconcile(supabase, nowIso, 1)
+    if (due) {
+      try {
+        const r = await reconcileRun(supabase, due, embed)
+        out.reconciled = due.id
+        out.attribution = r.matched?.attribution ?? 'none'
+      } catch (err) {
+        console.error('[Curation] Rekonziliation fehlgeschlagen:', err)
+        out.ok = false
+        out.reconcile_error = err instanceof Error ? err.message : String(err)
+      }
+      return NextResponse.json(out)
     }
-    return NextResponse.json(out)
-  }
 
-  // 3 Advance — eine Arbeitseinheit je Tick (Muster app/api/cron/glossary-jobs/route.ts).
-  const run = await getNextOpenRun(supabase)
-  if (!run) return NextResponse.json({ ...out, idle: true })
+    // 3 Advance — eine Arbeitseinheit je Tick (Muster app/api/cron/glossary-jobs/route.ts).
+    const run = await getNextOpenRun(supabase)
+    if (!run) return NextResponse.json({ ...out, idle: true })
 
-  // Aufgeben, BEVOR gearbeitet wird: MAX_ATTEMPTS erfolglose Ticks heissen
-  // meist Function-Timeout — ein hart beendeter Tick kann danach selbst
-  // nichts mehr schreiben, der Check hier ist der einzige Ausweg (Muster
-  // glossary-jobs/route.ts).
-  if (run.attempts >= MAX_ATTEMPTS) {
-    await finishRun(supabase, run.id, 'error', `Nach ${MAX_ATTEMPTS} Durchgaengen ohne Fortschritt aufgegeben (Function-Timeout?). Server-Log pruefen.`)
-    return NextResponse.json({ ...out, ok: false, error: 'max attempts' })
-  }
+    // Aufgeben, BEVOR gearbeitet wird: MAX_ATTEMPTS erfolglose Ticks heissen
+    // meist Function-Timeout — ein hart beendeter Tick kann danach selbst
+    // nichts mehr schreiben, der Check hier ist der einzige Ausweg (Muster
+    // glossary-jobs/route.ts).
+    if (run.attempts >= MAX_ATTEMPTS) {
+      await finishRun(supabase, run.id, 'error', `Nach ${MAX_ATTEMPTS} Durchgaengen ohne Fortschritt aufgegeben (Function-Timeout?). Server-Log pruefen.`)
+      return NextResponse.json({ ...out, ok: false, error: 'max attempts' })
+    }
 
-  // Versuch zaehlen und Lease stempeln in EINEM Update, vor der Arbeit — ein
-  // Tick, der ins Timeout laeuft, schreibt danach nichts mehr; der Zaehler
-  // muss also schon beim Start persistiert sein (claimRun, service.ts).
-  const attempt = run.attempts + 1
-  await claimRun(supabase, run.id, attempt)
-  run.attempts = attempt
+    // Versuch zaehlen und Lease stempeln in EINEM Update, vor der Arbeit — ein
+    // Tick, der ins Timeout laeuft, schreibt danach nichts mehr; der Zaehler
+    // muss also schon beim Start persistiert sein (claimRun, service.ts).
+    const attempt = run.attempts + 1
+    await claimRun(supabase, run.id, attempt)
+    run.attempts = attempt
 
-  const { callTool } = createCaller({ runId: run.id, mode: 'shadow' })
-  try {
-    const res = await advanceRun(
-      {
-        supabase,
-        callTool,
-        embed,
-        settings,
-        models: { scout: run.model_scout!, editor: run.model_editor!, critic: run.model_critic! },
-        budgetMs: TICK_BUDGET_MS,
-        log: (t) => console.log(t),
-      },
-      run,
-    )
-    // R10 (Controller-Ruling, verbindlich): advanceRun meldet finished:false,
-    // wenn das Tick-Budget aufgebraucht ist ODER compose auf den naechsten
-    // Tick vertagt (COMPOSE_MIN_REMAINING_MS, run.ts) — in beiden Faellen hat
-    // die zuletzt gelaufene Phase ihren Zwischenstand schon persistiert
-    // (advanceRun ruft saveRunState vor der Rueckkehr). Das Lease bliebe sonst
-    // bis LEASE_STALE_MS (15 min, service.ts) stehen, obwohl der naechste
-    // Minutentick sofort weiterarbeiten koennte — die Freigabe spart bis zu
-    // 15 Minuten Leerlauf je Vertagung.
-    if (!res.finished) await releaseLease(supabase, run.id)
-    return NextResponse.json({ ...out, advanced: run.id, ...res })
+    const { callTool } = createCaller({ runId: run.id, mode: 'shadow' })
+    try {
+      const res = await advanceRun(
+        {
+          supabase,
+          callTool,
+          embed,
+          settings,
+          models: { scout: run.model_scout!, editor: run.model_editor!, critic: run.model_critic! },
+          budgetMs: TICK_BUDGET_MS,
+          log: (t) => console.log(t),
+        },
+        run,
+      )
+      // R10 (Controller-Ruling, verbindlich): advanceRun meldet finished:false,
+      // wenn das Tick-Budget aufgebraucht ist ODER compose auf den naechsten
+      // Tick vertagt (COMPOSE_MIN_REMAINING_MS, run.ts) — in beiden Faellen hat
+      // die zuletzt gelaufene Phase ihren Zwischenstand schon persistiert
+      // (advanceRun ruft saveRunState vor der Rueckkehr). Das Lease bliebe sonst
+      // bis LEASE_STALE_MS (15 min, service.ts) stehen, obwohl der naechste
+      // Minutentick sofort weiterarbeiten koennte — die Freigabe spart bis zu
+      // 15 Minuten Leerlauf je Vertagung.
+      if (!res.finished) await releaseLease(supabase, run.id)
+      return NextResponse.json({ ...out, advanced: run.id, ...res })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'unbekannt'
+      console.error('[Curation] Tick fehlgeschlagen:', err)
+      await appendRunLog(supabase, run, [{ at: stamp(), text: `Tick fehlgeschlagen: ${message}`, ok: false }])
+      // Lease freigeben: sonst nimmt der naechste Tick den Run erst nach
+      // LEASE_STALE_MS wieder auf statt in der naechsten Minute (gleiche
+      // Begruendung wie der Ueberlast-Pfad in glossary-jobs/route.ts).
+      await releaseLease(supabase, run.id)
+      return NextResponse.json({ ...out, ok: false, advanced: run.id, error: message })
+    }
   } catch (err) {
+    // Faengt nur Fehler AUSSERHALB jeder Arbeitseinheit (s. Kommentar oben) —
+    // ohne Run-Kontext gibt es hier kein Log und kein Lease zu bedienen, nur
+    // eine saubere 200-Antwort, damit Vercel den Cron nicht als fehlgeschlagen fuehrt.
     const message = err instanceof Error ? err.message : 'unbekannt'
-    console.error('[Curation] Tick fehlgeschlagen:', err)
-    await appendRunLog(supabase, run, [{ at: stamp(), text: `Tick fehlgeschlagen: ${message}`, ok: false }])
-    // Lease freigeben: sonst nimmt der naechste Tick den Run erst nach
-    // LEASE_STALE_MS wieder auf statt in der naechsten Minute (gleiche
-    // Begruendung wie der Ueberlast-Pfad in glossary-jobs/route.ts).
-    await releaseLease(supabase, run.id)
-    return NextResponse.json({ ...out, ok: false, advanced: run.id, error: message })
+    console.error('[Curation] Tick fehlgeschlagen (ausserhalb der Arbeitseinheit):', err)
+    return NextResponse.json({ ok: false, error: message }, { status: 200 })
   }
 }

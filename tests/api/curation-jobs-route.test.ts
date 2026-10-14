@@ -103,14 +103,31 @@ describe('GET /api/cron/curation-jobs', () => {
     expect(m.createRun).not.toHaveBeenCalled()
   })
 
-  it('Rekonziliation hat Vorrang vor advance; danach idle', async () => {
+  it('Rekonziliation hat Vorrang vor advance; naechster Tick danach idle', async () => {
     m.getRunsToReconcile.mockResolvedValueOnce([{ id: 'old', asof: '2026-10-14T04:25:00.000Z' }])
     m.reconcileRun.mockResolvedValue({ matched: { post_id: 'p', job_id: 'j', attribution: 'job' }, metrics: {} })
     m.listTodayRuns.mockResolvedValue([{ id: 'today', day: '2026-10-15', mode: 'shadow', status: 'done' }])
     const { GET } = await import('@/app/api/cron/curation-jobs/route')
+
     const body = await (await GET(req())).json()
     expect(body.reconciled).toBe('old')
     expect(m.advanceRun).not.toHaveBeenCalled()
+
+    // Naechster Tick: getRunsToReconcile liefert (mockResolvedValueOnce ist
+    // verbraucht) wieder den beforeEach-Default [], getNextOpenRun den
+    // Default null — der Tick hat nichts mehr zu tun.
+    const second = await (await GET(req())).json()
+    expect(second.idle).toBe(true)
+  })
+
+  it('Rekonziliation: ein Fehler in reconcileRun setzt ok:false zusaetzlich zu reconcile_error', async () => {
+    m.getRunsToReconcile.mockResolvedValueOnce([{ id: 'old', asof: '2026-10-14T04:25:00.000Z' }])
+    m.reconcileRun.mockRejectedValueOnce(new Error('reconcile kaputt'))
+    m.listTodayRuns.mockResolvedValue([{ id: 'today', day: '2026-10-15', mode: 'shadow', status: 'done' }])
+    const { GET } = await import('@/app/api/cron/curation-jobs/route')
+    const body = await (await GET(req())).json()
+    expect(body.ok).toBe(false)
+    expect(body.reconcile_error).toBe('reconcile kaputt')
   })
 
   it('advance: attempts >= MAX_ATTEMPTS → error vor der Arbeit; Exception → Log + Lease frei + ok:false', async () => {
@@ -138,5 +155,15 @@ describe('GET /api/cron/curation-jobs', () => {
     expect(body.ok).toBe(true)
     expect(body.advanced).toBe('r')
     expect(body.finished).toBe(false)
+  })
+
+  it('R19: eine DB-Exception ausserhalb jeder Arbeitseinheit antwortet trotzdem 200 mit ok:false', async () => {
+    m.listTodayRuns.mockResolvedValue([{ id: 'r', day: '2026-10-15', mode: 'shadow', status: 'processing' }])
+    m.getNextOpenRun.mockRejectedValueOnce(new Error('db weg'))
+    const { GET } = await import('@/app/api/cron/curation-jobs/route')
+    const res = await GET(req())
+    const body = await res.json()
+    expect(res.status).toBe(200)
+    expect(body).toEqual({ ok: false, error: 'db weg' })
   })
 })
