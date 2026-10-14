@@ -111,6 +111,15 @@ const unit = (p: Partial<UnitRow> & { unit_key: string; member_ids: string[]; ti
 const pub = (id: string, member_ids: string[], bundle_type: string | null = null, embedding: number[] | null = null, position = 0) => ({
   id, position, heading: `H ${id}`, bundle_type, member_ids, embedding,
 })
+const poolItem = (id: string) => ({
+  id, title: id, source_identifier: 'q', source_display_name: null, total_score: 1, bundle_type: null, metadata: null, content_length: 1000,
+  daily_repo_id: null, queued_at: '', source_pub_rate: 0, excerpt: '', hand: false, techmeme_story: null, techmeme_story_index: null,
+})
+const snapshotOf = (ids: string[]) => ({
+  asOf: ASOF, windowFrom: '', items: ids.map(poolItem), truncated: false,
+  excluded: { used_earlier: 0, expired: 0, skipped: 0, junk: 0, short: 0 }, handIds: [] as string[],
+  techmemeStories: [] as Array<{ story: string; index: number; member_ids: string[] }>,
+})
 
 describe('reconcileOutcomes', () => {
   it('ID-Treffer kept/relabeled, Similarity merged, dropped_after_selection vs never, added', () => {
@@ -159,14 +168,39 @@ describe('reconcileOutcomes', () => {
     expect(r.added).toEqual([])
   })
 
-  it('zwei Plan-Einheiten im selben Abschnitt sind beide Treffer — keine gilt als gestrichen', () => {
+  it('exklusiv (R13): eine zweite Plan-Einheit auf denselben Abschnitt bekommt keinen Treffer', () => {
     const units = [
-      unit({ unit_key: 'single::a', member_ids: ['a'], tier: 'recommended' }),
       unit({ unit_key: 'single::b', member_ids: ['b'], tier: 'recommended', rank: 2 }),
+      unit({ unit_key: 'single::a', member_ids: ['a'], tier: 'recommended', rank: 1 }),
     ]
-    const r = reconcileOutcomes(units, [pub('u1', ['a', 'b'], 'deep_dive')], new Map(), new Set(['a', 'b']), 'post')
-    expect(r.outcomes.map(o => o.outcome)).toEqual(['relabeled', 'relabeled'])
+    const r = reconcileOutcomes(units, [pub('u1', ['a', 'b'])], new Map(), new Set(), 'post')
+    expect(r.outcomes.map(o => [o.unit_key, o.outcome])).toEqual([['single::a', 'kept'], ['single::b', 'dropped_never_selected']])
+    expect([...r.matched.values()]).toEqual(['u1'])
     expect(r.added).toEqual([])
+  })
+
+  it('exklusiv (R13): Pass 1 nimmt den naechsten freien Abschnitt mit gemeinsamem Member', () => {
+    const units = [
+      unit({ unit_key: 'bundle::ab', member_ids: ['a', 'b'], tier: 'recommended' }),
+      unit({ unit_key: 'single::b', member_ids: ['b'], tier: 'bench' }),
+    ]
+    const r = reconcileOutcomes(units, [pub('u1', ['a', 'b'], null, null, 0), pub('u2', ['b'], null, null, 1)], new Map(), new Set(), 'post')
+    expect(r.matched).toEqual(new Map([['bundle::ab', 'u1'], ['single::b', 'u2']]))
+    expect(r.added).toEqual([])
+  })
+
+  it('exklusiv (R13): in Pass 2 gewinnt die hoehere Similarity, bei Gleichstand die fruehere Plan-Einheit', () => {
+    const units = [
+      unit({ unit_key: 'single::c', member_ids: ['c'], tier: 'recommended' }),
+      unit({ unit_key: 'single::d', member_ids: ['d'], tier: 'recommended', rank: 2 }),
+    ]
+    const published = [pub('u1', [], null, [1, 0.3, 0])]
+    const higher = reconcileOutcomes(units, published, new Map([['c', [1, 0.5, 0]], ['d', [1, 0.3, 0]]]), new Set(), 'post')
+    expect(higher.outcomes.map(o => [o.unit_key, o.outcome])).toEqual([['single::c', 'dropped_never_selected'], ['single::d', 'merged']])
+    expect(higher.outcomes[1].similarity).toBe(1)
+    const tie = reconcileOutcomes(units, published, new Map([['c', [1, 0.3, 0]], ['d', [1, 0.3, 0]]]), new Set(), 'post')
+    expect(tie.outcomes.map(o => o.outcome)).toEqual(['merged', 'dropped_never_selected'])
+    expect([...tie.matched.values()]).toEqual(['u1'])
   })
 
   it('Similarity: Maximum ueber die Member, auf 3 Stellen gerundet; ID-getroffene Abschnitte und kaputte Vektoren zaehlen nicht', () => {
@@ -222,6 +256,21 @@ describe('metricsOf', () => {
     expect(m.diff_vs_total_score_20).toBeCloseTo(0)
     expect(m.outcomes.kept).toBe(2)
   })
+
+  it('Dublette im Plan (R13): der Abschnitt zaehlt einmal im Recall, die zweite Einheit ist ein Fehltreffer der Precision', () => {
+    const units = [
+      unit({ unit_key: 'single::a', member_ids: ['a'], tier: 'recommended' }),
+      unit({ unit_key: 'single::b', member_ids: ['b'], tier: 'recommended', rank: 2 }),
+    ]
+    const published = [pub('u1', ['a', 'b'])]
+    const r = reconcileOutcomes(units, published, new Map(), new Set(), 'post')
+    const m = metricsOf({
+      units, outcomes: r.outcomes, published, added: r.added, baseline: null, snapshot: snapshotOf(['a', 'b']),
+      cluster: { storyKeyOf: {}, clusters: {}, related: [] }, itemEmbeddings: new Map(), attribution: 'job',
+    })
+    expect(m.unit_recall_20).toBe(1)
+    expect(m.setzlisten_precision_10).toBe(0.5)
+  })
 })
 
 describe('aggregateRuns', () => {
@@ -246,10 +295,6 @@ describe('aggregateRuns', () => {
 
 // ── reconcileRun ──────────────────────────────────────────────────────────
 
-const poolItem = (id: string) => ({
-  id, title: id, source_identifier: 'q', source_display_name: null, total_score: 1, bundle_type: null, metadata: null, content_length: 1000,
-  daily_repo_id: null, queued_at: '', source_pub_rate: 0, excerpt: '', hand: false, techmeme_story: null, techmeme_story_index: null,
-})
 const RUN: RunRow = {
   id: 'r', day: '2026-10-15', mode: 'shadow', asof: ASOF, status: 'done', phase: 'finished', brief_mode: 'full', attempts: 3,
   last_advanced_at: null, cancel_requested: false, log: [], degraded: [], budget_usd: 4, spend_usd: 1, compose_attempts: 1,

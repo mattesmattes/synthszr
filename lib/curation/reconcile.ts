@@ -202,21 +202,41 @@ function safeCosine(a: number[] | null, b: number[] | null): number | null {
   return Number.isFinite(s) ? s : null
 }
 
-/** Ähnlichster Abschnitt zu einer Plan-Einheit: Maximum über ihre Member; Gleichstand → kleinere Position. */
-function bestSimilarityMatch(
-  unit: UnitRow,
-  candidates: PublishedUnitRow[],
-  itemEmbeddings: Map<string, number[]>,
-): { target: PublishedUnitRow; similarity: number } | null {
-  let best: { target: PublishedUnitRow; similarity: number } | null = null
-  for (const target of candidates) {
-    for (const id of unit.member_ids) {
-      const similarity = safeCosine(itemEmbeddings.get(id) ?? null, target.embedding)
-      if (similarity === null) continue
-      if (!best || similarity > best.similarity) best = { target, similarity }
-    }
+/** Similarity einer Plan-Einheit zu einem Abschnitt: Maximum über ihre Member; null ohne vergleichbaren Vektor. */
+function unitSimilarity(unit: UnitRow, target: PublishedUnitRow, itemEmbeddings: Map<string, number[]>): number | null {
+  let best: number | null = null
+  for (const id of unit.member_ids) {
+    const similarity = safeCosine(itemEmbeddings.get(id) ?? null, target.embedding)
+    if (similarity === null) continue
+    if (best === null || similarity > best) best = similarity
   }
   return best
+}
+
+interface SimilarityPair { unit: UnitRow; order: number; target: PublishedUnitRow; similarity: number }
+
+/**
+ * Alle Paare (offene Plan-Einheit, offener Abschnitt) ab der Schwelle,
+ * absteigend nach Similarity; Gleichstand → frühere Plan-Einheit, dann
+ * kleinere Position (Ruling R13). `units` kommt in Plan-Reihenfolge. WARUM
+ * die Positionsregel explizit: wie excludedByUnattributable in
+ * precedents.ts — ohne sie entschiede die Eingabereihenfolge der Abschnitte.
+ */
+function similarityPairs(
+  units: UnitRow[],
+  targets: PublishedUnitRow[],
+  itemEmbeddings: Map<string, number[]>,
+  threshold: number,
+): SimilarityPair[] {
+  const pairs: SimilarityPair[] = []
+  units.forEach((unit, order) => {
+    for (const target of targets) {
+      const similarity = unitSimilarity(unit, target, itemEmbeddings)
+      if (similarity !== null && similarity >= threshold) pairs.push({ unit, order, target, similarity })
+    }
+  })
+  pairs.sort((a, b) => (b.similarity - a.similarity) || (a.order - b.order) || (a.target.position - b.target.position))
+  return pairs
 }
 
 function roundSimilarity(similarity: number): number {
@@ -225,6 +245,13 @@ function roundSimilarity(similarity: number): number {
 
 function outcomeOf(unit: UnitRow, hit: UnitHit | null, selectedIds: Set<string>, postId: string): OutcomePatch {
   if (!hit) {
+    // WARUM alle selected_items und nicht nur Hand-Items (Ruling R14): die
+    // Spec („Rekonziliation") definiert dropped_after_selection wörtlich als
+    // „Plan-Einheit ∩ selected_items des Tages-Jobs". Die Phase-0-Einschränkung
+    // auf Hand-Items (precedents.ts, Falle 2: unberührte Techmeme-Themen sind
+    // „nie gewählt") gilt hier bewusst nicht — auch automatisch selektierte
+    // Techmeme-Items zählen als gestrichen, cut_rate ist damit konservativ
+    // (eher zu hoch als zu niedrig).
     const selected = unit.member_ids.some((id) => selectedIds.has(id))
     return {
       unit_key: unit.unit_key,
@@ -248,16 +275,18 @@ function outcomeOf(unit: UnitRow, hit: UnitHit | null, selectedIds: Set<string>,
 /**
  * Outcome je Plan-Einheit gegen die veröffentlichten Abschnitte.
  *
- * Pass 1 (ID): eine Einheit trifft jeden Abschnitt, der eines ihrer Member
- * trägt; Ziel für final_rank/matched_heading ist der früheste davon.
- * WARUM nicht exklusiv (ein Abschnitt nur für EINE Einheit): ein ID-Treffer
- * ist ein Fakt — das Item steht im Post. Legt der Betreiber zwei
- * Plan-Einheiten in einen Abschnitt, wäre die zweite sonst
- * dropped_after_selection, also genau die Falle „Zusammenlegungen als
- * Ablehnung gelernt" (Spec, Risikotabelle), die das Archiv als Negativ-Paar
- * weiterreichte.
- * Pass 2 (Similarity): nur Einheiten ohne ID-Treffer gegen Abschnitte ohne
- * ID-Treffer, Maximum über die Member, Schwelle 0,8.
+ * Exklusiv (Ruling R13): jeder Abschnitt gehört höchstens EINER
+ * Plan-Einheit, jede Plan-Einheit hat höchstens einen Treffer.
+ * Pass 1 (ID): Plan-Einheiten in Rangfolge recommended → bench → held, je
+ * Einheit der früheste noch freie Abschnitt mit gemeinsamem Member.
+ * Pass 2 (Similarity): nur Einheiten und Abschnitte ohne Treffer, Maximum
+ * über die Member, Schwelle 0,8; höchste Similarity zuerst vergeben,
+ * Gleichstand → frühere Plan-Einheit.
+ * WARUM exklusiv: Dubletten im Plan sollen Precision und Recall bestrafen,
+ * nicht doppelt zählen — dieselbe Absicht wie die Hard-Regel story_duplicate
+ * (critic.ts) und das Gate-Kriterium „Dubletten-Rate der Setzliste = 0"
+ * (Spec „Entscheidungsregel"). Bewusster Preis: eine zweite Plan-Einheit,
+ * deren Item im Post steht, erscheint als dropped_*.
  * WARUM `merged` nur hier entsteht: ein Live-Event dafür gibt es nicht, die
  * Edit-Seite hat keine Zusammenlegen-Funktion (Spec „Tägliche Korrektur") —
  * der Betreiber löscht einen Abschnitt und redigiert den anderen. Dieselbe
@@ -274,27 +303,26 @@ export function reconcileOutcomes(
   const ordered = inPlanOrder(units)
   const byPosition = [...published].sort((a, b) => a.position - b.position)
   const hitOf = new Map<string, UnitHit>()
-  const hitPublished = new Set<string>()
+  const taken = new Set<string>()
 
   for (const unit of ordered) {
     const members = new Set(unit.member_ids)
-    const overlapping = byPosition.filter((p) => p.member_ids.some((id) => members.has(id)))
-    if (overlapping.length === 0) continue
-    hitOf.set(unit.unit_key, { target: overlapping[0], similarity: 1, byId: true })
-    for (const p of overlapping) hitPublished.add(p.id)
+    const target = byPosition.find((p) => !taken.has(p.id) && p.member_ids.some((id) => members.has(id)))
+    if (!target) continue
+    hitOf.set(unit.unit_key, { target, similarity: 1, byId: true })
+    taken.add(target.id)
   }
 
-  const openPublished = byPosition.filter((p) => !hitPublished.has(p.id))
-  for (const unit of ordered) {
-    if (hitOf.has(unit.unit_key)) continue
-    const best = bestSimilarityMatch(unit, openPublished, itemEmbeddings)
-    if (!best || best.similarity < threshold) continue
-    hitOf.set(unit.unit_key, { target: best.target, similarity: best.similarity, byId: false })
-    hitPublished.add(best.target.id)
+  const openUnits = ordered.filter((u) => !hitOf.has(u.unit_key))
+  const openPublished = byPosition.filter((p) => !taken.has(p.id))
+  for (const pair of similarityPairs(openUnits, openPublished, itemEmbeddings, threshold)) {
+    if (hitOf.has(pair.unit.unit_key) || taken.has(pair.target.id)) continue
+    hitOf.set(pair.unit.unit_key, { target: pair.target, similarity: pair.similarity, byId: false })
+    taken.add(pair.target.id)
   }
 
   const outcomes = ordered.map((unit) => outcomeOf(unit, hitOf.get(unit.unit_key) ?? null, selectedIds, postId))
-  const added = byPosition.filter((p) => !hitPublished.has(p.id))
+  const added = byPosition.filter((p) => !taken.has(p.id))
   const matched = new Map([...hitOf].map(([key, hit]) => [key, hit.target.id] as [string, string]))
   return { outcomes, added, matched }
 }
@@ -346,16 +374,15 @@ function publishedIdHitsOf(planUnits: UnitRow[], published: PublishedUnitRow[], 
   return published.filter((p) => p.member_ids.some((id) => ids.has(id)))
 }
 
-/** Eine Plan-Einheit hat überlebt: Outcome-Treffer ODER ein Member liegt in der Story eines Abschnitts. */
-function isUnitHit(
-  unit: UnitRow,
-  outcomeByKey: Map<string, OutcomePatch>,
-  publishedKeys: Set<string>,
-  storyOf: Map<string, string>,
-): boolean {
+/**
+ * Eine Plan-Einheit hat überlebt: Outcome kept/relabeled/merged. WARUM nur
+ * das Outcome und keine Story-Überschneidung (Ruling R13): eine Dublette zu
+ * einem schon vergebenen Abschnitt teilt dessen Story — über die Story zählte
+ * sie als überlebt und die Precision bestrafte sie nicht.
+ */
+function isUnitHit(unit: UnitRow, outcomeByKey: Map<string, OutcomePatch>): boolean {
   const outcome = outcomeByKey.get(unit.unit_key)?.outcome
-  if (outcome && HIT_OUTCOMES.has(outcome)) return true
-  return unit.member_ids.some((id) => publishedKeys.has(storyKeyOf(id, storyOf)))
+  return outcome !== undefined && HIT_OUTCOMES.has(outcome)
 }
 
 function zeroOutcomes(): Record<UnitOutcome, number> {
@@ -420,6 +447,9 @@ function baselineRecallOf(
  * zuerst, Techmeme vorgeclustert) gibt es für die Baseline nicht — mit ihnen
  * träfe der Plan in einer anderen Währung als total_score. storyOf entsteht
  * deshalb für alle drei Listen aus derselben assignStoryKeys-Clusterung.
+ * Recall misst die Abdeckung des Posts (jeder Abschnitt zählt einmal, Story-
+ * Ebene plus merged), Precision das Überleben je Setzlisten-Einheit nach der
+ * exklusiven Zuordnung aus reconcileOutcomes (Ruling R13).
  */
 export function metricsOf(input: {
   units: UnitRow[]
@@ -448,12 +478,11 @@ export function metricsOf(input: {
     ...(baseline?.total_score['20'] ?? []),
   ]
   const storyOf = assignStoryKeys(allIds, itemEmbeddings, DEFAULT_DEDUP_THRESHOLD)
-  const publishedKeys = new Set(published.flatMap((p) => p.member_ids).map((id) => storyKeyOf(id, storyOf)))
 
   const recall20 = ratio(publishedHitsOf(planAndBench, published, outcomeByKey, storyOf).length, published.length)
   const recallId20 = ratio(publishedIdHitsOf(planAndBench, published, outcomeByKey).length, published.length)
   const setzlisteRecall10 = ratio(publishedHitsOf(setzliste, published, outcomeByKey, storyOf).length, published.length)
-  const setzlisteHits = setzliste.filter((u) => isUnitHit(u, outcomeByKey, publishedKeys, storyOf)).length
+  const setzlisteHits = setzliste.filter((u) => isUnitHit(u, outcomeByKey)).length
   const setzlistePrecision10 = ratio(setzlisteHits, Math.min(SETZLISTE_K, recommended.length))
 
   const unitKeyById = new Map<string, string>()
