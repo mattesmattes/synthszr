@@ -140,6 +140,8 @@ describe('loadCoverageAsOf', () => {
     expect(q.gte).toHaveBeenCalledWith('published_at', '2026-10-05T00:00:00.000Z')
     expect(q.lt).toHaveBeenCalledWith('published_at', '2026-10-15T04:25:00.000Z')
     expect(q.not).toHaveBeenCalledWith('embedding', 'is', null)
+    // Seite à 200 (PAGE_WIDE) — die Zeile traegt einen 768er-Embedding-Vektor.
+    expect(q.range).toHaveBeenCalledWith(0, 199)
     expect(r).toEqual([{ id: 'u1', post_id: 'p1', heading: 'H', published_at: '2026-10-12T05:00:00.000Z', embedding: [1, 0] }])
   })
 })
@@ -153,6 +155,8 @@ describe('loadRoleSoftRange', () => {
     const r = await loadRoleSoftRange(client, '2026-10-15T04:25:00.000Z')
     expect(r.topic).toEqual({ min: 0, median: 1, max: 1 })
     expect(r.recap).toEqual({ min: 0, median: 1, max: 1 })
+    // Seite à 1000 (PAGE_NARROW) — die Zeile hat keine Embedding-Spalte.
+    expect(state.chains.published_units[0].range).toHaveBeenCalledWith(0, 999)
   })
 })
 
@@ -169,6 +173,7 @@ describe('loadCorrectionPairs', () => {
     const r = await loadCorrectionPairs(client, '2026-10-15T04:25:00.000Z', 'shadow')
     expect(r).toEqual([{ outcome: 'dropped_after_selection', title: 'Titel 1', role: 'topic', final_role: null, day: '2026-10-10', heading: null }])
     expect(state.chains.curation_runs[0].eq).toHaveBeenCalledWith('mode', 'shadow')
+    expect(state.chains.curation_runs[0].range).toHaveBeenCalledWith(0, 999)
   })
   it('ueberspringt Einheiten ohne auflösbaren Titel', async () => {
     state.queues.curation_runs = [{ data: [{ id: 'run-1', day: '2026-10-10', pool: { items: [] } }], error: null }]
@@ -204,6 +209,7 @@ describe('loadPanelFeedback', () => {
     const r = await loadPanelFeedback(client, '2026-10-15T04:25:00.000Z')
     expect(r.accepted).toEqual([{ id: 'a', title: 'A', role: 'topic', at: '2026-10-14T10:00:00.000Z' }])
     expect(r.rejected).toEqual([{ id: 'b', title: 'B', role: null, at: '2026-10-14T11:00:00.000Z' }])
+    expect(state.chains.queue_item_events[0].range).toHaveBeenCalledWith(0, 999)
   })
   it('ueberspringt die news_queue-Abfrage, wenn keine Events gefunden wurden', async () => {
     state.queues.queue_item_events = [{ data: [], error: null }]
@@ -237,6 +243,7 @@ describe('loadTechmemeAdoption', () => {
     const r = await loadTechmemeAdoption(client, '2026-10-15T04:25:00.000Z')
     expect(r).toEqual([{ index: 0, stories: 2, used: 1, rate: 0.5 }])
     expect(state.chains.news_queue[0].eq).toHaveBeenCalledWith('metadata->>techmeme', 'true')
+    expect(state.chains.news_queue[0].range).toHaveBeenCalledWith(0, 999)
   })
 })
 
@@ -256,8 +263,11 @@ describe('buildArchiveBrief', () => {
     state.fallback = { data: [], error: null }
     state.queues.settings = [{ data: null, error: null }]
     await buildArchiveBrief(client, { asOf: '2026-10-15T04:25:00.000Z', candidates: [], briefMode: 'none', mode: 'shadow' })
-    // published_units wird trotzdem angefragt (Rollen-Soft-Range laeuft IMMER);
-    // nur die Tagesaktuellen Quellen (Coverage/Praezedenzen/Paare/Panel) nicht.
+    // published_units wird GENAU EINMAL angefragt (Rollen-Soft-Range laeuft
+    // IMMER) — ein zweiter Aufruf waere loadCoverageAsOf, das in 'none' NICHT
+    // laufen darf. Praezedenzen (RPC), Korrektur-Paare (curation_runs) und
+    // Panel (queue_item_events) laufen in 'none' ebenfalls nicht.
+    expect(state.chains.published_units?.length).toBe(1)
     expect(client.rpc).not.toHaveBeenCalled()
     expect(state.chains.curation_runs).toBeUndefined()
     expect(state.chains.queue_item_events).toBeUndefined()
@@ -271,5 +281,36 @@ describe('buildArchiveBrief', () => {
     expect(state.chains.published_units).toBeDefined()
     expect(state.chains.curation_runs).toBeUndefined()
     expect(state.chains.queue_item_events).toBeUndefined()
+  })
+
+  it('meta.pairs/panel_accept zaehlen die GERENDERTEN (gekappten) Eintraege, nicht die geladenen', async () => {
+    state.fallback = { data: [], error: null }
+    state.queues.settings = [{ data: null, error: null }]
+    client.rpc = vi.fn(async () => ({ data: [], error: null }))
+    state.queues.curation_runs = [{
+      data: [{ id: 'run-1', day: '2026-10-10', pool: { items: Array.from({ length: 25 }, (_, i) => ({ id: `item-${i}`, title: `T${i}` })) } }],
+      error: null,
+    }]
+    state.queues.curation_units = [{
+      data: Array.from({ length: 25 }, (_, i) => ({ run_id: 'run-1', member_ids: [`item-${i}`], role: null, outcome: 'dropped_never_selected', final_role: null, matched_heading: null })),
+      error: null,
+    }]
+    state.queues.queue_item_events = [{
+      data: Array.from({ length: 7 }, (_, i) => ({ queue_item_id: `p${i}`, event: 'panel_accept', at: `2026-10-14T0${i}:00:00.000Z` })),
+      error: null,
+    }]
+    // ZWEI news_queue-Antworten in Aufrufreihenfolge: loadTechmemeAdoption
+    // laeuft unconditioniert VOR loadPanelFeedback (beide fragen news_queue
+    // an) — die Queue wird pro Tabelle nacheinander abgearbeitet (shift()).
+    state.queues.news_queue = [
+      { data: [], error: null },
+      { data: Array.from({ length: 7 }, (_, i) => ({ id: `p${i}`, title: `P${i}`, bundle_type: 'topic' })), error: null },
+    ]
+    const brief = await buildArchiveBrief(client, { asOf: '2026-10-15T04:25:00.000Z', candidates: [], briefMode: 'full', mode: 'shadow' })
+    // geladen: 25 Paare, 7 Panel-Items — gerendert (gekappt): 20 bzw. 5.
+    expect(brief.meta.pairs).toBe(20)
+    expect(brief.meta.panel_accept).toBe(5)
+    expect((brief.dayBlock.match(/^- T\d+/gm) ?? []).length).toBe(20)
+    expect((brief.dayBlock.match(/^- P\d+ \(topic\)/gm) ?? []).length).toBe(5)
   })
 })

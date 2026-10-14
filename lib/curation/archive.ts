@@ -27,12 +27,16 @@ export interface PrecedentHit { unit_id: string; post_id: string; heading: strin
 export interface CorrectionPair { outcome: UnitOutcome; title: string; role: string | null; final_role: string | null; day: string; heading: string | null }
 export interface PanelItem { id: string; title: string; role: string | null; at: string }
 
-// WARUM 200 ueberall (Seiten UND .in()-Scheiben): Vertrag §0 — .in()-Listen
-// ab ~400 UUIDs loesen gegen Prod einen HeadersOverflowError aus
-// (scripts/lib/taste-ground-truth.ts:7-11); dieselbe Groesse fuer
-// Bereichs-Seiten haelt den Code einheitlich, ohne dass eine zweite Zahl
-// begruendet werden muesste.
-const PAGE = 200
+// WARUM zwei Seitengroessen (Vertrag §0): PostgREST kappt jede Antwort still
+// bei max_rows = 1000 — schmale Zeilen (keine Embedding-Spalte) vertragen die
+// volle Seite PAGE_NARROW. loadCoverageAsOf liest published_units MIT dem
+// 768er-Embedding-Vektor je Zeile (deutlich schwerer, Muster pool.ts
+// EXCERPT_CHARS/EMBED_BATCH-Begruendung), daher dort die kleinere
+// PAGE_WIDE. IN_CHUNK bleibt unabhaengig davon bei 200: das ist die
+// .in()-Grenze gegen den HeadersOverflowError in der GET-Query-String-Laenge
+// (scripts/lib/taste-ground-truth.ts:7-11), nicht gegen die Zeilenbreite.
+const PAGE_NARROW = 1000
+const PAGE_WIDE = 200
 const IN_CHUNK = 200
 
 const MAX_DROPPED_AFTER = 10
@@ -232,7 +236,7 @@ interface PublishedUnitCoverageRow { id: string; post_id: string; heading: strin
 /** Veroeffentlichte Einheiten mit Embedding in [from, to) — Coverage-Fenster fuer coverageHits. */
 export async function loadCoverageAsOf(supabase: SupabaseAdmin, from: string, to: string): Promise<CoverageUnit[]> {
   const out: CoverageUnit[] = []
-  for (let offset = 0; ; offset += PAGE) {
+  for (let offset = 0; ; offset += PAGE_WIDE) {
     const { data, error } = await supabase
       .from('published_units')
       .select('id, post_id, heading, published_at, embedding')
@@ -240,14 +244,14 @@ export async function loadCoverageAsOf(supabase: SupabaseAdmin, from: string, to
       .lt('published_at', to)
       .not('embedding', 'is', null)
       .order('id')
-      .range(offset, offset + PAGE - 1)
+      .range(offset, offset + PAGE_WIDE - 1)
     if (error) throw new Error(`published_units: ${error.message}`)
     const page = (data ?? []) as PublishedUnitCoverageRow[]
     for (const row of page) {
       const embedding = parseEmbedding(row.embedding)
       if (embedding.length > 0) out.push({ id: row.id, post_id: row.post_id, heading: row.heading, published_at: row.published_at, embedding })
     }
-    if (page.length < PAGE) break
+    if (page.length < PAGE_WIDE) break
   }
   return out
 }
@@ -274,14 +278,14 @@ interface PublishedUnitRoleRow { post_id: string; bundle_type: string | null }
 export async function loadRoleSoftRange(supabase: SupabaseAdmin, asOf: string, days = 30): Promise<ReturnType<typeof roleSoftRange>> {
   const since = shiftIso(asOf, days)
   const byPost = new Map<string, Array<string | null>>()
-  for (let offset = 0; ; offset += PAGE) {
+  for (let offset = 0; ; offset += PAGE_NARROW) {
     const { data, error } = await supabase
       .from('published_units')
       .select('post_id, bundle_type')
       .gte('published_at', since)
       .lt('published_at', asOf)
       .order('post_id')
-      .range(offset, offset + PAGE - 1)
+      .range(offset, offset + PAGE_NARROW - 1)
     if (error) throw new Error(`published_units: ${error.message}`)
     const page = (data ?? []) as PublishedUnitRoleRow[]
     for (const row of page) {
@@ -289,7 +293,7 @@ export async function loadRoleSoftRange(supabase: SupabaseAdmin, asOf: string, d
       list.push(row.bundle_type)
       byPost.set(row.post_id, list)
     }
-    if (page.length < PAGE) break
+    if (page.length < PAGE_NARROW) break
   }
   return roleSoftRange([...byPost.values()])
 }
@@ -307,7 +311,7 @@ interface CorrectionUnitRow { run_id: string; member_ids: string[]; role: string
 export async function loadCorrectionPairs(supabase: SupabaseAdmin, asOf: string, mode: RunMode, days = 14): Promise<CorrectionPair[]> {
   const since = shiftIso(asOf, days)
   const runs: RunPoolRow[] = []
-  for (let offset = 0; ; offset += PAGE) {
+  for (let offset = 0; ; offset += PAGE_NARROW) {
     const { data, error } = await supabase
       .from('curation_runs')
       .select('id, day, pool')
@@ -316,11 +320,11 @@ export async function loadCorrectionPairs(supabase: SupabaseAdmin, asOf: string,
       .gte('asof', since)
       .lt('asof', asOf)
       .order('id')
-      .range(offset, offset + PAGE - 1)
+      .range(offset, offset + PAGE_NARROW - 1)
     if (error) throw new Error(`curation_runs: ${error.message}`)
     const page = (data ?? []) as RunPoolRow[]
     runs.push(...page)
-    if (page.length < PAGE) break
+    if (page.length < PAGE_NARROW) break
   }
   if (runs.length === 0) return []
 
@@ -366,7 +370,7 @@ interface QueueTitleRow { id: string; title: string; bundle_type: string | null 
 export async function loadPanelFeedback(supabase: SupabaseAdmin, asOf: string, days = 30): Promise<{ accepted: PanelItem[]; rejected: PanelItem[] }> {
   const since = shiftIso(asOf, days)
   const latestByItem = new Map<string, { event: string; at: string }>()
-  for (let offset = 0; ; offset += PAGE) {
+  for (let offset = 0; ; offset += PAGE_NARROW) {
     const { data, error } = await supabase
       .from('queue_item_events')
       .select('queue_item_id, event, at')
@@ -374,11 +378,11 @@ export async function loadPanelFeedback(supabase: SupabaseAdmin, asOf: string, d
       .gte('at', since)
       .lt('at', asOf)
       .order('at')
-      .range(offset, offset + PAGE - 1)
+      .range(offset, offset + PAGE_NARROW - 1)
     if (error) throw new Error(`queue_item_events: ${error.message}`)
     const page = (data ?? []) as PanelEventRow[]
     for (const row of page) latestByItem.set(row.queue_item_id, { event: row.event, at: row.at })
-    if (page.length < PAGE) break
+    if (page.length < PAGE_NARROW) break
   }
   if (latestByItem.size === 0) return { accepted: [], rejected: [] }
 
@@ -415,7 +419,7 @@ interface TechmemeQueueRow { status: string; metadata: Record<string, unknown> |
 export async function loadTechmemeAdoption(supabase: SupabaseAdmin, asOf: string, days = 30): Promise<ReturnType<typeof techmemeAdoptionOf>> {
   const since = shiftIso(asOf, days)
   const rows: Array<{ story_index: number; status: string }> = []
-  for (let offset = 0; ; offset += PAGE) {
+  for (let offset = 0; ; offset += PAGE_NARROW) {
     const { data, error } = await supabase
       .from('news_queue')
       .select('status, metadata')
@@ -423,14 +427,14 @@ export async function loadTechmemeAdoption(supabase: SupabaseAdmin, asOf: string
       .gte('queued_at', since)
       .lt('queued_at', asOf)
       .order('id')
-      .range(offset, offset + PAGE - 1)
+      .range(offset, offset + PAGE_NARROW - 1)
     if (error) throw new Error(`news_queue: ${error.message}`)
     const page = (data ?? []) as TechmemeQueueRow[]
     for (const row of page) {
       const idx = row.metadata?.techmeme_story_index
       if (typeof idx === 'number') rows.push({ story_index: idx, status: row.status })
     }
-    if (page.length < PAGE) break
+    if (page.length < PAGE_NARROW) break
   }
   return techmemeAdoptionOf(rows)
 }
@@ -496,13 +500,10 @@ export async function buildArchiveBrief(supabase: SupabaseAdmin, input: ArchiveI
   if (briefMode === 'full') {
     try {
       pairs = await loadCorrectionPairs(supabase, asOf, mode)
-      meta.pairs = pairs.length
     } catch { meta.missing.push('pairs') }
 
     try {
       panel = await loadPanelFeedback(supabase, asOf)
-      meta.panel_accept = panel.accepted.length
-      meta.panel_reject = panel.rejected.length
     } catch { meta.missing.push('panel') }
   }
 
@@ -515,6 +516,14 @@ export async function buildArchiveBrief(supabase: SupabaseAdmin, input: ArchiveI
 
   const { systemPrefix, dayBlock, precedentIds } = formatBrief({ rules, softRange, adoption, coverage, precedents, negativeText, pairs, panel, candidateTitles })
   meta.approx_tokens = Math.ceil((systemPrefix.length + dayBlock.length) / 3.5)
+  // meta zaehlt, was im dayBlock LANDET (nach Kappung), nicht was geladen
+  // wurde — sonst meldete meta.pairs z. B. 80 geladene dropped_never_selected-
+  // Zeilen, obwohl nur 20 davon tatsaechlich im Prompt stehen. capPairs/
+  // capPanelSide sind rein und bereits oben definiert, ein zweiter Aufruf
+  // hier kostet nur Array-Arbeit auf einer kleinen Menge (kein DB-Zugriff).
+  meta.pairs = capPairs(pairs).length
+  meta.panel_accept = capPanelSide(panel.accepted).length
+  meta.panel_reject = capPanelSide(panel.rejected).length
 
   return { systemPrefix, dayBlock, precedentIds, meta }
 }
