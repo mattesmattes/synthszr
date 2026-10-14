@@ -10,7 +10,8 @@
  * Tage: backtestDays (lib/curation/backtest.ts) — Gate-Fenster [from,to]
  * UNION die letzten `last` Tage vor heute, sortiert, dedupliziert, bei
  * `--limit` vom Anfang gekappt. Ein Tag mit einem bereits `done`-Backtest-
- * Run wird uebersprungen (ausser `--force`): der Unique-Index auf
+ * Run DESSELBEN Arms (gleicher `--brief` UND gleiches `--label`, Final-Review
+ * 2026-10-14 (R25)) wird uebersprungen (ausser `--force`): der Unique-Index auf
  * curation_runs schuetzt nur offene Status (Anhang A §1), ein erneuter
  * Lauf legte sonst bei jedem Wiederanlauf einen zweiten, kostenpflichtigen
  * Run fuer denselben Tag an.
@@ -35,6 +36,10 @@
  * Tage laufen weiter. Nur `pool_small` ist ein Sonderfall: den schliesst
  * `advanceRun` selbst als `error` ab (lib/curation/run.ts:379-387), ohne zu
  * werfen — das greift hier durch, ohne dass dieses Script etwas tun muss.
+ *
+ * `--label <name>` (Default bt-<brief>-<YYYYMMDD>) kennzeichnet den Arm auf
+ * curation_runs.label; `--brief full` nur mit `--sequential` (Korrektur-Paare
+ * frueherer Tage desselben Arms, R28).
  *
  * Lauf: pnpm curation:backtest -- --dry-run --limit 2
  *       pnpm curation:backtest -- --limit 2 --max-usd 6 --out scripts/curation-backtest-probe.json
@@ -62,7 +67,7 @@ async function main(): Promise<number> {
     // WARUM vor jedem DB-Zugriff: der Parser laeuft, BEVOR ein Supabase-Client
     // oder ein Modell-Aufrufer entsteht — ein Tippfehler in --brief o.ae.
     // soll nicht erst nach einem teuren Teil-Lauf auffallen.
-    console.warn('[Curation] WARNUNG: Argumente ungueltig (--from/--to/--last/--brief/--limit/--max-usd/--kickoff/--out pruefen) — Abbruch.')
+    console.warn('[Curation] WARNUNG: Argumente ungueltig (--from/--to/--last/--brief/--limit/--max-usd/--kickoff/--out/--label pruefen; --brief full nur mit --sequential) — Abbruch.')
     return 1
   }
   // WARUM eine eigene Zuweisung statt mit `parsed` weiterzuarbeiten: die
@@ -85,7 +90,7 @@ async function main(): Promise<number> {
   const today = berlinDay(new Date().toISOString())
   const days = backtestDays(args, today)
   console.log(
-    `[Curation] backtest-curation: ${days.length} Tage (${days[0]}..${days[days.length - 1]}), brief=${args.brief}, `
+    `[Curation] backtest-curation: ${days.length} Tage (${days[0]}..${days[days.length - 1]}), brief=${args.brief}, label=${args.label}, `
     + `${args.sequential ? 'sequentiell' : `parallel (${PARALLEL_DAYS})`}${args.dryRun ? ', DRY-RUN' : ''}, Budget ${args.maxUsd} USD`,
   )
   const t0 = Date.now()
@@ -109,7 +114,7 @@ async function main(): Promise<number> {
   // 36+ Gate-Tage waere sonst 36 zusaetzliche Round-Trips nur fuers
   // Ueberspringen-Pruefen.
   const existingDays = args.force ? [] : await listRuns(supabase, { limit: 2000, mode: 'backtest' })
-  const doneByDay = doneRunIdByDay(existingDays)
+  const doneByDay = doneRunIdByDay(existingDays, { brief_mode: args.brief, label: args.label })
 
   const dryRunCallTool: CallToolFn = async () => {
     // Sicherheitsnetz zu Ruling R12: phasePool/phaseCluster rufen callTool
@@ -194,7 +199,15 @@ async function main(): Promise<number> {
     let run: RunRow | undefined
     try {
       const asof = `${d}T${kickoffHH}:${kickoffMM}:00.000Z`
-      run = await createRun(supabase, { day: d, mode: 'backtest', asof, brief_mode: args.brief, budget_usd: settings.budget_usd, models })
+      run = await createRun(supabase, {
+        day: d,
+        mode: 'backtest',
+        asof,
+        brief_mode: args.brief,
+        label: args.label,
+        budget_usd: settings.budget_usd,
+        models,
+      })
       const callTool = args.dryRun ? dryRunCallTool : createCaller({ runId: run.id, mode: 'backtest' }).callTool
       const deps: RunDeps = { supabase, callTool, embed, settings, models, budgetMs: Number.POSITIVE_INFINITY, log: console.log }
       const entry = args.dryRun ? await dryRunDay(deps, run) : await runDayFull(deps, run)

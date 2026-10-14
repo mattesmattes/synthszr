@@ -240,6 +240,7 @@ Die Fragen 0–8 wurden dem Betreiber mit Empfehlung vorgelegt; Ergebnis:
 - **Schreibrechte:** Phase 1 schreibt zusätzlich zu `curation_runs`/`curation_units` in `llm_usage` (Kostenkontrolle wie jeder Modellaufruf der App), in `published_units` für den in der Rekonziliation attribuierten Post (idempotent über `processPost`, sonst veraltet der Archivbrief nach dem ersten Tag) und in die Cache-Tabellen `curation_item_embeddings`/`curation_cards`. Keine Writes auf `news_queue`, `queue_item_events`, `article_jobs`, `generated_posts`, `ranking_*`.
 - **`get_precedent_units`:** nimmt keine Rolle als Parameter, sondern liefert in einem Aufruf die Top-`per_role`-Einheiten je Rolle — ein Round-Trip statt fünf.
 - **Kickoff:** in Phase 1 ein fester UTC-Zeitpunkt (`settings.curation.kickoff_utc`, Default `04:25`) ohne Analyse-Bedingung und Deadline; beides kommt erst in Phase 2 mit der Run-Phase `techmeme`.
+- **Backtest-Arme:** Backtest-Arme tragen ein `label` (`curation_runs.label`, Default `bt-<brief>-<YYYYMMDD>`), damit Ablationsstufen und Iterationen beim Überspringen, bei den Korrektur-Paaren und im Report getrennt bleiben.
 
 Code-Mapping-Befunde (korrigieren die Spec):
 

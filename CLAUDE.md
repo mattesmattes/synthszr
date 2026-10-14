@@ -424,7 +424,12 @@ abgeschlossen (zählt in keinem Aggregat).
 `cancelled`):
 - `pnpm curation:backtest` (`scripts/backtest-curation.ts`) — Gate-Fenster
   plus letzte 30 Tage, `runDayInline` je Tag mit sofortiger Rekonziliation;
-  u. a. `--last`, `--brief`, `--sequential`, `--max-usd`, `--force`.
+  u. a. `--last`, `--brief`, `--sequential`, `--max-usd`, `--force`,
+  `--label <name>`. Das Label (Default `bt-<brief>-<YYYYMMDD>`) steht auf
+  `curation_runs.label` und trennt die Arme: übersprungen wird nur ein
+  `done`-Tag mit gleichem `brief_mode` und Label, Korrektur-Paare kommen nur
+  aus dem eigenen Arm, `--report` aggregiert je Arm. `--brief full` nur mit
+  `--sequential`.
 - `pnpm curation:shadow-once` (`scripts/shadow-once-curation.ts`) — ein Lauf
   in einem Rutsch, von Hand angestoßen; `--asof`. Gleicht nur ab, wenn das
   Abgleichfenster (24 h nach `asof`) zu ist, sonst übernimmt der Cron am

@@ -76,6 +76,12 @@ function fail(table: string, error: { message: string } | null | undefined): nev
  * Cron-Tick oder ein zweiter Klick im Panel soll nicht mit einem Fehler
  * enden, sondern auf den laufenden Run zeigen (Muster createOrGetJob,
  * lib/glossary/jobs/service.ts).
+ *
+ * Aber nur, wenn der offene Run zum selben Arm gehoert (gleicher brief_mode
+ * UND gleiches label): ein haengender Run einer frueheren Backtest-
+ * Invocation liefe sonst mit seinem alten brief_mode weiter und landete im
+ * Report des neuen Arms (Final-Review 2026-10-14 (R25), I4) — dann lieber
+ * abbrechen, damit der Betreiber den alten Run sieht und schliesst.
  */
 export async function createRun(
   supabase: SupabaseAdmin,
@@ -84,15 +90,19 @@ export async function createRun(
     mode: RunMode
     asof: string
     brief_mode: BriefMode
+    /** Backtest-Arm (R25); Shadow laesst es weg → null. */
+    label?: string | null
     budget_usd: number
     models: { scout: string; editor: string; critic: string }
   },
 ): Promise<RunRow> {
+  const label = input.label ?? null
   const row = {
     day: input.day,
     mode: input.mode,
     asof: input.asof,
     brief_mode: input.brief_mode,
+    label,
     budget_usd: input.budget_usd,
     model_scout: input.models.scout,
     model_editor: input.models.editor,
@@ -111,7 +121,11 @@ export async function createRun(
       .limit(1)
       .maybeSingle()
     if (open.error || !open.data) fail('curation_runs', open.error)
-    return parseRunRow(open.data as Record<string, unknown>)
+    const existing = parseRunRow(open.data as Record<string, unknown>)
+    if (existing.brief_mode !== input.brief_mode || existing.label !== label) {
+      throw new Error(`curation_runs: offener Run mit anderem brief_mode/label (${existing.brief_mode}/${existing.label ?? 'null'})`)
+    }
+    return existing
   }
   if (error || !data) fail('curation_runs', error)
   return parseRunRow(data as Record<string, unknown>)
@@ -421,6 +435,7 @@ export function parseRunRow(raw: Record<string, unknown>): RunRow {
     ...(raw as unknown as RunRow),
     budget_usd: Number(raw.budget_usd ?? 0),
     spend_usd: Number(raw.spend_usd ?? 0),
+    label: (raw.label as string | null | undefined) ?? null,
     log: (raw.log as RunLogEntry[] | undefined) ?? [],
     degraded: (raw.degraded as RunRow['degraded'] | undefined) ?? [],
   }

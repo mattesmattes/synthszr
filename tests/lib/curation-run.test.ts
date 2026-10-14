@@ -25,7 +25,7 @@ vi.mock('@/lib/curation/service', async (orig) => ({
   ...(await orig() as object), saveRunState: m.saveRunState, appendRunLog: m.appendRunLog, finishRun: m.finishRun, insertUnits: m.insertUnits, getRun: m.getRun,
   claimRun: m.claimRun, spentTodayUsd: m.spentTodayUsd,
 }))
-import { CallInvalidError } from '@/lib/ai/call'
+import { CallInvalidError, CallRefusedError } from '@/lib/ai/call'
 import {
   advanceRun, phaseArchive, phaseCluster, phaseCompose, phaseScout, reserveBudget, runDayInline, unitsFromPlan, POOL_MIN_ITEMS, RunClaimLostError,
 } from '@/lib/curation/run'
@@ -46,7 +46,7 @@ const run = (over: Partial<RunRow> = {}): RunRow => ({
   attempts: 1, last_advanced_at: null, cancel_requested: false, log: [], degraded: [], budget_usd: 4, spend_usd: 0, compose_attempts: 0,
   pool: null, cards: null, story_keys: null, brief: null, baseline: null, plan: null, critique: null, reconciled_at: null,
   matched_post_id: null, matched_job_id: null, metrics: null, model_scout: 'h', model_editor: 'o', model_critic: 's',
-  error_message: null, created_at: '', finished_at: null, ...over,
+  error_message: null, created_at: '', finished_at: null, label: null, ...over,
 })
 const deps = (over: Partial<any> = {}) => ({
   supabase: {} as any, callTool: vi.fn(), embed: vi.fn(), settings: DEFAULT_CURATION_SETTINGS,
@@ -284,6 +284,12 @@ describe('phaseArchive', () => {
     expect(patch.phase).toBe('compose')
   })
 
+  it('R25: reicht mode und label des Runs an buildArchiveBrief durch', async () => {
+    m.buildArchiveBrief.mockResolvedValue(emptyBrief())
+    await phaseArchive(deps(), run({ phase: 'archive', mode: 'backtest', label: 'bt-full-20261014', pool: snap(3), story_keys: emptyCluster() }))
+    expect(m.buildArchiveBrief.mock.calls[0][1]).toMatchObject({ mode: 'backtest', label: 'bt-full-20261014' })
+  })
+
   it('kappt auf 120 Kandidaten — Hand zuerst, die schwaechsten Top-Anfuehrer fallen weg', async () => {
     const base = snap(200)
     const handIds = base.items.slice(150).map((i) => i.id)
@@ -402,6 +408,44 @@ describe('phaseCompose', () => {
     const backtest = await phaseCompose(deps({ spentTodayUsd: 11.5 }), { ...ready(), mode: 'backtest' })
     expect(m.composeDay).toHaveBeenCalledTimes(1)
     expect(backtest.plan?.source).toBe('model')
+  })
+
+  it('R26: composeDay wirft CallInvalidError → Versuch zaehlt, Kosten gebucht, zweiter Versuch liefert den Plan', async () => {
+    const second = { ...plan(), thesis: 'zwei' }
+    m.composeDay
+      .mockRejectedValueOnce(new CallInvalidError('curation_editor', 0.4))
+      .mockResolvedValueOnce({ plan: second, costUsd: 0.5, model: 'o' })
+    m.checkHardRules.mockReturnValue([])
+    m.critiqueWithModel.mockResolvedValue({ hard: [], soft: [], costUsd: 0.05 })
+    const r = ready()
+    const patch = await phaseCompose(deps(), r)
+    expect(m.composeDay).toHaveBeenCalledTimes(2)
+    expect(m.composeDay.mock.calls[1][1].seed).toBe(20261016)
+    expect(patch.plan).toBe(second)
+    expect(patch.compose_attempts).toBe(2)
+    expect(patch.spend_usd).toBeCloseTo(0.95)
+    expect(patch.degraded).toEqual([])
+    expect(m.appendRunLog).toHaveBeenCalledWith({}, r, [expect.objectContaining({ text: expect.stringContaining('compose-Versuch 1 gescheitert'), ok: false })])
+  })
+
+  it('R26: zweimal CallInvalidError/CallRefusedError → Baseline + compose_fallback, beide Fehlerkosten gebucht', async () => {
+    m.composeDay
+      .mockRejectedValueOnce(new CallInvalidError('curation_editor', 0.4))
+      .mockRejectedValueOnce(new CallRefusedError('curation_editor', 'cyber', 0.3))
+    const patch = await phaseCompose(deps(), ready())
+    expect(m.composeDay).toHaveBeenCalledTimes(2)
+    expect(m.critiqueWithModel).not.toHaveBeenCalled()
+    expect(patch.plan?.source).toBe('baseline')
+    expect(patch.degraded).toEqual(['compose_fallback'])
+    expect(patch.compose_attempts).toBe(2)
+    expect(patch.spend_usd).toBeCloseTo(0.7)
+    expect(patch.phase).toBe('units')
+  })
+
+  it('R26: andere Fehler aus composeDay werden weitergeworfen', async () => {
+    m.composeDay.mockRejectedValueOnce(new Error('anthropic: 529 overloaded'))
+    await expect(phaseCompose(deps(), ready())).rejects.toThrow('529 overloaded')
+    expect(m.composeDay).toHaveBeenCalledTimes(1)
   })
 
   it('critic_enabled false → kein Kritiker-Call, degraded critic', async () => {

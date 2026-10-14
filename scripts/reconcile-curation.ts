@@ -20,7 +20,10 @@
  * ein Abgleich schriebe dauerhaft attribution 'none'. `--force` uebersteuert.
  * `--report`: zusaetzlich aggregateRuns ueber ALLE bereits rekonziliierten
  * Laeufe (reconciled_at IS NOT NULL) je angefragtem Modus — der aktuelle
- * Gate-Stand, nicht nur die in diesem Lauf frisch abgeglichenen Tage.
+ * Gate-Stand, nicht nur die in diesem Lauf frisch abgeglichenen Tage. Ein
+ * Aggregat je Arm (brief_mode, label), eine Tabellenzeile je Arm
+ * (Final-Review 2026-10-14 (R25)) — ein Aggregat ueber alle Backtest-Arme
+ * mischte die Ablationsstufen.
  *
  * Lauf: pnpm curation:reconcile -- --dry-run
  *       pnpm curation:reconcile -- --mode shadow
@@ -29,7 +32,7 @@
 import { config } from 'dotenv'
 import { existsSync, readFileSync } from 'node:fs'
 import type { SupabaseAdmin } from '@/lib/news-queue/events'
-import type { RunMetrics, RunMode, RunRow } from '@/lib/curation/types'
+import type { BriefMode, RunMetrics, RunMode, RunRow } from '@/lib/curation/types'
 const prodEnv = `${process.env.HOME}/.synthszr.env.prod`
 config({ path: existsSync(prodEnv) ? prodEnv : '.env.local', quiet: true })
 
@@ -73,10 +76,10 @@ async function main(): Promise<number> {
     return 1
   }
 
-  const { BASELINE_FILE, handPrecisionRefOf } = await import('@/lib/curation/backtest')
+  const { BASELINE_FILE, aggregateByArm, handPrecisionRefOf } = await import('@/lib/curation/backtest')
   const { createAdminClient } = await import('@/lib/supabase/admin')
   const { generateEmbeddings } = await import('@/lib/embeddings/generator')
-  const { aggregateRuns, isMatchWindowOpen, loadMatchCandidates, pickMatchingPost, reconcileRun } = await import('@/lib/curation/reconcile')
+  const { isMatchWindowOpen, loadMatchCandidates, pickMatchingPost, reconcileRun } = await import('@/lib/curation/reconcile')
   const supabase = createAdminClient()
   const embed = (texts: string[]) => generateEmbeddings(texts, { batchSize: 16 })
   const modes = args.mode ? [args.mode] : [...MODES]
@@ -126,13 +129,24 @@ async function main(): Promise<number> {
 
   if (args.report) {
     const handPrecisionRef = handPrecisionRefOf(BASELINE_FILE, existsSync, (p) => readFileSync(p, 'utf-8'))
+    const table: Array<Record<string, unknown>> = []
     for (const mode of modes) {
-      const metricsList = await loadReconciledMetrics(supabase, mode, args.since)
-      const aggregate = aggregateRuns(metricsList, handPrecisionRef)
-      console.log(`[Curation] Gate-Aggregat ${mode} (n=${aggregate.n}):`)
-      console.table(aggregate.mean)
-      console.log(`[Curation] Gate ${mode}:`, aggregate.gate)
+      const rows = await loadReconciledMetrics(supabase, mode, args.since)
+      for (const arm of aggregateByArm(rows, handPrecisionRef)) {
+        table.push({
+          mode,
+          brief_mode: arm.brief_mode,
+          label: arm.label ?? '–',
+          n: arm.aggregate.n,
+          ...arm.aggregate.mean,
+          diff_n: arm.aggregate.diff_vs_total_score_20.n,
+          diff_lo90: arm.aggregate.diff_vs_total_score_20.bootstrap_90.lo90,
+          ...arm.aggregate.gate,
+        })
+      }
     }
+    console.log('[Curation] Gate-Aggregat je Arm (mode, brief_mode, label):')
+    console.table(table)
   }
 
   return 0
@@ -154,19 +168,33 @@ async function loadOpenRuns(supabase: SupabaseAdmin, modes: RunMode[], since: st
   return runs
 }
 
-/** metrics aller bereits rekonziliierten Laeufe eines Modus (reconciled_at IS NOT NULL), optional seit `since` (auf asof). */
-async function loadReconciledMetrics(supabase: SupabaseAdmin, mode: RunMode, since: string | undefined): Promise<RunMetrics[]> {
-  const metrics: RunMetrics[] = []
+interface ReconciledRow { brief_mode: BriefMode; label: string | null; metrics: RunMetrics | null }
+
+/**
+ * metrics, brief_mode und label aller bereits rekonziliierten Laeufe eines
+ * Modus (reconciled_at IS NOT NULL), optional seit `since` (auf asof).
+ * metrics null (Abgleich aufgegeben, R22) bleibt drin — aggregateRuns
+ * ignoriert die Zeile.
+ */
+async function loadReconciledMetrics(supabase: SupabaseAdmin, mode: RunMode, since: string | undefined): Promise<ReconciledRow[]> {
+  const rows: ReconciledRow[] = []
   for (let offset = 0; ; offset += PAGE) {
-    let query = supabase.from('curation_runs').select('metrics').eq('status', 'done').eq('mode', mode).not('reconciled_at', 'is', null)
+    let query = supabase
+      .from('curation_runs')
+      .select('metrics, brief_mode, label')
+      .eq('status', 'done')
+      .eq('mode', mode)
+      .not('reconciled_at', 'is', null)
     if (since) query = query.gte('asof', `${since}T00:00:00.000Z`)
     const { data, error } = await query.order('asof', { ascending: true }).range(offset, offset + PAGE - 1)
     if (error) throw new Error(`curation_runs: ${error.message}`)
     if (!data || data.length === 0) break
-    for (const row of data as Array<{ metrics: unknown }>) if (row.metrics) metrics.push(row.metrics as RunMetrics)
+    for (const row of data as Array<{ metrics: unknown; brief_mode: BriefMode; label: string | null }>) {
+      rows.push({ brief_mode: row.brief_mode, label: row.label ?? null, metrics: (row.metrics as RunMetrics | null) ?? null })
+    }
     if (data.length < PAGE) break
   }
-  return metrics
+  return rows
 }
 
 void import('@/scripts/lib/curation-script-runner').then(({ runScript }) => runScript(main))

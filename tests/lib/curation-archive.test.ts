@@ -175,6 +175,22 @@ describe('loadCorrectionPairs', () => {
     expect(state.chains.curation_runs[0].eq).toHaveBeenCalledWith('mode', 'shadow')
     expect(state.chains.curation_runs[0].range).toHaveBeenCalledWith(0, 999)
   })
+  it('R25: Backtest nur Paare der eigenen Invocation — brief_mode full und dasselbe label', async () => {
+    state.queues.curation_runs = [{ data: [], error: null }]
+    await loadCorrectionPairs(client, '2026-10-15T04:25:00.000Z', 'backtest', 'bt-full-20261014')
+    const c = state.chains.curation_runs[0]
+    expect(c.eq).toHaveBeenCalledWith('mode', 'backtest')
+    expect(c.eq).toHaveBeenCalledWith('brief_mode', 'full')
+    expect(c.eq).toHaveBeenCalledWith('label', 'bt-full-20261014')
+  })
+  it('R25: Shadow filtert weder brief_mode noch label', async () => {
+    state.queues.curation_runs = [{ data: [], error: null }]
+    await loadCorrectionPairs(client, '2026-10-15T04:25:00.000Z', 'shadow')
+    const c = state.chains.curation_runs[0]
+    expect(c.eq).not.toHaveBeenCalledWith('brief_mode', expect.anything())
+    expect(c.eq).not.toHaveBeenCalledWith('label', expect.anything())
+    expect(c.is).not.toHaveBeenCalledWith('label', null)
+  })
   it('ueberspringt Einheiten ohne auflösbaren Titel', async () => {
     state.queues.curation_runs = [{ data: [{ id: 'run-1', day: '2026-10-10', pool: { items: [] } }], error: null }]
     state.queues.curation_units = [{
@@ -312,5 +328,13 @@ describe('buildArchiveBrief', () => {
     expect(brief.meta.panel_accept).toBe(5)
     expect((brief.dayBlock.match(/^- T\d+/gm) ?? []).length).toBe(20)
     expect((brief.dayBlock.match(/^- P\d+ \(topic\)/gm) ?? []).length).toBe(5)
+  })
+
+  it('R25: reicht das label des Runs an loadCorrectionPairs durch (Backtest)', async () => {
+    await buildArchiveBrief(client, {
+      asOf: '2026-10-15T04:25:00.000Z', candidates: [], briefMode: 'full', mode: 'backtest', label: 'bt-full-20261014',
+    })
+    const runChains = state.chains.curation_runs ?? []
+    expect(runChains.some((c) => c.eq.mock.calls.some((call: unknown[]) => call[0] === 'label' && call[1] === 'bt-full-20261014'))).toBe(true)
   })
 })

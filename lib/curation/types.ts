@@ -120,6 +120,8 @@ export interface RunMetrics {
 export interface RunRow {
   id: string; day: string; mode: RunMode; asof: string; status: RunStatus; phase: RunPhase
   brief_mode: BriefMode; attempts: number; last_advanced_at: string | null; cancel_requested: boolean
+  /** Backtest-Arm (Final-Review 2026-10-14 (R25)) — trennt Ablationsstufen und Iterationen; Shadow: null. */
+  label: string | null
   log: RunLogEntry[]; degraded: Degradation[]; budget_usd: number; spend_usd: number; compose_attempts: number
   pool: PoolSnapshot | null; cards: ScoutCard[] | null; story_keys: ClusterResult | null
   brief: ArchiveBrief | null; baseline: BaselineLists | null; plan: ComposePlan | null; critique: Critique | null
@@ -130,7 +132,7 @@ export interface RunRow {
 /** Leichte Listenansicht ohne die schweren JSON-Spalten. */
 export type RunSummary = Omit<RunRow, 'pool' | 'cards' | 'story_keys' | 'brief' | 'plan' | 'critique' | 'log'>
 export const RUN_SUMMARY_COLUMNS =
-  'id, day, mode, asof, status, phase, brief_mode, attempts, last_advanced_at, cancel_requested, degraded, budget_usd, spend_usd, compose_attempts, baseline, reconciled_at, matched_post_id, matched_job_id, metrics, model_scout, model_editor, model_critic, error_message, created_at, finished_at'
+  'id, day, mode, asof, status, phase, brief_mode, label, attempts, last_advanced_at, cancel_requested, degraded, budget_usd, spend_usd, compose_attempts, baseline, reconciled_at, matched_post_id, matched_job_id, metrics, model_scout, model_editor, model_critic, error_message, created_at, finished_at'
 
 export interface UnitRow {
   id: string; run_id: string; unit_key: string; member_ids: string[]; story_key: string | null

@@ -374,7 +374,7 @@ describe('aggregateRuns', () => {
 // ── reconcileRun ──────────────────────────────────────────────────────────
 
 const RUN: RunRow = {
-  id: 'r', day: '2026-10-15', mode: 'shadow', asof: ASOF, status: 'done', phase: 'finished', brief_mode: 'full', attempts: 3,
+  id: 'r', day: '2026-10-15', mode: 'shadow', asof: ASOF, status: 'done', phase: 'finished', brief_mode: 'full', label: null, attempts: 3,
   last_advanced_at: null, cancel_requested: false, log: [], degraded: [], budget_usd: 4, spend_usd: 1, compose_attempts: 1,
   pool: {
     asOf: ASOF, windowFrom: '', items: ['a', 'b', 'x'].map(poolItem), truncated: false,

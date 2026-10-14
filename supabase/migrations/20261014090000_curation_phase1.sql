@@ -12,6 +12,7 @@ create table if not exists public.curation_runs (
   phase text not null default 'pool'
     check (phase in ('pool','scout','cluster','archive','compose','units','finished')),
   brief_mode text not null default 'full' check (brief_mode in ('none','precedents-only','full')),
+  label text,                                          -- Backtest-Arm (--label, Default bt-<brief>-<YYYYMMDD>); Shadow: null
   attempts int not null default 0,                     -- Ticks ohne Fortschritt (wie glossary_jobs)
   last_advanced_at timestamptz,                        -- Lease gegen ueberlappende Ticks
   cancel_requested boolean not null default false,
@@ -154,6 +155,8 @@ select
      and table_name in ('curation_runs','curation_units','curation_item_embeddings','curation_cards')) as neue_tabellen,
   (select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public'
      and c.relname in ('curation_runs','curation_units','curation_item_embeddings','curation_cards') and c.relrowsecurity) as rls_aktiv,
+  exists (select 1 from information_schema.columns where table_schema='public'
+     and table_name='curation_runs' and column_name='label') as label_spalte,
   not exists (select 1 from pg_policies where schemaname='public'
      and tablename in ('curation_runs','curation_units','curation_item_embeddings','curation_cards')) as keine_policy,
   not exists (select 1 from information_schema.role_table_grants where table_schema='public'

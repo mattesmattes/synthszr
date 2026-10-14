@@ -5,14 +5,30 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-  BACKTEST_DEFAULTS, backtestDayReportOf, backtestDays, buildBacktestReport, doneRunIdByDay, dryRunPoolLine,
+  BACKTEST_DEFAULTS, aggregateByArm, backtestDayReportOf, backtestDays, buildBacktestReport, doneRunIdByDay, dryRunPoolLine,
   errorDayReportOf, handPrecisionRefOf, parseBacktestArgs,
 } from '@/lib/curation/backtest'
 import type { ClusterResult, PoolSnapshot, RunMetrics } from '@/lib/curation/types'
 
+const NOW = new Date('2026-10-14T19:00:00.000Z')
+const DEFAULT_ARGS = { ...BACKTEST_DEFAULTS, label: 'bt-precedents-only-20261014' }
+
 describe('parseBacktestArgs', () => {
-  it('liefert Defaults ohne Argumente', () => {
-    expect(parseBacktestArgs([])).toEqual(BACKTEST_DEFAULTS)
+  it('liefert Defaults ohne Argumente; label = bt-<brief>-<YYYYMMDD des Starts, UTC>', () => {
+    expect(parseBacktestArgs([], NOW)).toEqual(DEFAULT_ARGS)
+  })
+
+  it('R25: --label setzt das Label; Default folgt --brief', () => {
+    expect(parseBacktestArgs(['--label', 'ablation-a'], NOW)?.label).toBe('ablation-a')
+    expect(parseBacktestArgs(['--label=ablation-b'], NOW)?.label).toBe('ablation-b')
+    expect(parseBacktestArgs(['--brief', 'none'], NOW)?.label).toBe('bt-none-20261014')
+    expect(parseBacktestArgs(['--label'], NOW)).toBeNull()
+    expect(parseBacktestArgs(['--label', 'mit leerzeichen'], NOW)).toBeNull()
+  })
+
+  it('R28 (Minor 16): --brief full nur mit --sequential', () => {
+    expect(parseBacktestArgs(['--brief', 'full'], NOW)).toBeNull()
+    expect(parseBacktestArgs(['--brief', 'full', '--sequential'], NOW)?.label).toBe('bt-full-20261014')
   })
 
   it('ungueltiger --brief-Wert → null', () => {
@@ -20,17 +36,17 @@ describe('parseBacktestArgs', () => {
   })
 
   it('--since hat keine Wirkung (anders als measure-curation-baseline.ts)', () => {
-    expect(parseBacktestArgs(['--since', '2026-09-01'])).toEqual(BACKTEST_DEFAULTS)
+    expect(parseBacktestArgs(['--since', '2026-09-01'], NOW)).toEqual(DEFAULT_ARGS)
   })
 
   it('liest --from/--to/--last/--brief/--limit/--max-usd/--kickoff/--out in der Leerzeichen-Form', () => {
     const args = parseBacktestArgs([
-      '--from', '2026-01-01', '--to', '2026-01-31', '--last', '5', '--brief', 'full',
-      '--limit', '2', '--max-usd', '12.5', '--kickoff', '05:00', '--out', 'scripts/x.json',
+      '--from', '2026-01-01', '--to', '2026-01-31', '--last', '5', '--brief', 'full', '--sequential',
+      '--limit', '2', '--max-usd', '12.5', '--kickoff', '05:00', '--out', 'scripts/x.json', '--label', 'arm-1',
     ])
     expect(args).toEqual({
-      from: '2026-01-01', to: '2026-01-31', last: 5, brief: 'full', sequential: false, dryRun: false,
-      limit: 2, maxUsd: 12.5, kickoffUtc: '05:00', out: 'scripts/x.json', force: false,
+      from: '2026-01-01', to: '2026-01-31', last: 5, brief: 'full', sequential: true, dryRun: false,
+      limit: 2, maxUsd: 12.5, kickoffUtc: '05:00', out: 'scripts/x.json', force: false, label: 'arm-1',
     })
   })
 
@@ -145,9 +161,10 @@ describe('buildBacktestReport', () => {
       backtestDayReportOf({ day: '2026-09-01', id: 'r1', status: 'done', spend_usd: 1.5, degraded: [], metrics: metrics(), error_message: null }),
       backtestDayReportOf({ day: '2026-09-02', id: 'r2', status: 'cancelled', spend_usd: 0, degraded: [], metrics: null, error_message: null }),
     ]
-    const report = buildBacktestReport(BACKTEST_DEFAULTS, days, null, '2026-10-14T00:00:00.000Z')
+    const report = buildBacktestReport(DEFAULT_ARGS, days, null, '2026-10-14T00:00:00.000Z')
     expect(report.generated_at).toBe('2026-10-14T00:00:00.000Z')
-    expect(report.args).toEqual(BACKTEST_DEFAULTS)
+    expect(report.args).toEqual(DEFAULT_ARGS)
+    expect(report.args.label).toBe('bt-precedents-only-20261014')
     expect(report.days).toEqual(days)
     expect(report.aggregate.n).toBe(1)
   })
@@ -157,7 +174,7 @@ describe('buildBacktestReport', () => {
       backtestDayReportOf({ day: '2026-09-01', id: 'r1', status: 'done', spend_usd: 1.5, degraded: [], metrics: metrics(), error_message: null }),
       backtestDayReportOf({ day: '2026-09-02', id: 'r2', status: 'error', spend_usd: 0.3, degraded: [], metrics: null, error_message: 'compose: timeout' }),
     ]
-    const report = buildBacktestReport(BACKTEST_DEFAULTS, days, null)
+    const report = buildBacktestReport(DEFAULT_ARGS, days, null)
     expect(report.days.map((d) => d.status)).toEqual(['done', 'error'])
     expect(report.aggregate.n).toBe(1)
   })
@@ -199,14 +216,50 @@ describe('dryRunPoolLine', () => {
 })
 
 describe('doneRunIdByDay', () => {
+  const arm = { brief_mode: 'full' as const, label: 'bt-full-20261014' }
+
   it('nimmt nur done-Runs, letzter Eintrag je Tag gewinnt', () => {
     const map = doneRunIdByDay([
-      { day: '2026-09-01', id: 'r1', status: 'done' },
-      { day: '2026-09-02', id: 'r2', status: 'error' },
-      { day: '2026-09-01', id: 'r3', status: 'done' },
-    ])
+      { day: '2026-09-01', id: 'r1', status: 'done', ...arm },
+      { day: '2026-09-02', id: 'r2', status: 'error', ...arm },
+      { day: '2026-09-01', id: 'r3', status: 'done', ...arm },
+    ], arm)
     expect(map.get('2026-09-01')).toBe('r3')
     expect(map.has('2026-09-02')).toBe(false)
+  })
+
+  it('R25: ueberspringt nur Laeufe desselben Arms (gleicher brief_mode UND gleiches label)', () => {
+    const map = doneRunIdByDay([
+      { day: '2026-09-01', id: 'other-brief', status: 'done', brief_mode: 'precedents-only', label: 'bt-full-20261014' },
+      { day: '2026-09-02', id: 'other-label', status: 'done', brief_mode: 'full', label: 'bt-full-20261013' },
+      { day: '2026-09-03', id: 'no-label', status: 'done', brief_mode: 'full', label: null },
+      { day: '2026-09-04', id: 'same', status: 'done', ...arm },
+    ], arm)
+    expect([...map.entries()]).toEqual([['2026-09-04', 'same']])
+  })
+})
+
+describe('aggregateByArm', () => {
+  const metrics = (u: number): RunMetrics => ({
+    attribution: 'job', published_units: 9, published_attributable: 9, plan: { recommended: 10, bench: 10, held: 0 },
+    unit_recall_20: u, unit_recall_id_20: u, setzlisten_recall_10: 0.4, setzlisten_precision_10: 0.5, duplicate_rate_recommended: 0,
+    cut_rate: 0.3, additions: 1, additions_rate: 0.1, hand_stories: 2, held_rate: 0, baseline_total_score_unit_recall_20: 0.4,
+    baseline_total_score_recall_10: 0.2, diff_vs_total_score_20: u - 0.4,
+    outcomes: { kept: 0, relabeled: 0, merged: 0, dropped_after_selection: 0, dropped_never_selected: 0, added: 0 },
+  })
+
+  it('R25: ein Aggregat je (brief_mode, label), metrics null zaehlt nicht', () => {
+    const groups = aggregateByArm([
+      { brief_mode: 'full', label: 'a', metrics: metrics(0.6) },
+      { brief_mode: 'full', label: 'a', metrics: metrics(0.8) },
+      { brief_mode: 'full', label: 'a', metrics: null },
+      { brief_mode: 'none', label: 'a', metrics: metrics(0.2) },
+      { brief_mode: 'full', label: null, metrics: metrics(0.4) },
+    ], null)
+    expect(groups.map((g) => [g.brief_mode, g.label, g.aggregate.n])).toEqual([
+      ['full', 'a', 2], ['none', 'a', 1], ['full', null, 1],
+    ])
+    expect(groups[0].aggregate.mean.unit_recall_20).toBeCloseTo(0.7)
   })
 })
 

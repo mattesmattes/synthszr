@@ -21,7 +21,14 @@ import type { SupabaseAdmin } from '@/lib/news-queue/events'
 import type { ArchiveBrief, ArchiveMeta, BriefMode, RunMode, UnitOutcome } from '@/lib/curation/types'
 
 export interface ArchiveCandidate { id: string; title: string; embedding: number[] }
-export interface ArchiveInput { asOf: string; candidates: ArchiveCandidate[]; briefMode: BriefMode; mode: RunMode }
+export interface ArchiveInput {
+  asOf: string
+  candidates: ArchiveCandidate[]
+  briefMode: BriefMode
+  mode: RunMode
+  /** label des Runs — im Backtest die Kennung des Arms fuer loadCorrectionPairs (R25); Shadow: null. */
+  label?: string | null
+}
 export interface CoverageUnit { id: string; post_id: string; heading: string; published_at: string; embedding: number[] }
 export interface PrecedentHit { unit_id: string; post_id: string; heading: string; bundle_type: string | null; published_at: string; similarity: number; candidate_index: number }
 export interface CorrectionPair { outcome: UnitOutcome; title: string; role: string | null; final_role: string | null; day: string; heading: string | null }
@@ -307,18 +314,35 @@ interface CorrectionUnitRow { run_id: string; member_ids: string[]; role: string
  * Der Titel kommt NICHT aus news_queue (das Item kann laengst geloescht
  * sein), sondern aus dem eigenen pool-Snapshot des Runs (run.pool.items) —
  * derselbe Snapshot, den der Lauf selbst beim Start eingefroren hat.
+ *
+ * Im Backtest nur Paare des eigenen Arms: brief_mode 'full' und dasselbe
+ * label (Final-Review 2026-10-14 (R25), I4). Die Spec verlangt „Paare der
+ * eigenen Laeufe" — sonst mischte die dritte Ablationsstufe Paare anderer
+ * Arme und frueherer Iterationen mit alten Prompts hinein. Shadow filtert
+ * nicht (label null, es gibt nur einen Arm).
  */
-export async function loadCorrectionPairs(supabase: SupabaseAdmin, asOf: string, mode: RunMode, days = 14): Promise<CorrectionPair[]> {
+export async function loadCorrectionPairs(
+  supabase: SupabaseAdmin,
+  asOf: string,
+  mode: RunMode,
+  label: string | null = null,
+  days = 14,
+): Promise<CorrectionPair[]> {
   const since = shiftIso(asOf, days)
   const runs: RunPoolRow[] = []
   for (let offset = 0; ; offset += PAGE_NARROW) {
-    const { data, error } = await supabase
+    let query = supabase
       .from('curation_runs')
       .select('id, day, pool')
       .eq('mode', mode)
       .not('reconciled_at', 'is', null)
       .gte('asof', since)
       .lt('asof', asOf)
+    if (mode === 'backtest') {
+      query = query.eq('brief_mode', 'full')
+      query = label === null ? query.is('label', null) : query.eq('label', label)
+    }
+    const { data, error } = await query
       .order('id')
       .range(offset, offset + PAGE_NARROW - 1)
     if (error) throw new Error(`curation_runs: ${error.message}`)
@@ -454,7 +478,7 @@ export async function loadTechmemeAdoption(supabase: SupabaseAdmin, asOf: string
  * das Panel-Feedback.
  */
 export async function buildArchiveBrief(supabase: SupabaseAdmin, input: ArchiveInput): Promise<ArchiveBrief> {
-  const { asOf, candidates, briefMode, mode } = input
+  const { asOf, candidates, briefMode, mode, label = null } = input
   const day = berlinDay(asOf)
   const meta: ArchiveMeta = {
     coverage_hits: 0, followups: 0, precedents: 0, negatives: 0,
@@ -499,7 +523,7 @@ export async function buildArchiveBrief(supabase: SupabaseAdmin, input: ArchiveI
 
   if (briefMode === 'full') {
     try {
-      pairs = await loadCorrectionPairs(supabase, asOf, mode)
+      pairs = await loadCorrectionPairs(supabase, asOf, mode, label)
     } catch { meta.missing.push('pairs') }
 
     try {

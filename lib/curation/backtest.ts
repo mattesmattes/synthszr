@@ -24,6 +24,12 @@ export interface BacktestArgs {
   kickoffUtc: string
   out: string
   force: boolean
+  /**
+   * Kennung des Backtest-Arms auf curation_runs.label (Final-Review
+   * 2026-10-14 (R25), I4) — trennt Ablationsstufen und Iterationen in Skip,
+   * Korrektur-Paaren und Report. Default bt-<brief>-<YYYYMMDD des Starts, UTC>.
+   */
+  label: string
 }
 
 /**
@@ -31,7 +37,7 @@ export interface BacktestArgs {
  * GATE_START/GATE_END in measure-curation-baseline.ts) plus die letzten 30
  * Tage vor heute — dieselbe Doppel-Referenz wie die Baseline-Messung.
  */
-export const BACKTEST_DEFAULTS: BacktestArgs = {
+export const BACKTEST_DEFAULTS: Omit<BacktestArgs, 'label'> = {
   from: '2026-08-25',
   to: '2026-09-29',
   last: 30,
@@ -49,6 +55,13 @@ export const BACKTEST_DEFAULTS: BacktestArgs = {
 const KICKOFF_RE = /^([01]\d|2[0-3]):([0-5]\d)$/
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const BRIEF_MODES: ReadonlySet<string> = new Set(['none', 'precedents-only', 'full'])
+/** Ein Label ohne Leerzeichen und Sonderzeichen — es steht in Logs, Report und PostgREST-Filtern. */
+const LABEL_RE = /^[A-Za-z0-9._-]+$/
+
+/** Default-Label eines Backtest-Arms: bt-<brief>-<YYYYMMDD> mit dem UTC-Datum des Starts (R25). */
+export function defaultBacktestLabel(brief: BriefMode, now: Date): string {
+  return `bt-${brief}-${now.toISOString().slice(0, 10).replace(/-/g, '')}`
+}
 
 /**
  * Wert eines `--flag wert` oder `--flag=wert` — undefined, wenn das Flag
@@ -72,14 +85,15 @@ function hasFlag(argv: string[], name: string): boolean {
 /**
  * `--from`, `--to`, `--last N`, `--brief none|precedents-only|full`,
  * `--sequential`, `--dry-run`, `--limit N`, `--max-usd X`, `--kickoff
- * HH:MM`, `--out pfad`, `--force` — `=`- und Leerzeichen-Form, invalider
- * Wert → null. `--since` wird bewusst NICHT gelesen (anders als
- * measure-curation-baseline.ts): ein Backtest hat ein Gate-Fenster UND ein
- * Tagesfenster (`--from`/`--to`/`--last`), kein einzelnes „ab hier" — ein
- * `--since` auf der Kommandozeile hat deshalb keinerlei Wirkung, statt
- * eines der beiden Fenster stillschweigend zu verschieben.
+ * HH:MM`, `--out pfad`, `--force`, `--label name` — `=`- und
+ * Leerzeichen-Form, invalider Wert → null. `--since` wird bewusst NICHT
+ * gelesen (anders als measure-curation-baseline.ts): ein Backtest hat ein
+ * Gate-Fenster UND ein Tagesfenster (`--from`/`--to`/`--last`), kein
+ * einzelnes „ab hier" — ein `--since` auf der Kommandozeile hat deshalb
+ * keinerlei Wirkung, statt eines der beiden Fenster stillschweigend zu
+ * verschieben. `now` bestimmt nur das Datum im Default-Label.
  */
-export function parseBacktestArgs(argv: string[]): BacktestArgs | null {
+export function parseBacktestArgs(argv: string[], now: Date = new Date()): BacktestArgs | null {
   const fromRaw = readFlag(argv, '--from')
   if (fromRaw === null) return null
   const from = fromRaw ?? BACKTEST_DEFAULTS.from
@@ -123,9 +137,22 @@ export function parseBacktestArgs(argv: string[]): BacktestArgs | null {
   const out = outRaw ?? BACKTEST_DEFAULTS.out
   if (out.length === 0) return null
 
+  const labelRaw = readFlag(argv, '--label')
+  if (labelRaw === null) return null
+  const label = labelRaw ?? defaultBacktestLabel(brief as BriefMode, now)
+  if (!LABEL_RE.test(label)) return null
+
+  const sequential = hasFlag(argv, '--sequential')
+  // Final-Review 2026-10-14 (R28, Minor 16): der volle Brief liest die
+  // Korrektur-Paare frueherer Tage DESSELBEN Arms (loadCorrectionPairs) —
+  // parallel laufende Tage saehen je nach Zufall der Reihenfolge mal mehr,
+  // mal weniger davon. Ohne --sequential ist die dritte Ablationsstufe
+  // deshalb nicht reproduzierbar.
+  if (brief === 'full' && !sequential) return null
+
   return {
-    from, to, last, brief: brief as BriefMode, limit, maxUsd, kickoffUtc, out,
-    sequential: hasFlag(argv, '--sequential'),
+    from, to, last, brief: brief as BriefMode, limit, maxUsd, kickoffUtc, out, label,
+    sequential,
     dryRun: hasFlag(argv, '--dry-run'),
     force: hasFlag(argv, '--force'),
   }
@@ -140,7 +167,7 @@ export function parseBacktestArgs(argv: string[]): BacktestArgs | null {
  * Kosten-Limit soll zuerst die Gate-Referenz pruefen, nicht zufaellig in
  * den juengsten Tagen landen.
  */
-export function backtestDays(args: BacktestArgs, today: string): string[] {
+export function backtestDays(args: Pick<BacktestArgs, 'from' | 'to' | 'last' | 'limit'>, today: string): string[] {
   const days = new Set<string>()
   for (let d = args.from; d <= args.to; d = isoDayShift(d, 1)) days.add(d)
   const recentStart = isoDayShift(today, -args.last)
@@ -222,14 +249,55 @@ export function buildBacktestReport(
 }
 
 /**
- * Tag → id des juengsten `done`-Runs, fuer den Ueberspringen bereits
- * erledigter Backtest-Tage (ein `done`-Run blockiert createRun NICHT — der
- * Unique-Index von curation_runs schuetzt nur offene Status, Anhang A §1).
+ * Tag → id des juengsten `done`-Runs DESSELBEN Arms, fuer das Ueberspringen
+ * bereits erledigter Backtest-Tage (ein `done`-Run blockiert createRun NICHT
+ * — der Unique-Index von curation_runs schuetzt nur offene Status, Anhang A
+ * §1). Nur gleicher brief_mode UND gleiches label zaehlen (Final-Review
+ * 2026-10-14 (R25), I4): sonst uebersprang `--brief none` nach einem
+ * precedents-only-Lauf alle Tage und trug deren Metriken unter falschem Etikett.
  */
-export function doneRunIdByDay(runs: Array<{ day: string; id: string; status: RunStatus }>): Map<string, string> {
+export function doneRunIdByDay(
+  runs: Array<{ day: string; id: string; status: RunStatus; brief_mode: BriefMode; label: string | null }>,
+  arm: { brief_mode: BriefMode; label: string },
+): Map<string, string> {
   const map = new Map<string, string>()
-  for (const run of runs) if (run.status === 'done') map.set(run.day, run.id)
+  for (const run of runs) {
+    if (run.status !== 'done') continue
+    if (run.brief_mode !== arm.brief_mode || run.label !== arm.label) continue
+    map.set(run.day, run.id)
+  }
   return map
+}
+
+/** Gate-Aggregat eines Arms fuer `reconcile-curation --report`. */
+export interface ArmAggregate {
+  brief_mode: BriefMode
+  label: string | null
+  aggregate: AggregateReport
+}
+
+/**
+ * Ein Aggregat je (brief_mode, label) in der Reihenfolge des ersten Auftretens
+ * (Final-Review 2026-10-14 (R25)): ein Aggregat ueber alle Arme mischte die
+ * Ablationsstufen und waere als Gate-Stand wertlos. metrics null (Abgleich
+ * aufgegeben, R22) ignoriert aggregateRuns selbst.
+ */
+export function aggregateByArm(
+  rows: Array<{ brief_mode: BriefMode; label: string | null; metrics: RunMetrics | null }>,
+  handPrecisionRef: number | null,
+): ArmAggregate[] {
+  const groups = new Map<string, { brief_mode: BriefMode; label: string | null; metrics: Array<RunMetrics | null> }>()
+  for (const row of rows) {
+    const key = JSON.stringify([row.brief_mode, row.label])
+    const group = groups.get(key) ?? { brief_mode: row.brief_mode, label: row.label, metrics: [] }
+    group.metrics.push(row.metrics)
+    groups.set(key, group)
+  }
+  return [...groups.values()].map((g) => ({
+    brief_mode: g.brief_mode,
+    label: g.label,
+    aggregate: aggregateRuns(g.metrics, handPrecisionRef),
+  }))
 }
 
 /** Pfad des Baseline-Reports (measure-curation-baseline.ts) — von backtest-curation.ts und reconcile-curation.ts geteilt (Fix-Runde 1, Review Minor #3). */

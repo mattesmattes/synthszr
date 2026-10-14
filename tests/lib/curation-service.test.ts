@@ -91,6 +91,10 @@ describe('parseRunRow', () => {
     expect(r.budget_usd).toBe(4)
     expect(r.spend_usd).toBe(0)
   })
+  it('R25: fehlendes label → null', () => {
+    expect(parseRunRow(RUN).label).toBeNull()
+    expect(parseRunRow({ ...RUN, label: 'bt-x' }).label).toBe('bt-x')
+  })
   it('fehlende log/degraded → leere Arrays', () => {
     const r = parseRunRow({ ...RUN, log: undefined, degraded: undefined })
     expect(r.log).toEqual([])
@@ -99,6 +103,40 @@ describe('parseRunRow', () => {
 })
 
 describe('createRun', () => {
+  it('R25: schreibt label (Default null fuer Shadow)', async () => {
+    state.queues.curation_runs = [{ data: RUN, error: null }, { data: RUN, error: null }]
+    await createRun(client, {
+      day: '2026-10-15', mode: 'backtest', asof: RUN.asof, brief_mode: 'full', label: 'bt-full-20261014',
+      budget_usd: 4, models: { scout: 'h', editor: 'o', critic: 's' },
+    })
+    expect(state.chains.curation_runs[0].insert).toHaveBeenCalledWith(expect.objectContaining({ label: 'bt-full-20261014' }))
+    await createRun(client, {
+      day: '2026-10-15', mode: 'shadow', asof: RUN.asof, brief_mode: 'full',
+      budget_usd: 4, models: { scout: 'h', editor: 'o', critic: 's' },
+    })
+    expect(state.chains.curation_runs[1].insert).toHaveBeenCalledWith(expect.objectContaining({ label: null }))
+  })
+  it('R25: 23505 mit offenem Run eines anderen brief_mode/label → wirft statt ihn fortzusetzen', async () => {
+    state.queues.curation_runs = [
+      { data: null, error: { code: '23505', message: 'duplicate' } },
+      { data: { ...RUN, mode: 'backtest', brief_mode: 'precedents-only', label: 'bt-precedents-only-20261013' }, error: null },
+    ]
+    await expect(createRun(client, {
+      day: '2026-10-15', mode: 'backtest', asof: RUN.asof, brief_mode: 'none', label: 'bt-none-20261014',
+      budget_usd: 4, models: { scout: 'h', editor: 'o', critic: 's' },
+    })).rejects.toThrow('curation_runs: offener Run mit anderem brief_mode/label (precedents-only/bt-precedents-only-20261013)')
+  })
+  it('R25: 23505 mit gleichem brief_mode und label → liefert den offenen Run', async () => {
+    state.queues.curation_runs = [
+      { data: null, error: { code: '23505', message: 'duplicate' } },
+      { data: { ...RUN, mode: 'backtest', label: 'bt-full-20261014' }, error: null },
+    ]
+    const r = await createRun(client, {
+      day: '2026-10-15', mode: 'backtest', asof: RUN.asof, brief_mode: 'full', label: 'bt-full-20261014',
+      budget_usd: 4, models: { scout: 'h', editor: 'o', critic: 's' },
+    })
+    expect(r.label).toBe('bt-full-20261014')
+  })
   it('liefert bei 23505 den offenen Run des Tages', async () => {
     state.queues.curation_runs = [
       { data: null, error: { code: '23505', message: 'duplicate' } },

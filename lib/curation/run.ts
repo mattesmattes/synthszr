@@ -249,6 +249,7 @@ export async function phaseArchive(deps: RunDeps, run: RunRow): Promise<Partial<
     candidates,
     briefMode: run.brief_mode,
     mode: run.mode,
+    label: run.label,
   })
 
   // Der Brief ist auch mit Lücken brauchbar (jede Quelle einzeln in try/catch,
@@ -318,7 +319,24 @@ export async function phaseCompose(deps: RunDeps, run: RunRow): Promise<Partial<
     // Antwort ab.
     attempts++
     await saveRunState(deps.supabase, run.id, { compose_attempts: attempts, spend_usd: spend + estimate })
-    const composed = await composeDay(deps.callTool, input, brief?.precedentIds ?? {})
+    let composed: Awaited<ReturnType<typeof composeDay>>
+    try {
+      composed = await composeDay(deps.callTool, input, brief?.precedentIds ?? {})
+    } catch (err) {
+      // Spec-Fehlerpfad „Compose: kein tool_use nach Retry → zählt als
+      // Versuch; 2 Versuche → Baseline-Plan, degraded" (Final-Review
+      // 2026-10-14 (R26), I5): ungültige Antwort (auch ein max_tokens-
+      // Abbruch) oder Refusal verbrauchen den Versuch, statt den ganzen Tick
+      // zu werfen — im Backtest fiele der Tag sonst aus dem Aggregat
+      // (Survivorship-Bias). Netzwerk-, Auth- oder Überlast-Fehler sind kein
+      // Modellversagen und gehen an die Route (attempts, nächster Tick).
+      if (!(err instanceof CallInvalidError || err instanceof CallRefusedError)) throw err
+      spend += err.costUsd
+      const text = `compose-Versuch ${attempts} gescheitert: ${err.message}`
+      await appendRunLog(deps.supabase, run, [{ at: stamp(), text, ok: false }])
+      deps.log?.(`[Curation] ${run.day}: ${text}`)
+      continue
+    }
     spend += composed.costUsd
 
     const hard = checkHardRules(composed.plan, pool, cluster, embeddings)
