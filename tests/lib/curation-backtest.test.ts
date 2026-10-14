@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   BACKTEST_DEFAULTS, backtestDayReportOf, backtestDays, buildBacktestReport, doneRunIdByDay, dryRunPoolLine,
-  handPrecisionRefOf, parseBacktestArgs,
+  errorDayReportOf, handPrecisionRefOf, parseBacktestArgs,
 } from '@/lib/curation/backtest'
 import type { ClusterResult, PoolSnapshot, RunMetrics } from '@/lib/curation/types'
 
@@ -207,5 +207,21 @@ describe('doneRunIdByDay', () => {
     ])
     expect(map.get('2026-09-01')).toBe('r3')
     expect(map.has('2026-09-02')).toBe(false)
+  })
+})
+
+describe('errorDayReportOf', () => {
+  it('baut eine lokale Fehler-Zeile ohne DB-Zugriff, mit run_id (Scheitern NACH createRun, Review 2026-10-14 R20)', () => {
+    const entry = errorDayReportOf('2026-09-05', 'r9', 'curation_runs: boom')
+    expect(entry).toEqual({
+      day: '2026-09-05', run_id: 'r9', status: 'error', spend_usd: 0, degraded: [], attribution: null, metrics: null,
+      error: 'curation_runs: boom',
+    })
+  })
+
+  it('run_id ist null, wenn createRun selbst scheiterte — kein Run zum Benennen', () => {
+    const entry = errorDayReportOf('2026-09-06', null, 'curation_runs: connect ECONNREFUSED')
+    expect(entry.run_id).toBeNull()
+    expect(entry.status).toBe('error')
   })
 })

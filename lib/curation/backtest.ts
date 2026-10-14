@@ -150,10 +150,15 @@ export function backtestDays(args: BacktestArgs, today: string): string[] {
   return args.limit === null ? sorted : sorted.slice(0, args.limit)
 }
 
-/** Eintrag eines Tages im Backtest-Report — dieselbe Zeile fuer Voll-, Skip-, Dry-Run- und Fehler-Tage. */
+/**
+ * Eintrag eines Tages im Backtest-Report — dieselbe Zeile fuer Voll-, Skip-,
+ * Dry-Run- und Fehler-Tage. `run_id` ist null, wenn kein Run angelegt werden
+ * konnte (createRun selbst scheiterte, Review 2026-10-14 R20) — der einzige
+ * Fall ohne eine echte curation_runs-Zeile.
+ */
 export interface BacktestDayReport {
   day: string
-  run_id: string
+  run_id: string | null
   status: RunStatus
   spend_usd: number
   degraded: Degradation[]
@@ -183,6 +188,19 @@ export function backtestDayReportOf(run: {
     metrics: run.metrics,
     error: run.error_message,
   }
+}
+
+/**
+ * Lokale Fehler-Zeile OHNE DB-Zugriff (Review 2026-10-14, R20): fuer den
+ * Fall, dass der Recovery-Pfad eines Tages selbst scheitert (finishRun oder
+ * mustGetRun werfen) — dann ist ein erneutes DB-Lesen weder moeglich noch
+ * sicher, der Report-Eintrag entsteht aus dem, was das Script ohnehin schon
+ * weiss. `runId` ist null, wenn schon `createRun` scheiterte (kein Run
+ * angelegt, also auch kein `finishRun`-Ziel); sonst die id des Runs, dessen
+ * Abschluss NACH einem Fehler selbst fehlschlug.
+ */
+export function errorDayReportOf(day: string, runId: string | null, message: string): BacktestDayReport {
+  return { day, run_id: runId, status: 'error', spend_usd: 0, degraded: [], attribution: null, metrics: null, error: message }
 }
 
 export interface BacktestReport {

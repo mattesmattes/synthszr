@@ -54,7 +54,7 @@ const PARALLEL_DAYS = 3
 async function main(): Promise<number> {
   const {
     parseBacktestArgs, backtestDays, backtestDayReportOf, buildBacktestReport, doneRunIdByDay, dryRunPoolLine,
-    handPrecisionRefOf, BASELINE_FILE,
+    errorDayReportOf, handPrecisionRefOf, BASELINE_FILE,
   } = await import('@/lib/curation/backtest')
 
   const parsed = parseBacktestArgs(process.argv.slice(2))
@@ -170,6 +170,13 @@ async function main(): Promise<number> {
     return backtestDayReportOf(final)
   }
 
+  /**
+   * Fehler aus `createRun`, `dryRunDay`/`runDayFull` UND dem Recovery-Pfad
+   * selbst (finishRun/mustGetRun) wirft `processDay` nicht weiter (Review
+   * 2026-10-14, R20) — jeder dieser Zweige liefert eine Report-Zeile zurueck.
+   * Nur so kann `Promise.all` einer Parallelgruppe (unten) verlaesslich ALLE
+   * Ergebnisse einsammeln, auch wenn ein Tag scheitert.
+   */
   async function processDay(d: string): Promise<{ entry: DayReport; spend: number }> {
     const existingId = doneByDay.get(d)
     if (existingId) {
@@ -177,29 +184,58 @@ async function main(): Promise<number> {
       return { entry: backtestDayReportOf(await mustGetRun(existingId)), spend: 0 }
     }
 
-    const asof = `${d}T${kickoffHH}:${kickoffMM}:00.000Z`
-    const run = await createRun(supabase, { day: d, mode: 'backtest', asof, brief_mode: args.brief, budget_usd: settings.budget_usd, models })
-    const callTool = args.dryRun ? dryRunCallTool : createCaller({ runId: run.id, mode: 'backtest' }).callTool
-    const deps: RunDeps = { supabase, callTool, embed, settings, models, budgetMs: Number.POSITIVE_INFINITY, log: console.log }
-
+    // WARUM createRun jetzt IM try: ein einzelner transienter DB-Fehler auf
+    // genau diesem Request hat dieselbe Eintrittswahrscheinlichkeit wie ein
+    // transienter Fehler in einer der anderen, schon geschuetzten Phasen
+    // (Re-Review 2026-10-14) — der Unique-Violation-Fall (haengender
+    // pending/processing-Run) wirft dabei NICHT: createRun faengt ihn selbst
+    // ab und liefert den bestehenden offenen Run zurueck (lib/curation/
+    // service.ts:100-116); was hier durchkommt, sind echte Ausfaelle.
+    let run: RunRow | undefined
     try {
+      const asof = `${d}T${kickoffHH}:${kickoffMM}:00.000Z`
+      run = await createRun(supabase, { day: d, mode: 'backtest', asof, brief_mode: args.brief, budget_usd: settings.budget_usd, models })
+      const callTool = args.dryRun ? dryRunCallTool : createCaller({ runId: run.id, mode: 'backtest' }).callTool
+      const deps: RunDeps = { supabase, callTool, embed, settings, models, budgetMs: Number.POSITIVE_INFINITY, log: console.log }
       const entry = args.dryRun ? await dryRunDay(deps, run) : await runDayFull(deps, run)
       return { entry, spend: entry.spend_usd }
     } catch (err) {
       // WARUM hier fangen statt den ganzen Backtest mitreissen zu lassen
       // (Fix-Runde 1, Review Important #1): ein einzelner transienter Fehler
-      // (Modell-API, Validierung, Rekonziliation) soll weder die bereits
-      // bezahlten Tage noch den Report verwerfen. finishRun schliesst den
-      // Run als 'error' ab — sonst blockiert die offene Zeile (status
-      // pending/processing) ueber curation_runs_one_open_per_day jeden Retry
-      // desselben Tages; ein Run, der schon 'done' war (nur reconcileRun
-      // scheiterte danach), wird bewusst ebenfalls auf 'error' gesetzt — ohne
-      // Metriken ist der Tag fuer das Aggregat ohnehin nicht nutzbar.
+      // (Modell-API, Validierung, Rekonziliation, jetzt auch createRun
+      // selbst) soll weder die bereits bezahlten Tage noch den Report
+      // verwerfen. finishRun schliesst den Run als 'error' ab — sonst
+      // blockiert die offene Zeile (status pending/processing) ueber
+      // curation_runs_one_open_per_day jeden Retry desselben Tages; ein Run,
+      // der schon 'done' war (nur reconcileRun scheiterte danach), wird
+      // bewusst ebenfalls auf 'error' gesetzt — ohne Metriken ist der Tag
+      // fuer das Aggregat ohnehin nicht nutzbar.
       const message = err instanceof Error ? err.message : String(err)
       console.error(`[Curation] ${d}: FEHLER ${message}`)
-      await finishRun(supabase, run.id, 'error', message)
-      const entry = backtestDayReportOf(await mustGetRun(run.id))
-      return { entry, spend: entry.spend_usd }
+
+      if (!run) {
+        // createRun selbst ist gescheitert — keine Zeile zum Abschliessen,
+        // kein mustGetRun moeglich. Lokaler Eintrag ohne run_id.
+        return { entry: errorDayReportOf(d, null, message), spend: 0 }
+      }
+
+      try {
+        await finishRun(supabase, run.id, 'error', message)
+        const entry = backtestDayReportOf(await mustGetRun(run.id))
+        return { entry, spend: entry.spend_usd }
+      } catch (recoveryErr) {
+        // WARUM dieses verschachtelte try/catch (Review 2026-10-14, R20):
+        // finishRun/mustGetRun koennen selbst scheitern (transienter
+        // Supabase-Fehler beim Status-Update, Zeile nicht gefunden) — ohne
+        // diesen Fang entkaeme GENAU DIESER Recovery-Fehler `processDay` und
+        // riesse die laufende Promise.all-Gruppe mit, derselbe Fehlerfall wie
+        // Important #1, nur auf den Recovery-Pfad selbst verschoben. Scheitert
+        // die Recovery, wird der Report-Eintrag lokal gebaut — kein weiteres
+        // DB-Lesen, das ebenfalls scheitern koennte.
+        const recoveryMessage = recoveryErr instanceof Error ? recoveryErr.message : String(recoveryErr)
+        console.error(`[Curation] ${d}: Sekundaerfehler ${recoveryMessage}`)
+        return { entry: errorDayReportOf(d, run.id, message), spend: 0 }
+      }
     }
   }
 

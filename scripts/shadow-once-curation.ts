@@ -139,7 +139,20 @@ async function main(): Promise<number> {
     // blockiert ueber curation_runs_one_open_per_day jeden erneuten Versuch.
     const message = err instanceof Error ? err.message : String(err)
     console.error(`[Curation] ${day}: FEHLER ${message}`)
-    await finishRun(supabase, run.id, 'error', message)
+    try {
+      await finishRun(supabase, run.id, 'error', message)
+    } catch (recoveryErr) {
+      // WARUM dieses verschachtelte try/catch (Review 2026-10-14, R20):
+      // finishRun kann selbst scheitern (transienter Supabase-Fehler) — ohne
+      // diesen Fang wuerde DIESER Fehler ungefangen in runScript()s
+      // Catch-Zweig springen; das Ergebnis waere dasselbe wie ohne Fang
+      // ueberhaupt (Run bleibt 'processing', blockiert ueber
+      // curation_runs_one_open_per_day), nur mit einem irrefuehrenden
+      // Stacktrace statt der eigentlichen Fehlermeldung im Log. Exit 1 steht
+      // so oder so fest, also nur geloggt, nicht erneut geworfen.
+      const recoveryMessage = recoveryErr instanceof Error ? recoveryErr.message : String(recoveryErr)
+      console.error(`[Curation] ${day}: Sekundaerfehler ${recoveryMessage}`)
+    }
     return 1
   }
 
