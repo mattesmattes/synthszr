@@ -29,7 +29,7 @@ import {
   Megaphone,
   ClipboardEdit,
   Wallet,
-  Library, CalendarRange } from 'lucide-react'
+  Library, CalendarRange, ClipboardList } from 'lucide-react'
 import { LucideIcon } from 'lucide-react'
 
 interface NavItem {
@@ -151,6 +151,11 @@ const navGroups: NavGroup[] = [
         href: '/admin/digests',
         icon: Sparkles,
         highlight: true
+      },
+      {
+        label: 'Morgenkonferenz',
+        href: '/admin/curation',
+        icon: ClipboardList
       },
       {
         label: 'News Queue',
