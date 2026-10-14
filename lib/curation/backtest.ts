@@ -10,7 +10,7 @@
  */
 import { isoDayShift } from '@/lib/curation/precedents'
 import { aggregateRuns, type AggregateReport } from '@/lib/curation/reconcile'
-import type { BriefMode, Degradation, RunMetrics, RunStatus } from '@/lib/curation/types'
+import type { BriefMode, ClusterResult, Degradation, PoolSnapshot, RunMetrics, RunStatus } from '@/lib/curation/types'
 
 export interface BacktestArgs {
   from: string
@@ -150,7 +150,7 @@ export function backtestDays(args: BacktestArgs, today: string): string[] {
   return args.limit === null ? sorted : sorted.slice(0, args.limit)
 }
 
-/** Eintrag eines Tages im Backtest-Report — dieselbe Zeile fuer Voll-, Skip- und Dry-Run-Tage. */
+/** Eintrag eines Tages im Backtest-Report — dieselbe Zeile fuer Voll-, Skip-, Dry-Run- und Fehler-Tage. */
 export interface BacktestDayReport {
   day: string
   run_id: string
@@ -159,9 +159,11 @@ export interface BacktestDayReport {
   degraded: Degradation[]
   attribution: RunMetrics['attribution'] | null
   metrics: RunMetrics | null
+  /** `run.error_message` — gesetzt, sobald das Script den Tag per finishRun(..., 'error', message) abgeschlossen hat (Fix-Runde 1, Review Important #1). */
+  error: string | null
 }
 
-/** Formt eine curation_runs-Zeile in eine Report-Zeile — attribution kommt aus den Metriken, nicht der Spalte. */
+/** Formt eine curation_runs-Zeile in eine Report-Zeile — attribution kommt aus den Metriken, nicht der Spalte, error aus error_message. */
 export function backtestDayReportOf(run: {
   day: string
   id: string
@@ -169,6 +171,7 @@ export function backtestDayReportOf(run: {
   spend_usd: number
   degraded: Degradation[]
   metrics: RunMetrics | null
+  error_message: string | null
 }): BacktestDayReport {
   return {
     day: run.day,
@@ -178,6 +181,7 @@ export function backtestDayReportOf(run: {
     degraded: run.degraded,
     attribution: run.metrics?.attribution ?? null,
     metrics: run.metrics,
+    error: run.error_message,
   }
 }
 
@@ -208,4 +212,43 @@ export function doneRunIdByDay(runs: Array<{ day: string; id: string; status: Ru
   const map = new Map<string, string>()
   for (const run of runs) if (run.status === 'done') map.set(run.day, run.id)
   return map
+}
+
+/** Pfad des Baseline-Reports (measure-curation-baseline.ts) — von backtest-curation.ts und reconcile-curation.ts geteilt (Fix-Runde 1, Review Minor #3). */
+export const BASELINE_FILE = 'scripts/curation-baseline.json'
+
+/**
+ * `baselines.hand.precision_full` aus dem Baseline-Report, falls die Datei
+ * existiert und valides JSON mit dem Feld enthaelt — sonst null (kein
+ * Gate-Vergleich). `exists`/`read` sind injiziert (Muster `EmbedTexts`,
+ * `CallToolFn`): die Funktion bleibt ohne echtes Dateisystem testbar, die
+ * Scripts rufen sie mit `existsSync`/`readFileSync` auf.
+ */
+export function handPrecisionRefOf(
+  path: string,
+  exists: (p: string) => boolean,
+  read: (p: string) => string,
+): number | null {
+  if (!exists(path)) return null
+  try {
+    const raw = JSON.parse(read(path)) as { baselines?: { hand?: { precision_full?: unknown } } }
+    const value = raw.baselines?.hand?.precision_full
+    return typeof value === 'number' ? value : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Pool-/Cluster-Vorschauzeile des `--dry-run`-Pfads (Ruling R12) — identisch
+ * in `backtest-curation.ts` und `shadow-once-curation.ts`, deshalb hier
+ * einmal geteilt (Fix-Runde 1, Review Minor #4). Reine Formatierung, kein
+ * `console.log` hier — das bleibt Sache der Scripts.
+ */
+export function dryRunPoolLine(day: string, pool: PoolSnapshot, cluster: ClusterResult): string {
+  const ex = pool.excluded
+  const stories = Object.keys(cluster.clusters).length
+  return `[Curation] ${day}: Pool ${pool.items.length} Items `
+    + `(excluded used_earlier ${ex.used_earlier}, expired ${ex.expired}, skipped ${ex.skipped}, junk ${ex.junk}, short ${ex.short}) `
+    + `· ${stories} Stories · ${pool.handIds.length} Hand`
 }

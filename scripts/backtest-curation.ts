@@ -27,6 +27,15 @@
  * Hand-Anteil, schreibt aber NICHTS in curation_runs ausser der angelegten
  * Zeile selbst (kein saveRunState); der Run endet als `cancelled`.
  *
+ * Fehler eines einzelnen Tages (Fix-Runde 1, Review Important #1): ein
+ * Scout-/Kritiker-/Compose-/Archiv-/Rekonziliations-Fehler reisst NICHT den
+ * ganzen Backtest mit — der Tag wird als `error` abgeschlossen (Run per
+ * `finishRun`, sonst blockiert die offene Zeile ueber den Unique-Index jeden
+ * Retry), im Report mit `status:'error'` und `error` gefuehrt, die uebrigen
+ * Tage laufen weiter. Nur `pool_small` ist ein Sonderfall: den schliesst
+ * `advanceRun` selbst als `error` ab (lib/curation/run.ts:379-387), ohne zu
+ * werfen — das greift hier durch, ohne dass dieses Script etwas tun muss.
+ *
  * Lauf: pnpm curation:backtest -- --dry-run --limit 2
  *       pnpm curation:backtest -- --limit 2 --max-usd 6 --out scripts/curation-backtest-probe.json
  *       pnpm curation:backtest                              (voller Gate-Bereich, ~55-90 USD)
@@ -41,12 +50,12 @@ config({ path: existsSync(prodEnv) ? prodEnv : '.env.local', quiet: true })
 
 /** Tage, die gleichzeitig laufen, solange `--sequential` nicht gesetzt ist — s. Begruendung bei groupsOf unten. */
 const PARALLEL_DAYS = 3
-/** Baseline-Report aus measure-curation-baseline.ts — Referenz fuer aggregateRuns' precision_vs_hand-Gate. */
-const BASELINE_FILE = 'scripts/curation-baseline.json'
 
 async function main(): Promise<number> {
-  const { parseBacktestArgs, backtestDays, backtestDayReportOf, buildBacktestReport, doneRunIdByDay } =
-    await import('@/lib/curation/backtest')
+  const {
+    parseBacktestArgs, backtestDays, backtestDayReportOf, buildBacktestReport, doneRunIdByDay, dryRunPoolLine,
+    handPrecisionRefOf, BASELINE_FILE,
+  } = await import('@/lib/curation/backtest')
 
   const parsed = parseBacktestArgs(process.argv.slice(2))
   if (!parsed) {
@@ -67,7 +76,6 @@ async function main(): Promise<number> {
   const { berlinDay } = await import('@/lib/curation/precedents')
   const { createAdminClient } = await import('@/lib/supabase/admin')
   const { createCaller } = await import('@/lib/ai/call')
-  const { flushUsageLog } = await import('@/lib/ai/usage-log')
   const { generateEmbeddings } = await import('@/lib/embeddings/generator')
   const { createRun, finishRun, getRun, listRuns, loadCurationSettings } = await import('@/lib/curation/service')
   const { phaseCluster, phasePool, runDayInline } = await import('@/lib/curation/run')
@@ -137,15 +145,7 @@ async function main(): Promise<number> {
     const clusterPatch = await phaseCluster(deps, patched)
     patched = { ...patched, ...clusterPatch }
 
-    const pool = patched.pool!
-    const cluster = patched.story_keys!
-    const stories = Object.keys(cluster.clusters).length
-    const ex = pool.excluded
-    console.log(
-      `[Curation] ${run.day}: Pool ${pool.items.length} Items `
-      + `(excluded used_earlier ${ex.used_earlier}, expired ${ex.expired}, skipped ${ex.skipped}, junk ${ex.junk}, short ${ex.short}) `
-      + `· ${stories} Stories · ${pool.handIds.length} Hand`,
-    )
+    console.log(dryRunPoolLine(run.day, patched.pool!, patched.story_keys!))
 
     await finishRun(supabase, run.id, 'cancelled')
     return backtestDayReportOf(await mustGetRun(run.id))
@@ -182,8 +182,25 @@ async function main(): Promise<number> {
     const callTool = args.dryRun ? dryRunCallTool : createCaller({ runId: run.id, mode: 'backtest' }).callTool
     const deps: RunDeps = { supabase, callTool, embed, settings, models, budgetMs: Number.POSITIVE_INFINITY, log: console.log }
 
-    const entry = args.dryRun ? await dryRunDay(deps, run) : await runDayFull(deps, run)
-    return { entry, spend: entry.spend_usd }
+    try {
+      const entry = args.dryRun ? await dryRunDay(deps, run) : await runDayFull(deps, run)
+      return { entry, spend: entry.spend_usd }
+    } catch (err) {
+      // WARUM hier fangen statt den ganzen Backtest mitreissen zu lassen
+      // (Fix-Runde 1, Review Important #1): ein einzelner transienter Fehler
+      // (Modell-API, Validierung, Rekonziliation) soll weder die bereits
+      // bezahlten Tage noch den Report verwerfen. finishRun schliesst den
+      // Run als 'error' ab — sonst blockiert die offene Zeile (status
+      // pending/processing) ueber curation_runs_one_open_per_day jeden Retry
+      // desselben Tages; ein Run, der schon 'done' war (nur reconcileRun
+      // scheiterte danach), wird bewusst ebenfalls auf 'error' gesetzt — ohne
+      // Metriken ist der Tag fuer das Aggregat ohnehin nicht nutzbar.
+      const message = err instanceof Error ? err.message : String(err)
+      console.error(`[Curation] ${d}: FEHLER ${message}`)
+      await finishRun(supabase, run.id, 'error', message)
+      const entry = backtestDayReportOf(await mustGetRun(run.id))
+      return { entry, spend: entry.spend_usd }
+    }
   }
 
   // WARUM 3 parallel ohne --sequential: Backtest-Tage sind voneinander
@@ -210,17 +227,23 @@ async function main(): Promise<number> {
     }
   }
 
-  const handPrecisionRef = handPrecisionRefOf()
+  const failedDays = reports.filter((r) => r.status === 'error').length
+  const handPrecisionRef = handPrecisionRefOf(BASELINE_FILE, existsSync, (p) => readFileSync(p, 'utf-8'))
   const report = buildBacktestReport(args, reports, handPrecisionRef)
   // WARUM nicht bei --dry-run: der Report beschreibt einen echten Backtest-
   // Lauf (Spend, Metriken); eine Pool/Cluster-Vorschau soll eine bestehende
   // Report-Datei nicht stillschweigend ueberschreiben (Muster
   // measure-curation-baseline.ts: `if (!args.dryRun) writeFileSync(...)`).
+  // Gilt AUCH bei Fehlern: der Report wird immer geschrieben (Review
+  // Important #1), nicht nur im reinen Erfolgsfall.
   if (!args.dryRun) writeFileSync(args.out, JSON.stringify(report, null, 1))
 
   console.table(report.aggregate.mean)
   const mins = ((Date.now() - t0) / 60000).toFixed(1)
-  console.log(`[Curation] FERTIG — ${reports.length}/${days.length} Tage, ${spentThisRun.toFixed(2)} USD (${mins} min)`)
+  console.log(`[Curation] FERTIG — ${reports.length}/${days.length} Tage (${failedDays} fehlgeschlagen), ${spentThisRun.toFixed(2)} USD (${mins} min)`)
+  if (failedDays > 0) {
+    console.warn(`[Curation] WARNUNG: ${failedDays} von ${reports.length} Tagen mit Fehler abgeschlossen — Details in ${args.out} (days[].error).`)
+  }
   if (budgetExceeded) {
     console.warn(
       `[Curation] WARNUNG: Budget ueberschritten (${spentThisRun.toFixed(2)} USD > ${args.maxUsd} USD) `
@@ -228,11 +251,10 @@ async function main(): Promise<number> {
     )
   }
 
-  // WARUM hier und nicht in .then(): flushUsageLog() muss VOR process.exit
-  // abgeschlossen sein (Anhang A §0) — sonst verliert ein Skript die
-  // llm_usage-Zeilen der letzten Aufrufe (BEFUND 2026-10-14, usage-log.ts).
-  await flushUsageLog()
-  return budgetExceeded ? 1 : 0
+  // WARUM kein flushUsageLog() hier: das uebernimmt runScript() (scripts/lib/
+  // curation-script-runner.ts) einheitlich fuer alle drei curation:*-Scripts,
+  // AUCH wenn main() wirft (Fix-Runde 1, Review Important #2).
+  return budgetExceeded || failedDays > 0 ? 1 : 0
 }
 
 /** Gruppen der Groesse `size`, letzte Gruppe ggf. kleiner — Reihenfolge bleibt erhalten. */
@@ -242,16 +264,4 @@ function groupsOf<T>(items: T[], size: number): T[][] {
   return groups
 }
 
-/** baselines.hand.precision_full aus scripts/curation-baseline.json, falls die Datei existiert — sonst null (kein Gate-Vergleich). */
-function handPrecisionRefOf(): number | null {
-  if (!existsSync(BASELINE_FILE)) return null
-  try {
-    const raw = JSON.parse(readFileSync(BASELINE_FILE, 'utf-8')) as { baselines?: { hand?: { precision_full?: unknown } } }
-    const value = raw.baselines?.hand?.precision_full
-    return typeof value === 'number' ? value : null
-  } catch {
-    return null
-  }
-}
-
-main().then((code) => process.exit(code)).catch((e) => { console.error(e); process.exit(1) })
+void import('@/scripts/lib/curation-script-runner').then(({ runScript }) => runScript(main))

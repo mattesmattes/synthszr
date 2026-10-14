@@ -33,7 +33,6 @@ config({ path: existsSync(prodEnv) ? prodEnv : '.env.local', quiet: true })
 const MODES: readonly RunMode[] = ['shadow', 'backtest']
 /** Seitengroesse fuer .range() (Vertrag 0: Scheiben à 1000/200 — hier die schmale 1000er-Seite, keine Payload-Spalten). */
 const PAGE = 1000
-const BASELINE_FILE = 'scripts/curation-baseline.json'
 
 interface ReconcileArgs { mode: RunMode | undefined; since: string | undefined; dryRun: boolean; report: boolean }
 
@@ -65,8 +64,8 @@ async function main(): Promise<number> {
     return 1
   }
 
+  const { BASELINE_FILE, handPrecisionRefOf } = await import('@/lib/curation/backtest')
   const { createAdminClient } = await import('@/lib/supabase/admin')
-  const { flushUsageLog } = await import('@/lib/ai/usage-log')
   const { generateEmbeddings } = await import('@/lib/embeddings/generator')
   const { aggregateRuns, loadMatchCandidates, pickMatchingPost, reconcileRun } = await import('@/lib/curation/reconcile')
   const supabase = createAdminClient()
@@ -110,7 +109,7 @@ async function main(): Promise<number> {
   }
 
   if (args.report) {
-    const handPrecisionRef = handPrecisionRefOf()
+    const handPrecisionRef = handPrecisionRefOf(BASELINE_FILE, existsSync, (p) => readFileSync(p, 'utf-8'))
     for (const mode of modes) {
       const metricsList = await loadReconciledMetrics(supabase, mode, args.since)
       const aggregate = aggregateRuns(metricsList, handPrecisionRef)
@@ -120,7 +119,6 @@ async function main(): Promise<number> {
     }
   }
 
-  await flushUsageLog()
   return 0
 }
 
@@ -155,16 +153,4 @@ async function loadReconciledMetrics(supabase: SupabaseAdmin, mode: RunMode, sin
   return metrics
 }
 
-/** baselines.hand.precision_full aus scripts/curation-baseline.json, falls die Datei existiert — sonst null (kein Gate-Vergleich). */
-function handPrecisionRefOf(): number | null {
-  if (!existsSync(BASELINE_FILE)) return null
-  try {
-    const raw = JSON.parse(readFileSync(BASELINE_FILE, 'utf-8')) as { baselines?: { hand?: { precision_full?: unknown } } }
-    const value = raw.baselines?.hand?.precision_full
-    return typeof value === 'number' ? value : null
-  } catch {
-    return null
-  }
-}
-
-main().then((code) => process.exit(code)).catch((e) => { console.error(e); process.exit(1) })
+void import('@/scripts/lib/curation-script-runner').then(({ runScript }) => runScript(main))

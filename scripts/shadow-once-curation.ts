@@ -15,6 +15,13 @@
  * Modellaufruf (Ruling R12, wie backtest-curation.ts) — zeigt Pool-Groesse,
  * Ausschluesse, Stories und Hand-Anteil, Run endet als `cancelled`.
  *
+ * Fehler des Laufs (Fix-Runde 1, Review Important #1, "dasselbe Muster wie
+ * backtest-curation.ts"): ein Fehler in runDayInline oder der anschliessenden
+ * Rekonziliation wird geloggt, der Run per `finishRun(...,'error',message)`
+ * abgeschlossen (sonst blockiert die offene Zeile ueber den Unique-Index
+ * einen erneuten Versuch) und das Script beendet mit Exit 1 — ebenso, wenn
+ * der Lauf ohne Wurf in einem anderen Status als 'done' endet.
+ *
  * Lauf: pnpm curation:shadow-once -- --dry-run
  *       pnpm curation:shadow-once
  *       pnpm curation:shadow-once -- --asof 2026-10-14T04:25:00.000Z
@@ -48,10 +55,10 @@ async function main(): Promise<number> {
   const dryRun = argv.includes('--dry-run')
   const asof = asofArg ?? new Date().toISOString()
 
+  const { dryRunPoolLine } = await import('@/lib/curation/backtest')
   const { berlinDay } = await import('@/lib/curation/precedents')
   const { createAdminClient } = await import('@/lib/supabase/admin')
   const { createCaller } = await import('@/lib/ai/call')
-  const { flushUsageLog } = await import('@/lib/ai/usage-log')
   const { generateEmbeddings } = await import('@/lib/embeddings/generator')
   const { createRun, finishRun, loadCurationSettings } = await import('@/lib/curation/service')
   const { phaseCluster, phasePool, runDayInline } = await import('@/lib/curation/run')
@@ -94,30 +101,28 @@ async function main(): Promise<number> {
       if (!message.startsWith('pool_small')) throw err
       await finishRun(supabase, run.id, 'error', message)
       console.warn(`[Curation] ${day}: ${message} — kein Cluster, Run auf error`)
-      await flushUsageLog()
-      return 0
+      return 1
     }
     const clusterPatch = await phaseCluster(deps, patched)
     patched = { ...patched, ...clusterPatch }
 
-    const pool = patched.pool!
-    const cluster = patched.story_keys!
-    const stories = Object.keys(cluster.clusters).length
-    const ex = pool.excluded
-    console.log(
-      `[Curation] ${day}: Pool ${pool.items.length} Items `
-      + `(excluded used_earlier ${ex.used_earlier}, expired ${ex.expired}, skipped ${ex.skipped}, junk ${ex.junk}, short ${ex.short}) `
-      + `· ${stories} Stories · ${pool.handIds.length} Hand`,
-    )
+    console.log(dryRunPoolLine(day, patched.pool!, patched.story_keys!))
     await finishRun(supabase, run.id, 'cancelled')
-    await flushUsageLog()
     return 0
   }
 
-  const finished = await runDayInline(deps, run)
-  console.log(`[Curation] ${day}: Lauf beendet — Status ${finished.status}, Phase ${finished.phase}, ${finished.spend_usd.toFixed(2)} USD, Degradierungen ${JSON.stringify(finished.degraded)}`)
+  try {
+    const finished = await runDayInline(deps, run)
+    console.log(`[Curation] ${day}: Lauf beendet — Status ${finished.status}, Phase ${finished.phase}, ${finished.spend_usd.toFixed(2)} USD, Degradierungen ${JSON.stringify(finished.degraded)}`)
 
-  if (finished.status === 'done') {
+    if (finished.status !== 'done') {
+      // WARUM Exit 1 ohne Wurf: pool_small (oder ein anderer Status, den
+      // advanceRun selbst setzt) hat keinen Post-Abgleich zum Ziel — der
+      // Betreiber soll den Fehlschlag am Exit-Code erkennen, nicht nur im Log.
+      console.warn(`[Curation] ${day}: Lauf nicht 'done' (${finished.status}) — ${finished.error_message ?? 'kein Fehlertext'}, keine Rekonziliation.`)
+      return 1
+    }
+
     // WARUM sofort und nicht ueber getRunsToReconcile (service.ts, 10 min
     // Vorlauf): ein manuell angestossener Einzellauf soll sein Ergebnis beim
     // Beenden des Scripts zeigen, nicht erst beim naechsten Cron-Tick.
@@ -126,14 +131,21 @@ async function main(): Promise<number> {
       `[Curation] ${day}: Rekonziliation — ${matched ? `Post ${matched.post_id} (${matched.attribution})` : 'kein Post (zu frueh?)'} `
       + `· UnitRecall@20 ${metrics.unit_recall_20.toFixed(2)}`,
     )
-  } else {
-    console.warn(`[Curation] ${day}: Lauf nicht 'done' (${finished.status}) — ${finished.error_message ?? 'kein Fehlertext'}, keine Rekonziliation.`)
+  } catch (err) {
+    // WARUM hier fangen (Fix-Runde 1, Review Important #1, dasselbe Muster
+    // wie backtest-curation.ts): ohne diesen Fang springt ein Fehler aus
+    // runDayInline oder reconcileRun direkt in runScript()s Catch-Zweig,
+    // OHNE den Run abzuschliessen — die Zeile bleibt 'processing' und
+    // blockiert ueber curation_runs_one_open_per_day jeden erneuten Versuch.
+    const message = err instanceof Error ? err.message : String(err)
+    console.error(`[Curation] ${day}: FEHLER ${message}`)
+    await finishRun(supabase, run.id, 'error', message)
+    return 1
   }
 
   const mins = ((Date.now() - t0) / 60000).toFixed(1)
   console.log(`[Curation] FERTIG — ${mins} min`)
-  await flushUsageLog()
   return 0
 }
 
-main().then((code) => process.exit(code)).catch((e) => { console.error(e); process.exit(1) })
+void import('@/scripts/lib/curation-script-runner').then(({ runScript }) => runScript(main))

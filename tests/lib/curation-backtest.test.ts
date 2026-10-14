@@ -5,9 +5,10 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-  BACKTEST_DEFAULTS, backtestDayReportOf, backtestDays, buildBacktestReport, doneRunIdByDay, parseBacktestArgs,
+  BACKTEST_DEFAULTS, backtestDayReportOf, backtestDays, buildBacktestReport, doneRunIdByDay, dryRunPoolLine,
+  handPrecisionRefOf, parseBacktestArgs,
 } from '@/lib/curation/backtest'
-import type { RunMetrics } from '@/lib/curation/types'
+import type { ClusterResult, PoolSnapshot, RunMetrics } from '@/lib/curation/types'
 
 describe('parseBacktestArgs', () => {
   it('liefert Defaults ohne Argumente', () => {
@@ -113,16 +114,27 @@ function metrics(over: Partial<RunMetrics> = {}): RunMetrics {
 describe('backtestDayReportOf', () => {
   it('liest attribution aus metrics, nicht aus der Spalte', () => {
     const entry = backtestDayReportOf({
-      day: '2026-09-01', id: 'r1', status: 'done', spend_usd: 1.5, degraded: ['scout_partial'], metrics: metrics(),
+      day: '2026-09-01', id: 'r1', status: 'done', spend_usd: 1.5, degraded: ['scout_partial'], metrics: metrics(), error_message: null,
     })
     expect(entry).toEqual({
       day: '2026-09-01', run_id: 'r1', status: 'done', spend_usd: 1.5, degraded: ['scout_partial'],
-      attribution: 'job', metrics: metrics(),
+      attribution: 'job', metrics: metrics(), error: null,
     })
   })
 
   it('attribution ist null ohne Metriken (z. B. cancelled/error)', () => {
-    const entry = backtestDayReportOf({ day: '2026-09-02', id: 'r2', status: 'cancelled', spend_usd: 0, degraded: [], metrics: null })
+    const entry = backtestDayReportOf({
+      day: '2026-09-02', id: 'r2', status: 'cancelled', spend_usd: 0, degraded: [], metrics: null, error_message: null,
+    })
+    expect(entry.attribution).toBeNull()
+  })
+
+  it('error kommt aus error_message, auch bei status error (Fix-Runde 1, Review Important #1)', () => {
+    const entry = backtestDayReportOf({
+      day: '2026-09-03', id: 'r3', status: 'error', spend_usd: 0.4, degraded: [], metrics: null, error_message: 'curation_runs: boom',
+    })
+    expect(entry.status).toBe('error')
+    expect(entry.error).toBe('curation_runs: boom')
     expect(entry.attribution).toBeNull()
   })
 })
@@ -130,14 +142,59 @@ describe('backtestDayReportOf', () => {
 describe('buildBacktestReport', () => {
   it('aggregiert nur Tage mit Metriken', () => {
     const days = [
-      backtestDayReportOf({ day: '2026-09-01', id: 'r1', status: 'done', spend_usd: 1.5, degraded: [], metrics: metrics() }),
-      backtestDayReportOf({ day: '2026-09-02', id: 'r2', status: 'cancelled', spend_usd: 0, degraded: [], metrics: null }),
+      backtestDayReportOf({ day: '2026-09-01', id: 'r1', status: 'done', spend_usd: 1.5, degraded: [], metrics: metrics(), error_message: null }),
+      backtestDayReportOf({ day: '2026-09-02', id: 'r2', status: 'cancelled', spend_usd: 0, degraded: [], metrics: null, error_message: null }),
     ]
     const report = buildBacktestReport(BACKTEST_DEFAULTS, days, null, '2026-10-14T00:00:00.000Z')
     expect(report.generated_at).toBe('2026-10-14T00:00:00.000Z')
     expect(report.args).toEqual(BACKTEST_DEFAULTS)
     expect(report.days).toEqual(days)
     expect(report.aggregate.n).toBe(1)
+  })
+
+  it('schliesst error-Tage von der Aggregation aus, behaelt sie aber in days (Fix-Runde 1)', () => {
+    const days = [
+      backtestDayReportOf({ day: '2026-09-01', id: 'r1', status: 'done', spend_usd: 1.5, degraded: [], metrics: metrics(), error_message: null }),
+      backtestDayReportOf({ day: '2026-09-02', id: 'r2', status: 'error', spend_usd: 0.3, degraded: [], metrics: null, error_message: 'compose: timeout' }),
+    ]
+    const report = buildBacktestReport(BACKTEST_DEFAULTS, days, null)
+    expect(report.days.map((d) => d.status)).toEqual(['done', 'error'])
+    expect(report.aggregate.n).toBe(1)
+  })
+})
+
+describe('handPrecisionRefOf', () => {
+  it('liefert null, wenn die Datei nicht existiert', () => {
+    expect(handPrecisionRefOf('scripts/curation-baseline.json', () => false, () => '')).toBeNull()
+  })
+
+  it('liest baselines.hand.precision_full aus dem injizierten Reader', () => {
+    const read = () => JSON.stringify({ baselines: { hand: { precision_full: 0.82 } } })
+    expect(handPrecisionRefOf('scripts/curation-baseline.json', () => true, read)).toBe(0.82)
+  })
+
+  it('liefert null bei kaputtem JSON oder fehlendem Feld', () => {
+    expect(handPrecisionRefOf('x.json', () => true, () => '{not json')).toBeNull()
+    expect(handPrecisionRefOf('x.json', () => true, () => JSON.stringify({ baselines: {} }))).toBeNull()
+  })
+})
+
+function snapshot(over: Partial<PoolSnapshot> = {}): PoolSnapshot {
+  return {
+    asOf: '2026-09-01T04:25:00.000Z', windowFrom: '2026-08-30T04:25:00.000Z', items: [], truncated: false,
+    excluded: { used_earlier: 3, expired: 1, skipped: 0, junk: 2, short: 5 },
+    handIds: ['a', 'b'], techmemeStories: [],
+    ...over,
+  }
+}
+
+describe('dryRunPoolLine', () => {
+  it('formt Pool-Groesse, Ausschluesse, Stories und Hand-Anteil in einer Zeile', () => {
+    const cluster: ClusterResult = { storyKeyOf: {}, clusters: { s1: ['a'], s2: ['b', 'c'] }, related: [] }
+    const line = dryRunPoolLine('2026-09-01', snapshot({ items: [{} as PoolSnapshot['items'][number], {} as PoolSnapshot['items'][number]] }), cluster)
+    expect(line).toBe(
+      '[Curation] 2026-09-01: Pool 2 Items (excluded used_earlier 3, expired 1, skipped 0, junk 2, short 5) · 2 Stories · 2 Hand',
+    )
   })
 })
 
