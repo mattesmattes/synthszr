@@ -15,7 +15,7 @@
  * mit estimateUsd; reicht das Budget nicht, entfällt der Aufruf und die Phase
  * degradiert ('budget' bzw. 'critic'), statt den Lauf abzubrechen.
  */
-import { estimateUsd, type CallToolFn } from '@/lib/ai/call'
+import { CallInvalidError, CallRefusedError, estimateUsd, type CallToolFn } from '@/lib/ai/call'
 import { totalScoreListsByK } from '@/lib/curation/baseline-day'
 import { buildArchiveBrief, type ArchiveCandidate } from '@/lib/curation/archive'
 import { clusterPool, leaderOf } from '@/lib/curation/cluster'
@@ -23,7 +23,7 @@ import { baselinePlan, buildComposeMessages, composeDay, type ComposeInput } fro
 import { checkHardRules, checkSoftRules, critiqueWithModel, revisionHints } from '@/lib/curation/critic'
 import { loadPoolAsOf, loadPoolEmbeddings } from '@/lib/curation/pool'
 import { batchesOf, fallbackCard, loadCachedCards, saveCards, scoutBatch } from '@/lib/curation/scout'
-import { appendRunLog, finishRun, getRun, insertUnits, saveRunState, stamp } from '@/lib/curation/service'
+import { appendRunLog, claimRun, finishRun, getRun, insertUnits, saveRunState, spentTodayUsd, stamp } from '@/lib/curation/service'
 import type { SupabaseAdmin } from '@/lib/news-queue/events'
 import type { EmbedTexts } from '@/scripts/lib/published-units-backfill'
 import type {
@@ -45,6 +45,13 @@ export interface RunDeps {
    * jedem Phasenaufruf; ohne Wert (direkter Phasenaufruf) gilt keine Grenze.
    */
   deadline?: number
+  /**
+   * Ausgaben der ANDEREN Shadow-Runs desselben Tages (ohne den eigenen Run)
+   * für die Tageskappe in reserveBudget (Final-Review 2026-10-14 (R24)).
+   * advanceRun lädt sie einmal am Eintritt, runDayInline einmal am Start;
+   * ohne Wert (direkter Phasenaufruf) zählen nur die eigenen Ausgaben.
+   */
+  spentTodayUsd?: number
 }
 
 /** Arbeitszeit je Cron-Tick. maxDuration der Route ist 800 s (Task 12) — 200 s bleiben für Protokoll und Antwort. */
@@ -121,9 +128,23 @@ const CRITIC_PROMPT_CHARS = 2_000
 
 type Phase = (deps: RunDeps, run: RunRow) => Promise<Partial<RunRow>>
 
-/** Reicht das Run-Budget für einen weiteren Aufruf mit dieser Schätzung? */
-export function reserveBudget(run: RunRow, usd: number): boolean {
-  return run.spend_usd + usd <= run.budget_usd
+/**
+ * Reicht das Budget für einen weiteren Aufruf mit dieser Schätzung? Immer das
+ * Run-Budget; im Shadow zusätzlich die Tageskappe (`daily_budget_usd`):
+ * eigener Spend + fremde Tagesausgaben + Schätzung. WARUM je Call und nicht
+ * nur beim Kickoff (Final-Review 2026-10-14 (R24), I3): sonst wirkte die
+ * Kappe nur, solange der Cron genau einen Run je Tag anlegt — ein paralleler
+ * shadow-once-Lauf lief an ihr vorbei. Backtest-Läufe prüfen sie nicht
+ * (eigenes `--max-usd`, keine Shadow-Ausgaben des Tages).
+ */
+export function reserveBudget(
+  run: RunRow,
+  usd: number,
+  daily?: Pick<RunDeps, 'settings' | 'spentTodayUsd'>,
+): boolean {
+  if (run.spend_usd + usd > run.budget_usd) return false
+  if (!daily || run.mode !== 'shadow') return true
+  return run.spend_usd + (daily.spentTodayUsd ?? 0) + usd <= daily.settings.daily_budget_usd
 }
 
 /** Plan-Einheiten als curation_units-Zeilen — Ergebnisfelder bleiben null, bis die Rekonziliation (Task 11) sie füllt. */
@@ -178,7 +199,7 @@ export async function phaseScout(deps: RunDeps, run: RunRow): Promise<Partial<Ru
     // Reserviert wird je Gruppe, weil ihre Batches gleichzeitig starten —
     // nach dem Start lässt sich keiner mehr zurückhalten.
     const estimate = group.reduce((sum, batch) => sum + scoutEstimateUsd(deps.models.scout, batch), 0)
-    if (!reserveBudget({ ...run, spend_usd: spend }, estimate)) {
+    if (!reserveBudget({ ...run, spend_usd: spend }, estimate, deps)) {
       outOfBudget = true
       break
     }
@@ -284,7 +305,7 @@ export async function phaseCompose(deps: RunDeps, run: RunRow): Promise<Partial<
     const messages = buildComposeMessages(input)
     const inputChars = messages.cachedPrefix.length + messages.system.length + messages.user.length
     const estimate = estimateUsd(deps.models.editor, inputChars, COMPOSE_MAX_TOKENS)
-    if (!reserveBudget({ ...run, spend_usd: spend }, estimate)) {
+    if (!reserveBudget({ ...run, spend_usd: spend }, estimate, deps)) {
       outOfBudget = true
       break
     }
@@ -360,7 +381,12 @@ export async function advanceRun(deps: RunDeps, run: RunRow): Promise<{ phase: R
   // Das Tick-Ende als absolute Zeit an die Phasen: phaseCompose prüft es vor
   // JEDEM Versuch selbst (Ruling R11), die Prüfung hier unten deckt nur den
   // Eintritt in die Phase ab. Bei budgetMs = Infinity ist auch deadline Infinity.
-  const phaseDeps: RunDeps = { ...deps, deadline: now() + budgetMs }
+  const deadline = now() + budgetMs
+  // Einmal je Tick, nicht je Call (Final-Review 2026-10-14 (R24)): ein
+  // zusätzlicher SELECT je Tick; innerhalb des Ticks wächst nur der eigene
+  // Spend, den reserveBudget aus run.spend_usd kennt.
+  const spentToday = deps.spentTodayUsd ?? await foreignSpendToday(deps.supabase, run)
+  const phaseDeps: RunDeps = { ...deps, deadline, spentTodayUsd: spentToday }
   let current = run
 
   while (current.phase !== 'finished') {
@@ -386,8 +412,15 @@ export async function advanceRun(deps: RunDeps, run: RunRow): Promise<{ phase: R
       return { phase, finished: true, note: message }
     }
 
-    current = { ...current, ...patch }
-    await saveRunState(deps.supabase, current.id, patch)
+    // Fortschritt (Phasenwechsel) setzt den Versuchszähler zurück —
+    // MAX_ATTEMPTS zählt erfolglose Ticks IN FOLGE (Final-Review 2026-10-14
+    // (R27), Muster lib/glossary/jobs/advance.ts). Mit R11-Vertagungen kann
+    // ein legitimer Run mehr als zehn Ticks brauchen. Eine Vertagung in
+    // derselben Phase ist kein Fortschritt und lässt den Zähler stehen.
+    const progressed = patch.phase !== undefined && patch.phase !== phase
+    const persisted: Partial<RunRow> = progressed ? { ...patch, attempts: 0 } : patch
+    current = { ...current, ...persisted }
+    await saveRunState(deps.supabase, current.id, persisted)
 
     // Dieselbe Phase zurück heißt: die Phase hat ihren Zwischenstand gesichert,
     // aber die Restzeit reicht nicht für ihren nächsten Schritt (phaseCompose
@@ -408,9 +441,28 @@ export async function advanceRun(deps: RunDeps, run: RunRow): Promise<{ phase: R
   return { phase: 'finished', finished: true, note: 'done' }
 }
 
-/** Ein Lauf in einem Rutsch (Backtest, Shadow-Einzellauf): advanceRun ohne Tick-Budget, bis der Run fertig ist. */
+/** runDayInline fand den Run unter dem Lease eines anderen Prozesses (Cron-Tick oder zweites Script). */
+export class RunClaimLostError extends Error {
+  constructor(runId: string) {
+    super(`curation_runs: Run ${runId} wird gerade von einem anderen Prozess bearbeitet (Lease aktiv) — Abbruch ohne Arbeit`)
+    this.name = 'RunClaimLostError'
+  }
+}
+
+/**
+ * Ein Lauf in einem Rutsch (Backtest, Shadow-Einzellauf): advanceRun ohne
+ * Tick-Budget, bis der Run fertig ist.
+ * Claimt den Run vorab wie die Cron-Route (Final-Review 2026-10-14 (R23)):
+ * ohne Lease nähme der Minutentick einen pending-Shadow-Run aus shadow-once
+ * parallel auf (last_advanced_at bliebe bis zum ersten saveRunState null).
+ * Hält ein anderer Prozess den Run, wirft RunClaimLostError — der Aufrufer
+ * darf den Run dann NICHT abschließen, er gehört dem anderen Prozess.
+ */
 export async function runDayInline(deps: RunDeps, run: RunRow): Promise<RunRow> {
-  const inlineDeps: RunDeps = { ...deps, budgetMs: Number.POSITIVE_INFINITY }
+  const claimed = await claimRun(deps.supabase, run.id, run.attempts + 1)
+  if (!claimed) throw new RunClaimLostError(run.id)
+  const spentToday = deps.spentTodayUsd ?? await foreignSpendToday(deps.supabase, run)
+  const inlineDeps: RunDeps = { ...deps, budgetMs: Number.POSITIVE_INFINITY, spentTodayUsd: spentToday }
   let current = run
   for (;;) {
     const result = await advanceRun(inlineDeps, current)
@@ -418,6 +470,15 @@ export async function runDayInline(deps: RunDeps, run: RunRow): Promise<RunRow> 
     current = await mustGetRun(deps.supabase, run.id)
   }
   return mustGetRun(deps.supabase, run.id)
+}
+
+/**
+ * Ausgaben der anderen Shadow-Runs des Tages — nur im Shadow, ein Backtest
+ * hat keine Tageskappe (reserveBudget prüft sie dort nicht).
+ */
+async function foreignSpendToday(supabase: SupabaseAdmin, run: RunRow): Promise<number> {
+  if (run.mode !== 'shadow') return 0
+  return spentTodayUsd(supabase, run.day, run.id)
 }
 
 /**
@@ -486,14 +547,25 @@ async function critiqueBestEffort(
   const skip = (skipped: CriticOutcome['skipped']): CriticOutcome => ({ hard: [], soft: [], costUsd: 0, skipped })
   if (!deps.settings.critic_enabled) return skip('disabled')
   const estimate = estimateUsd(deps.models.critic, criticInputChars(plan, pool), CRITIC_MAX_TOKENS)
-  if (!reserveBudget(run, estimate)) return skip('budget')
+  if (!reserveBudget(run, estimate, deps)) return skip('budget')
+  // Reservierung VOR dem Call persistieren, wie bei compose: stirbt der Tick
+  // im Kritiker-Call, sieht der nächste Tick die Kosten trotzdem als
+  // ausgegeben (Final-Review 2026-10-14 (R24), I3).
+  await saveRunState(deps.supabase, run.id, { spend_usd: run.spend_usd + estimate })
   try {
     const result = await critiqueWithModel(deps.callTool, plan, pool, cluster, brief)
     return { ...result, skipped: null }
   } catch (err) {
     deps.log?.(`[Curation] ${run.day}: Kritiker übersprungen — ${err instanceof Error ? err.message : String(err)}`)
-    return skip('error')
+    // Bezahlte Antworten des gescheiterten Calls trotzdem buchen (R24).
+    return { ...skip('error'), costUsd: paidCostOf(err) }
   }
+}
+
+/** Kosten bezahlter Antworten eines gescheiterten callTool — 0 bei Fehlern ohne Antwort (Netzwerk, HTTP-Fehler). */
+function paidCostOf(err: unknown): number {
+  if (err instanceof CallInvalidError || err instanceof CallRefusedError) return err.costUsd
+  return 0
 }
 
 /** Prompt-Größe des Kritikers wie in critiqueWithModel gebaut: Plan als JSON, je Item `[id] title`, fester Teil. */

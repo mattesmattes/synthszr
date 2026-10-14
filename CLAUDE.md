@@ -357,13 +357,17 @@ RLS ohne Policy = nur Service-Role):
 - Minuten-Cron (`vercel.json`, `*/1 * * * *`), `maxDuration = 800`.
 - Phasenfolge `pool → scout → cluster → archive → compose → units → finished`
   (`advanceRun`), jede Phase persistiert ihr Ergebnis sofort.
-- Lease `LEASE_STALE_MS` = 15 min gegen überlappende Ticks.
+- Lease `LEASE_STALE_MS` = 15 min gegen überlappende Ticks; `claimRun` ist
+  ein Compare-and-Set (nur ohne oder mit abgelaufenem Lease), verliert ein
+  Tick den Claim, endet er ohne Arbeit. `runDayInline` (Scripts) claimt
+  seinen Run ebenso.
 - Tick-Budget `TICK_BUDGET_MS` = 600 s; `COMPOSE_MIN_REMAINING_MS` = 420 s —
   reicht die Restzeit des Ticks nicht, vertagt `phaseCompose` den Versuch
   (inkl. Zwischenstand) in den nächsten Tick, statt ins Timeout zu laufen.
 - Unter `POOL_MIN_ITEMS` = 40 endet der Run als `error` (`pool_small`), ohne
   Modellaufruf.
-- `MAX_ATTEMPTS` = 10 erfolglose Ticks in Folge, dann gibt der Run auf.
+- `MAX_ATTEMPTS` = 10 erfolglose Ticks in Folge, dann gibt der Run auf; jeder
+  Phasenwechsel setzt den Zähler auf 0 zurück.
 
 **Settings** (`settings.curation`, `loadCurationSettings`, Defaults aus
 `DEFAULT_CURATION_SETTINGS`):
@@ -381,10 +385,16 @@ RLS ohne Policy = nur Service-Role):
 `curation_editor` (Default `claude-opus-5`, Setzliste/Bank über `compose_day`),
 `curation_critic` (Default `claude-sonnet-5`, harte/weiche Verstöße).
 
-**Kosten:** Budget 4 USD je Run, 12 USD je Tag (`daily_budget_usd`,
-`spentTodayUsd`); `reserveBudget` reserviert vor JEDEM Modellaufruf (Compose,
-Kritiker) — reicht das Budget nicht, degradiert die Phase (`'budget'`), statt
-den Lauf abzubrechen. Ein Kritiker-Degrade mit Grund `'budget'` heißt NICHT,
+**Kosten:** Budget 4 USD je Run, 12 USD je Tag (`daily_budget_usd`);
+`reserveBudget` reserviert vor JEDEM Modellaufruf (Scout, Compose, Kritiker)
+und prüft im Shadow neben dem Run-Budget auch die Tageskappe: eigener Spend
+plus die Ausgaben der anderen Shadow-Runs des Tages (`spentTodayUsd`, einmal je
+Tick bzw. je `runDayInline` geladen). Die Tageskappe wird also je Tick
+geprüft, nicht nur beim Kickoff. `spend_usd` bucht alle bezahlten Antworten
+eines Aufrufs, auch Retry und Fehlerpfade (`CallInvalidError`/
+`CallRefusedError` tragen `costUsd`). Das Budget ist weich um höchstens einen
+Retry je Call, weil die Reservierung ein Estimate je Call ist. Reicht das
+Budget nicht, degradiert die Phase (`'budget'`), statt den Lauf abzubrechen. Ein Kritiker-Degrade mit Grund `'budget'` heißt NICHT,
 dass der Plan die Baseline ist: nur der Kritiker-Durchgang entfällt, der
 zuletzt komponierte Plan bleibt stehen, solange er keine harten Verstöße hat;
 die `total_score`-Baseline kommt nur zum Zug, wenn der Compose-Aufruf selbst

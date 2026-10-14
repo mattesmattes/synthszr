@@ -78,7 +78,7 @@ async function main(): Promise<number> {
   const { createCaller } = await import('@/lib/ai/call')
   const { generateEmbeddings } = await import('@/lib/embeddings/generator')
   const { createRun, finishRun, getRun, listRuns, loadCurationSettings } = await import('@/lib/curation/service')
-  const { phaseCluster, phasePool, runDayInline } = await import('@/lib/curation/run')
+  const { phaseCluster, phasePool, runDayInline, RunClaimLostError } = await import('@/lib/curation/run')
   const { reconcileRun } = await import('@/lib/curation/reconcile')
   const supabase = createAdminClient()
 
@@ -217,6 +217,12 @@ async function main(): Promise<number> {
         // createRun selbst ist gescheitert — keine Zeile zum Abschliessen,
         // kein mustGetRun moeglich. Lokaler Eintrag ohne run_id.
         return { entry: errorDayReportOf(d, null, message), spend: 0 }
+      }
+
+      if (err instanceof RunClaimLostError) {
+        // Claim verloren (Final-Review 2026-10-14 (R23)): ein anderer Prozess
+        // haelt den Run — kein finishRun, sonst braeche dessen Arbeit ab.
+        return { entry: errorDayReportOf(d, run.id, message), spend: 0 }
       }
 
       try {

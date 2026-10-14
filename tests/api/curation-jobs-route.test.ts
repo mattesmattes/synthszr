@@ -71,6 +71,7 @@ beforeEach(() => {
   m.getRunsToReconcile.mockResolvedValue([])
   m.getNextOpenRun.mockResolvedValue(null)
   m.listTodayRuns.mockResolvedValue([])
+  m.claimRun.mockResolvedValue(true)
 })
 
 describe('GET /api/cron/curation-jobs', () => {
@@ -203,6 +204,19 @@ describe('GET /api/cron/curation-jobs', () => {
     expect(body.ok).toBe(true)
     expect(body.advanced).toBe('r')
     expect(body.finished).toBe(false)
+  })
+
+  it('R23: Claim verloren (anderer Tick haelt das Lease) → keine Arbeit, kein Log, kein releaseLease', async () => {
+    m.listTodayRuns.mockResolvedValue([{ id: 'r', day: '2026-10-15', mode: 'shadow', status: 'processing' }])
+    m.getNextOpenRun.mockResolvedValueOnce({ id: 'r', attempts: 1, log: [] })
+    m.claimRun.mockResolvedValueOnce(false)
+    const { GET } = await import('@/app/api/cron/curation-jobs/route')
+    const body = await (await GET(req())).json()
+    expect(m.advanceRun).not.toHaveBeenCalled()
+    expect(m.releaseLease).not.toHaveBeenCalled()
+    expect(m.appendRunLog).not.toHaveBeenCalled()
+    expect(body.claim_lost).toBe('r')
+    expect(body.ok).toBe(true)
   })
 
   it('R19: eine DB-Exception ausserhalb jeder Arbeitseinheit antwortet trotzdem 200 mit ok:false', async () => {

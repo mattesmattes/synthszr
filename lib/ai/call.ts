@@ -31,24 +31,32 @@ export interface CallToolInput<T> {
 export interface CallToolResult<T> {
   result: T
   model: string
-  tokens: UsageTokens
-  costUsd: number
+  tokens: UsageTokens            // der letzten (gueltigen) Antwort
+  costUsd: number                // Summe ALLER bezahlten Antworten des Aufrufs, Retry eingeschlossen
   retried: boolean
   strictDropped: boolean
 }
 
 export type CallToolFn = <T>(input: CallToolInput<T>) => Promise<CallToolResult<T>>
 
+/**
+ * Das Modell hat abgelehnt. `costUsd`: alle bis dahin bezahlten Antworten
+ * (auch die Refusal-Antwort selbst) — der Aufrufer bucht sie in spend_usd
+ * (Final-Review 2026-10-14 (R24), I3).
+ */
 export class CallRefusedError extends Error {
-  constructor(useCase: string, public readonly category: string | null) {
+  constructor(useCase: string, public readonly category: string | null, public readonly costUsd: number = 0) {
     super(`${useCase}: Modell hat abgelehnt (${category ?? 'ohne Kategorie'})`)
     this.name = 'CallRefusedError'
   }
 }
 
-/** Nach dem Retry (s. callTool) immer noch kein tool_use-Block oder validate() === null. */
+/**
+ * Nach dem Retry (s. callTool) immer noch kein tool_use-Block oder
+ * validate() === null. `costUsd`: beide Antworten waren bezahlt (R24).
+ */
 export class CallInvalidError extends Error {
-  constructor(useCase: string) {
+  constructor(useCase: string, public readonly costUsd: number = 0) {
     super(`${useCase}: keine gueltige Tool-Antwort nach Retry`)
     this.name = 'CallInvalidError'
   }
@@ -65,6 +73,14 @@ const STREAM_FROM_TOKENS = 16_384
 
 /** Grobe Zeichen-zu-Token-Schätzung für estimateUsd (kein Tokenizer-Aufruf). */
 const CHARS_PER_TOKEN = 3.5
+
+/** Leere Nutzung, wenn eine Antwort kein usage-Feld traegt. */
+const ZERO_TOKENS = {
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheWriteTokens: 0,
+  cacheReadTokens: 0,
+} as unknown as UsageTokens
 
 /** Schaetzung fuer die Reservierung: Zeichen/3.5 als Input-Tokens, maxTokens als
  *  Output. Unbekanntes Modell → FALLBACK_PRICING. */
@@ -143,6 +159,21 @@ export function createCaller(opts: CallerOptions): { callTool: CallToolFn; model
     const send = (params: Anthropic.MessageCreateParamsNonStreaming) =>
       input.maxTokens > STREAM_FROM_TOKENS ? client.messages.stream(params).finalMessage() : client.messages.create(params)
 
+    // WARUM der Fallback: computeCostUsd liefert null, wenn das Modell nicht
+    // in MODEL_PRICING steht (lib/ai/usage-cost.ts) — dann estimateUsd statt
+    // einer erfundenen 0, damit die Budget-Reservierung nicht stillschweigend
+    // zu niedrig ausfällt.
+    const costOf = (response: Anthropic.Message): number => {
+      const tokens = extractUsage(response.usage) ?? ZERO_TOKENS
+      return computeCostUsd(model, tokens) ??
+        estimateUsd(model, input.user.length + input.system.length + (input.cachedPrefix?.length ?? 0), input.maxTokens)
+    }
+
+    // WARUM eine Summe (Final-Review 2026-10-14 (R24), I3): jede Antwort ist
+    // bezahlt — auch die ohne tool_use vor dem Retry und die Refusal. Nur die
+    // letzte zu zaehlen, liess spend_usd je Run um bis zu 1,8 USD hinter
+    // llm_usage zurueck und machte budget_usd zu einer weichen Grenze.
+    let costUsd = 0
     let strict = true
     let strictDropped = false
     let retried = false
@@ -156,6 +187,7 @@ export function createCaller(opts: CallerOptions): { callTool: CallToolFn; model
     while (attempt < 2 && !message) {
       try {
         const response = await send(buildParams(strict))
+        costUsd += costOf(response)
 
         // WARUM vor der tool_use-Suche: eine Refusal-Antwort hat keinen
         // tool_use-Block, der der Suche zur Verfügung stünde — erst prüfen,
@@ -163,7 +195,7 @@ export function createCaller(opts: CallerOptions): { callTool: CallToolFn; model
         // CallRefusedError mit Kategorie.
         if (response.stop_reason === 'refusal') {
           const details = (response as unknown as { stop_details?: { category?: string | null } }).stop_details
-          throw new CallRefusedError(input.useCase, details?.category ?? null)
+          throw new CallRefusedError(input.useCase, details?.category ?? null, costUsd)
         }
 
         const block = response.content.find(
@@ -178,7 +210,7 @@ export function createCaller(opts: CallerOptions): { callTool: CallToolFn; model
 
         attempt++
         retried = true
-        if (attempt >= 2) throw new CallInvalidError(input.useCase)
+        if (attempt >= 2) throw new CallInvalidError(input.useCase, costUsd)
       } catch (err) {
         // WARUM dieser Retry keinen tool_use-Versuch verbraucht (kein
         // attempt++): die erste Antwort war technisch kein gültiger
@@ -195,19 +227,7 @@ export function createCaller(opts: CallerOptions): { callTool: CallToolFn; model
       }
     }
 
-    const tokens = extractUsage(message!.usage) ?? ({
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheWriteTokens: 0,
-      cacheReadTokens: 0,
-    } as unknown as UsageTokens)
-
-    // WARUM der Fallback: computeCostUsd liefert null, wenn das Modell nicht
-    // in MODEL_PRICING steht (lib/ai/usage-cost.ts) — dann estimateUsd statt
-    // einer erfundenen 0, damit die Budget-Reservierung nicht stillschweigend
-    // zu niedrig ausfällt.
-    const costUsd = computeCostUsd(model, tokens) ??
-      estimateUsd(model, input.user.length + input.system.length + (input.cachedPrefix?.length ?? 0), input.maxTokens)
+    const tokens = extractUsage(message!.usage) ?? ZERO_TOKENS
 
     opts.onCost?.(input.useCase, costUsd)
 

@@ -152,8 +152,16 @@ export async function GET(request: NextRequest) {
     // Versuch zaehlen und Lease stempeln in EINEM Update, vor der Arbeit — ein
     // Tick, der ins Timeout laeuft, schreibt danach nichts mehr; der Zaehler
     // muss also schon beim Start persistiert sein (claimRun, service.ts).
+    // Compare-and-Set (Final-Review 2026-10-14 (R23)): hat ein anderer Tick
+    // oder ein Script den Run zwischen getNextOpenRun und hier geclaimt,
+    // greift das Update nicht — dann ohne Arbeit enden, auch ohne Log und
+    // ohne releaseLease, denn das Lease gehoert dem anderen Prozess.
     const attempt = run.attempts + 1
-    await claimRun(supabase, run.id, attempt)
+    const claimed = await claimRun(supabase, run.id, attempt)
+    if (!claimed) {
+      console.log(`[Curation] claim verloren ${run.id}`)
+      return NextResponse.json({ ...out, claim_lost: run.id })
+    }
     run.attempts = attempt
 
     const { callTool } = createCaller({ runId: run.id, mode: 'shadow' })

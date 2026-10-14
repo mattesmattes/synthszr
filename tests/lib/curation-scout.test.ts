@@ -80,10 +80,12 @@ describe('scoutBatch', () => {
     expect(r.costUsd).toBe(0.01)
     expect(callTool.mock.calls[0][0]).toMatchObject({ useCase: 'curation_scout', tool: SCOUT_TOOL, thinking: false, maxTokens: 4096 })
 
-    const bad = vi.fn(async () => { throw new CallInvalidError('curation_scout') })
+    const bad = vi.fn(async () => { throw new CallInvalidError('curation_scout', 0.02) })
     const r2 = await scoutBatch(bad as any, items)
     expect(r2.cards).toEqual([])
     expect(r2.missing).toEqual(['a', 'b', 'c', 'd'])
+    // R24: beide Antworten waren bezahlt — die Fallback-Cards tragen die Kosten des Fehlers.
+    expect(r2.costUsd).toBe(0.02)
   })
 
   it('wirft andere Fehler weiter (kein eigener Retry)', async () => {

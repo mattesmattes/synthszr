@@ -164,12 +164,33 @@ describe('getNextOpenRun', () => {
 
 describe('claimRun', () => {
   it('processing + Lease + attempts in EINEM Update', async () => {
+    state.queues.curation_runs = [{ data: [{ id: 'run-1' }], error: null }]
     await claimRun(client, 'run-1', 3)
     const c = state.chains.curation_runs[0]
     expect(c.update).toHaveBeenCalledWith(expect.objectContaining({
       status: 'processing', attempts: 3, last_advanced_at: expect.any(String),
     }))
     expect(c.eq).toHaveBeenCalledWith('id', 'run-1')
+  })
+
+  it('R23: Compare-and-Set — nur ohne oder mit abgelaufenem Lease und nur offene Runs; Zeile zurueck → true', async () => {
+    const now = Date.parse('2026-10-15T05:00:00.000Z')
+    state.queues.curation_runs = [{ data: [{ id: 'run-1' }], error: null }]
+    expect(await claimRun(client, 'run-1', 1, now)).toBe(true)
+    const c = state.chains.curation_runs[0]
+    expect(c.or).toHaveBeenCalledWith(`last_advanced_at.is.null,last_advanced_at.lt.${new Date(now - LEASE_STALE_MS).toISOString()}`)
+    expect(c.in).toHaveBeenCalledWith('status', ['pending', 'processing'])
+    expect(c.select).toHaveBeenCalledWith('id')
+  })
+
+  it('R23: keine Zeile zurueck (Lease von jemand anderem gehalten) → false', async () => {
+    state.queues.curation_runs = [{ data: [], error: null }]
+    expect(await claimRun(client, 'run-1', 1)).toBe(false)
+  })
+
+  it('wirft bei DB-Fehler', async () => {
+    state.queues.curation_runs = [{ data: null, error: { message: 'weg' } }]
+    await expect(claimRun(client, 'run-1', 1)).rejects.toThrow('curation_runs: weg')
   })
 })
 
@@ -352,6 +373,12 @@ describe('spentTodayUsd', () => {
     const c = state.chains.curation_runs[0]
     expect(c.eq).toHaveBeenCalledWith('day', '2026-10-15')
     expect(c.eq).toHaveBeenCalledWith('mode', 'shadow')
+    expect(c.neq).not.toHaveBeenCalled()
+  })
+  it('R24: mit excludeRunId nur fremde Ausgaben des Tages', async () => {
+    state.queues.curation_runs = [{ data: [{ spend_usd: '2.0000' }], error: null }]
+    expect(await spentTodayUsd(client, '2026-10-15', 'run-1')).toBe(2)
+    expect(state.chains.curation_runs[0].neq).toHaveBeenCalledWith('id', 'run-1')
   })
 })
 

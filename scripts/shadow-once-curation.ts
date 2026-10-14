@@ -68,8 +68,8 @@ async function main(): Promise<number> {
   const { createAdminClient } = await import('@/lib/supabase/admin')
   const { createCaller } = await import('@/lib/ai/call')
   const { generateEmbeddings } = await import('@/lib/embeddings/generator')
-  const { createRun, finishRun, loadCurationSettings } = await import('@/lib/curation/service')
-  const { phaseCluster, phasePool, runDayInline } = await import('@/lib/curation/run')
+  const { claimRun, createRun, finishRun, loadCurationSettings } = await import('@/lib/curation/service')
+  const { phaseCluster, phasePool, runDayInline, RunClaimLostError } = await import('@/lib/curation/run')
   const { isMatchWindowOpen, reconcileRun } = await import('@/lib/curation/reconcile')
   const supabase = createAdminClient()
 
@@ -100,6 +100,13 @@ async function main(): Promise<number> {
   if (dryRun) {
     // Ruling R12 (wie backtest-curation.ts): nur Pool + Cluster, kein
     // advanceRun, kein weiteres Schreiben ausser der angelegten Zeile selbst.
+    // Lease wie runDayInline (Final-Review 2026-10-14 (R23)): ein pending-
+    // Shadow-Run ohne Lease waere fuer den Minutentick ein normaler offener
+    // Run — er naehme ihn auf und bezahlte Modellaufrufe fuer einen Dry-Run.
+    if (!(await claimRun(supabase, run.id, run.attempts + 1))) {
+      console.warn(`[Curation] ${day}: Run ${run.id} wird von einem anderen Prozess bearbeitet — Dry-Run abgebrochen.`)
+      return 1
+    }
     let patched = run
     try {
       const poolPatch = await phasePool(deps, run)
@@ -153,6 +160,10 @@ async function main(): Promise<number> {
     // blockiert ueber curation_runs_one_open_per_day jeden erneuten Versuch.
     const message = err instanceof Error ? err.message : String(err)
     console.error(`[Curation] ${day}: FEHLER ${message}`)
+    // Claim verloren (Final-Review 2026-10-14 (R23)): der Run gehoert dem
+    // Prozess, der das Lease haelt (meist der Cron) — ihn hier als 'error'
+    // abzuschliessen, braeche dessen laufende Arbeit ab.
+    if (err instanceof RunClaimLostError) return 1
     try {
       await finishRun(supabase, run.id, 'error', message)
     } catch (recoveryErr) {

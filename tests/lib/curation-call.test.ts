@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import Anthropic from '@anthropic-ai/sdk'
-import { createCaller, estimateUsd, CallInvalidError, type AnthropicLike } from '@/lib/ai/call'
+import { createCaller, estimateUsd, CallInvalidError, CallRefusedError, type AnthropicLike } from '@/lib/ai/call'
 
 function message(content: unknown[], stop = 'tool_use'): Anthropic.Message {
   return {
@@ -111,6 +111,47 @@ describe('callTool', () => {
     await expect(
       callTool({ useCase: 'curation_editor', system: 'S', user: 'U', tool: TOOL, maxTokens: 1000, validate }),
     ).rejects.toMatchObject({ name: 'CallRefusedError', category: 'cyber' })
+  })
+
+  // R24: jede bezahlte Antwort zaehlt — Erst-Antwort, Retry und Fehlerpfade.
+  const haiku = async () => 'claude-haiku-4-5-20251001'
+  const singleCost = async () => {
+    const { client } = fakeClient([message([toolUse])])
+    const { callTool } = createCaller({ runId: 'r', mode: 'shadow', clientFactory: () => client, modelFor: haiku })
+    const res = await callTool({ useCase: 'curation_scout', system: 'S', user: 'U', tool: TOOL, maxTokens: 1000, thinking: false, validate })
+    return res.costUsd
+  }
+
+  it('R24: Retry nach Antwort ohne tool_use → costUsd ist die Summe beider Antworten', async () => {
+    const one = await singleCost()
+    const { client } = fakeClient([message([{ type: 'text', text: 'nö' }], 'end_turn'), message([toolUse])])
+    const { callTool } = createCaller({ runId: 'r', mode: 'shadow', clientFactory: () => client, modelFor: haiku })
+    const res = await callTool({ useCase: 'curation_scout', system: 'S', user: 'U', tool: TOOL, maxTokens: 1000, thinking: false, validate })
+    expect(res.retried).toBe(true)
+    expect(one).toBeGreaterThan(0)
+    expect(res.costUsd).toBeCloseTo(2 * one, 10)
+  })
+
+  it('R24: CallInvalidError traegt die Kosten beider bezahlter Antworten', async () => {
+    const one = await singleCost()
+    const nope = () => message([{ type: 'text', text: 'nö' }], 'end_turn')
+    const { client } = fakeClient([nope(), nope()])
+    const { callTool } = createCaller({ runId: 'r', mode: 'shadow', clientFactory: () => client, modelFor: haiku })
+    const err = await callTool({ useCase: 'curation_scout', system: 'S', user: 'U', tool: TOOL, maxTokens: 1000, thinking: false, validate })
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(CallInvalidError)
+    expect((err as CallInvalidError).costUsd).toBeCloseTo(2 * one, 10)
+  })
+
+  it('R24: CallRefusedError traegt die Kosten der Refusal-Antwort (und eines vorherigen Retrys)', async () => {
+    const one = await singleCost()
+    const refusal = message([], 'refusal')
+    const { client } = fakeClient([message([{ type: 'text', text: 'nö' }], 'end_turn'), refusal])
+    const { callTool } = createCaller({ runId: 'r', mode: 'shadow', clientFactory: () => client, modelFor: haiku })
+    const err = await callTool({ useCase: 'curation_scout', system: 'S', user: 'U', tool: TOOL, maxTokens: 1000, thinking: false, validate })
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(CallRefusedError)
+    expect((err as CallRefusedError).costUsd).toBeCloseTo(2 * one, 10)
   })
 
   it('400 mit „strict" → Retry ohne strict', async () => {

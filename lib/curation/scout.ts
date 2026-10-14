@@ -118,8 +118,10 @@ export async function scoutBatch(
     const missing = items.map((item) => item.id).filter((id) => !result.has(id))
     return { cards, missing, costUsd }
   } catch (err) {
+    // costUsd des Fehlers statt 0: beide Antworten waren bezahlt, die
+    // Fallback-Cards tragen ihre Kosten (Final-Review 2026-10-14 (R24)).
     if (err instanceof CallInvalidError) {
-      return { cards: [], missing: [...ids], costUsd: 0 }
+      return { cards: [], missing: [...ids], costUsd: err.costUsd }
     }
     throw err
   }

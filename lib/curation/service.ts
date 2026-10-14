@@ -150,13 +150,31 @@ export async function getNextOpenRun(supabase: SupabaseAdmin, now: number = Date
  * Function-Timeout laeuft, wird hart beendet und kann danach nichts mehr
  * schreiben. Der Zaehler muss also schon beim Start persistiert sein, sonst
  * eskaliert ein gekillter Tick nie.
+ *
+ * Compare-and-Set (Final-Review 2026-10-14 (R23), I2): das Update greift nur,
+ * wenn der Run offen ist und kein frisches Lease traegt — dieselbe Bedingung
+ * wie getNextOpenRun, aber atomar in der UPDATE-Anweisung. Lesen und
+ * Schreiben getrennt liessen zwei Ticks (doppelte Cron-Zustellung, manueller
+ * Lauf im Vercel-Dashboard) oder Script und Cron denselben Run parallel
+ * bearbeiten: doppelte Opus-Calls, Unique-Fehler in insertUnits, verlorene
+ * Log-Zeilen. `false` heisst: jemand anderes haelt den Run, keine Arbeit.
  */
-export async function claimRun(supabase: SupabaseAdmin, id: string, attempts: number): Promise<void> {
-  const { error } = await supabase
+export async function claimRun(
+  supabase: SupabaseAdmin,
+  id: string,
+  attempts: number,
+  now: number = Date.now(),
+): Promise<boolean> {
+  const staleBefore = new Date(now - LEASE_STALE_MS).toISOString()
+  const { data, error } = await supabase
     .from('curation_runs')
-    .update({ status: 'processing', last_advanced_at: new Date().toISOString(), attempts })
+    .update({ status: 'processing', last_advanced_at: new Date(now).toISOString(), attempts })
     .eq('id', id)
+    .in('status', OPEN_STATUSES as unknown as string[])
+    .or(`last_advanced_at.is.null,last_advanced_at.lt.${staleBefore}`)
+    .select('id')
   if (error) fail('curation_runs', error)
+  return ((data ?? []) as unknown[]).length > 0
 }
 
 /**
@@ -342,13 +360,18 @@ export async function updateUnitOutcomes(
  * SQL-Aggregat im select-String); die Spalte kommt Zeile fuer Zeile und wird
  * clientseitig summiert, dieselbe Number()-Konvertierung wie in parseRunRow
  * (numeric kommt als String).
+ * `excludeRunId`: nur die FREMDEN Ausgaben — reserveBudget addiert den
+ * eigenen Run selbst aus run.spend_usd, der in der DB schon den Stand vor
+ * diesem Tick traegt und sonst doppelt zaehlte (Final-Review 2026-10-14 (R24)).
  */
-export async function spentTodayUsd(supabase: SupabaseAdmin, day: string): Promise<number> {
-  const { data, error } = await supabase
+export async function spentTodayUsd(supabase: SupabaseAdmin, day: string, excludeRunId?: string): Promise<number> {
+  let query = supabase
     .from('curation_runs')
     .select('spend_usd')
     .eq('day', day)
     .eq('mode', 'shadow')
+  if (excludeRunId) query = query.neq('id', excludeRunId)
+  const { data, error } = await query
   if (error) fail('curation_runs', error)
   return ((data ?? []) as Array<{ spend_usd: unknown }>).reduce((sum, row) => sum + Number(row.spend_usd ?? 0), 0)
 }

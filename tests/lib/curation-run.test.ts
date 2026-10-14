@@ -13,6 +13,7 @@ const m = vi.hoisted(() => ({
   loadPoolAsOf: vi.fn(), loadPoolEmbeddings: vi.fn(), clusterPool: vi.fn(), scoutBatch: vi.fn(), loadCachedCards: vi.fn(), saveCards: vi.fn(),
   buildArchiveBrief: vi.fn(), composeDay: vi.fn(), baselinePlan: vi.fn(), checkHardRules: vi.fn(), checkSoftRules: vi.fn(), critiqueWithModel: vi.fn(),
   saveRunState: vi.fn(), appendRunLog: vi.fn(), finishRun: vi.fn(), insertUnits: vi.fn(), getRun: vi.fn(),
+  claimRun: vi.fn(), spentTodayUsd: vi.fn(),
 }))
 vi.mock('@/lib/curation/pool', () => ({ loadPoolAsOf: m.loadPoolAsOf, loadPoolEmbeddings: m.loadPoolEmbeddings }))
 vi.mock('@/lib/curation/cluster', () => ({ clusterPool: m.clusterPool, handStoriesOf: () => ({}), leaderOf: (c: any, k: string) => k }))
@@ -20,9 +21,13 @@ vi.mock('@/lib/curation/scout', () => ({ scoutBatch: m.scoutBatch, loadCachedCar
 vi.mock('@/lib/curation/archive', () => ({ buildArchiveBrief: m.buildArchiveBrief }))
 vi.mock('@/lib/curation/compose', () => ({ composeDay: m.composeDay, baselinePlan: m.baselinePlan, buildComposeMessages: () => ({ cachedPrefix: 'p', system: 's', user: 'u' }) }))
 vi.mock('@/lib/curation/critic', () => ({ checkHardRules: m.checkHardRules, checkSoftRules: m.checkSoftRules, critiqueWithModel: m.critiqueWithModel, revisionHints: (h: string[]) => h }))
-vi.mock('@/lib/curation/service', async (orig) => ({ ...(await orig() as object), saveRunState: m.saveRunState, appendRunLog: m.appendRunLog, finishRun: m.finishRun, insertUnits: m.insertUnits, getRun: m.getRun }))
+vi.mock('@/lib/curation/service', async (orig) => ({
+  ...(await orig() as object), saveRunState: m.saveRunState, appendRunLog: m.appendRunLog, finishRun: m.finishRun, insertUnits: m.insertUnits, getRun: m.getRun,
+  claimRun: m.claimRun, spentTodayUsd: m.spentTodayUsd,
+}))
+import { CallInvalidError } from '@/lib/ai/call'
 import {
-  advanceRun, phaseArchive, phaseCluster, phaseCompose, phaseScout, reserveBudget, runDayInline, unitsFromPlan, POOL_MIN_ITEMS,
+  advanceRun, phaseArchive, phaseCluster, phaseCompose, phaseScout, reserveBudget, runDayInline, unitsFromPlan, POOL_MIN_ITEMS, RunClaimLostError,
 } from '@/lib/curation/run'
 import { DEFAULT_CURATION_SETTINGS } from '@/lib/curation/types'
 import type { ComposeUnit, RunRow } from '@/lib/curation/types'
@@ -80,6 +85,8 @@ beforeEach(() => {
   m.baselinePlan.mockReturnValue(plan('baseline'))
   // Ruling R1: phaseArchive/phaseCompose laden Embeddings neu — ohne Default waere das Ergebnis undefined.
   m.loadPoolEmbeddings.mockResolvedValue({ embeddings: new Map(), generated: 0, failed: 0 })
+  m.claimRun.mockResolvedValue(true)
+  m.spentTodayUsd.mockResolvedValue(0)
 })
 
 describe('advanceRun', () => {
@@ -123,6 +130,37 @@ describe('advanceRun', () => {
     expect(m.appendRunLog).toHaveBeenCalledTimes(6)
     expect(m.insertUnits).toHaveBeenCalledWith(d.supabase, 'r', [expect.objectContaining({ unit_key: 'topic::i0', outcome: null })])
     expect(m.finishRun).toHaveBeenCalledWith(d.supabase, 'r', 'done')
+  })
+
+  it('R27: jeder Phasenwechsel setzt attempts auf 0 zurueck', async () => {
+    mockHappyRun()
+    await advanceRun(deps(), run({ attempts: 7 }))
+    const phasePatches = m.saveRunState.mock.calls.map((c) => c[2]).filter((p) => 'phase' in p)
+    expect(phasePatches).toHaveLength(6)
+    expect(phasePatches.every((p) => p.attempts === 0)).toBe(true)
+  })
+
+  it('R24: Shadow laedt die fremden Tagesausgaben einmal am Eintritt, Backtest nicht', async () => {
+    mockHappyRun()
+    const d = deps()
+    await advanceRun(d, run())
+    expect(m.spentTodayUsd).toHaveBeenCalledTimes(1)
+    expect(m.spentTodayUsd).toHaveBeenCalledWith(d.supabase, '2026-10-15', 'r')
+    m.spentTodayUsd.mockClear()
+    await advanceRun(deps(), run({ mode: 'backtest' }))
+    expect(m.spentTodayUsd).not.toHaveBeenCalled()
+  })
+
+  it('R24: Tageskappe ausgeschoepft → Scout und Compose ohne Call, budget', async () => {
+    mockHappyRun()
+    m.spentTodayUsd.mockResolvedValue(11.99)
+    const d = deps()
+    await advanceRun(d, run())
+    expect(m.scoutBatch).not.toHaveBeenCalled()
+    expect(m.composeDay).not.toHaveBeenCalled()
+    const last = m.saveRunState.mock.calls.map((c) => c[2]).filter((p) => 'plan' in p).at(-1)
+    expect(last.plan.source).toBe('baseline')
+    expect(last.degraded).toContain('budget')
   })
 
   it('andere Fehler werden geworfen, der Run bleibt offen (Route zaehlt attempts)', async () => {
@@ -339,6 +377,33 @@ describe('phaseCompose', () => {
     expect(log).toHaveBeenCalledWith(expect.stringContaining('kaputt'))
   })
 
+  it('R24: Kritiker wirft CallInvalidError → dessen Kosten in spend_usd, Reservierung VOR dem Call persistiert', async () => {
+    m.composeDay.mockResolvedValue({ plan: plan(), costUsd: 0.5, model: 'o' })
+    m.checkHardRules.mockReturnValue([])
+    m.critiqueWithModel.mockRejectedValueOnce(new CallInvalidError('curation_critic', 0.3))
+    const patch = await phaseCompose(deps(), ready())
+    expect(patch.spend_usd).toBeCloseTo(0.8)
+    expect(patch.degraded).toEqual(['critic'])
+    const reservation = m.saveRunState.mock.calls[1]
+    expect(reservation[1]).toBe('r')
+    expect(reservation[2].spend_usd).toBeGreaterThan(0.5)
+    expect(m.saveRunState.mock.invocationCallOrder[1]).toBeLessThan(m.critiqueWithModel.mock.invocationCallOrder[0])
+  })
+
+  it('R24: Tageskappe greift auch fuer compose (Shadow); Backtest prueft nur das Run-Budget', async () => {
+    const capped = await phaseCompose(deps({ spentTodayUsd: 11.5 }), ready())
+    expect(m.composeDay).not.toHaveBeenCalled()
+    expect(capped.plan?.source).toBe('baseline')
+    expect(capped.degraded).toContain('budget')
+
+    m.composeDay.mockResolvedValue({ plan: plan(), costUsd: 0.5, model: 'o' })
+    m.checkHardRules.mockReturnValue([])
+    m.critiqueWithModel.mockResolvedValue({ hard: [], soft: [], costUsd: 0.05 })
+    const backtest = await phaseCompose(deps({ spentTodayUsd: 11.5 }), { ...ready(), mode: 'backtest' })
+    expect(m.composeDay).toHaveBeenCalledTimes(1)
+    expect(backtest.plan?.source).toBe('model')
+  })
+
   it('critic_enabled false → kein Kritiker-Call, degraded critic', async () => {
     m.composeDay.mockResolvedValue({ plan: plan(), costUsd: 0.5, model: 'o' })
     m.checkHardRules.mockReturnValue([])
@@ -386,6 +451,8 @@ describe('phaseCompose', () => {
     expect(patch.spend_usd).toBeCloseTo(0.55)
     expect(patch.degraded).not.toContain('compose_fallback')
     expect(m.baselinePlan).not.toHaveBeenCalled()
+    // R27: Vertagung ohne Phasenwechsel ist kein Fortschritt — attempts bleibt stehen.
+    expect(patch.attempts).toBeUndefined()
     expect(m.appendRunLog.mock.calls.at(-1)![2][0].text).toContain('Phase compose vertagt')
     expect(m.finishRun).not.toHaveBeenCalled()
   })
@@ -429,6 +496,13 @@ it('reserveBudget', () => {
   expect(reserveBudget(run({ spend_usd: 3 }), 1.1)).toBe(false)
 })
 
+it('R24: reserveBudget prueft im Shadow zusaetzlich die Tageskappe (eigener Spend + fremde Tagesausgaben)', () => {
+  const daily = { settings: DEFAULT_CURATION_SETTINGS, spentTodayUsd: 8 }
+  expect(reserveBudget(run({ spend_usd: 3 }), 0.9, daily)).toBe(true)
+  expect(reserveBudget(run({ spend_usd: 3 }), 0.9, { ...daily, spentTodayUsd: 8.5 })).toBe(false)
+  expect(reserveBudget(run({ spend_usd: 3, mode: 'backtest' }), 0.9, { ...daily, spentTodayUsd: 8.5 })).toBe(true)
+})
+
 it('unitsFromPlan: Plan-Felder 1:1, Ergebnisfelder null', () => {
   expect(unitsFromPlan({ ...plan(), units: [unit] })).toEqual([{
     ...unit, panel_action: null, panel_at: null, outcome: null, final_role: null, final_rank: null,
@@ -445,4 +519,21 @@ it('runDayInline: ohne Tick-Budget bis finished, liefert den frisch gelesenen Ru
   expect(out.status).toBe('done')
   expect(m.finishRun).toHaveBeenCalledWith(d.supabase, 'r', 'done')
   expect(m.getRun).toHaveBeenCalledWith(d.supabase, 'r')
+})
+
+it('R23/R24: runDayInline claimt den Run vor der Arbeit und laedt die Tagesausgaben genau einmal', async () => {
+  mockHappyRun()
+  const d = deps()
+  m.getRun.mockResolvedValue({ ...run(), phase: 'finished', status: 'done' })
+  await runDayInline(d, run({ attempts: 1 }))
+  expect(m.claimRun).toHaveBeenCalledWith(d.supabase, 'r', 2)
+  expect(m.claimRun.mock.invocationCallOrder[0]).toBeLessThan(m.loadPoolAsOf.mock.invocationCallOrder[0])
+  expect(m.spentTodayUsd).toHaveBeenCalledTimes(1)
+})
+
+it('R23: runDayInline wirft RunClaimLostError, wenn ein anderer Prozess das Lease haelt — ohne Arbeit', async () => {
+  m.claimRun.mockResolvedValueOnce(false)
+  await expect(runDayInline(deps(), run())).rejects.toBeInstanceOf(RunClaimLostError)
+  expect(m.loadPoolAsOf).not.toHaveBeenCalled()
+  expect(m.finishRun).not.toHaveBeenCalled()
 })
