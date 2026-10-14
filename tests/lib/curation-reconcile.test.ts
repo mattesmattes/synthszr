@@ -121,6 +121,20 @@ const snapshotOf = (ids: string[]) => ({
   techmemeStories: [] as Array<{ story: string; index: number; member_ids: string[] }>,
 })
 
+/** metricsOf über die echten Outcomes aus reconcileOutcomes (ohne selected_items, Attribution job). */
+const metricsFor = (
+  units: UnitRow[],
+  published: ReturnType<typeof pub>[],
+  opts: { emb?: Map<string, number[]>; baseline?: { total_score: Record<string, string[]> } } = {},
+) => {
+  const emb = opts.emb ?? new Map<string, number[]>()
+  const r = reconcileOutcomes(units, published, emb, new Set(), 'post')
+  return metricsOf({
+    units, outcomes: r.outcomes, published, added: r.added, baseline: opts.baseline ?? null, snapshot: snapshotOf([]),
+    cluster: { storyKeyOf: {}, clusters: {}, related: [] }, itemEmbeddings: emb, attribution: 'job',
+  })
+}
+
 describe('reconcileOutcomes', () => {
   it('ID-Treffer kept/relabeled, Similarity merged, dropped_after_selection vs never, added', () => {
     const units = [
@@ -271,17 +285,66 @@ describe('metricsOf', () => {
     expect(m.unit_recall_20).toBe(1)
     expect(m.setzlisten_precision_10).toBe(0.5)
   })
+
+  it('Symmetrie (R16): ein Baseline-Item, das einen Abschnitt nur per Similarity trifft, zaehlt wie beim Plan', () => {
+    const units = [unit({ unit_key: 'single::y', member_ids: ['y'], tier: 'recommended' })]
+    const published = [pub('u1', [], null, [1, 0, 0], 0), pub('u2', ['q'], null, null, 1)]
+    const emb = new Map([['y', [1, 0.1, 0]], ['z', [1, 0, 0]]])
+    const m = metricsFor(units, published, { emb, baseline: { total_score: { '10': ['z'], '20': ['z'] } } })
+    expect(m.unit_recall_20).toBe(0.5)
+    expect(m.unit_recall_id_20).toBe(0)
+    expect(m.baseline_total_score_unit_recall_20).toBe(0.5)
+    expect(m.baseline_total_score_recall_10).toBe(0.5)
+    expect(m.diff_vs_total_score_20).toBe(0)
+  })
+
+  it('Kappung (R18): Recall@20 ueber die ersten 20 Einheiten, Setzliste ueber recommended Rang 1–10', () => {
+    const units = Array.from({ length: 25 }, (_, i) => unit({
+      unit_key: `single::i${i}`, member_ids: [`i${i}`], tier: i < 11 ? 'recommended' : 'bench', rank: i < 11 ? i + 1 : i - 10,
+    }))
+    const published = [pub('u1', ['i0'], null, null, 0), pub('u2', ['i20'], null, null, 1), pub('u3', ['i10'], null, null, 2)]
+    const m = metricsFor(units, published)
+    expect(m.unit_recall_20).toBeCloseTo(2 / 3)
+    expect(m.unit_recall_id_20).toBeCloseTo(2 / 3)
+    expect(m.setzlisten_recall_10).toBeCloseTo(1 / 3)
+    expect(m.setzlisten_precision_10).toBeCloseTo(1 / 10)
+  })
+
+  it('Dubletten (R17): gemeinsame Member-ID oder Story-Schluessel des ersten Members mit einer frueheren Setzlisten-Einheit', () => {
+    const units = [
+      unit({ unit_key: 'topic::a', member_ids: ['a', 'b'], tier: 'recommended', role: 'topic' }),
+      unit({ unit_key: 'deep_dive::a', member_ids: ['a'], tier: 'recommended', rank: 2, role: 'deep_dive' }),
+      unit({ unit_key: 'single::c', member_ids: ['c'], tier: 'recommended', rank: 3 }),
+      unit({ unit_key: 'single::d', member_ids: ['d'], tier: 'recommended', rank: 4 }),
+    ]
+    const emb = new Map([['c', [1, 0]], ['d', [1, 0.05]]])
+    const m = metricsFor(units, [pub('u1', ['x'])], { emb })
+    expect(m.duplicate_rate_recommended).toBe(0.5)
+    expect(metricsFor([], [pub('u1', ['x'])]).duplicate_rate_recommended).toBe(0)
+  })
+
+  it('held_rate zaehlt nur Hand-Einheiten in held und bleibt <= 1', () => {
+    const units = [
+      unit({ unit_key: 'single::a', member_ids: ['a'], tier: 'recommended', is_hand: true }),
+      unit({ unit_key: 'single::h1', member_ids: ['h1'], tier: 'held' }),
+      unit({ unit_key: 'single::h2', member_ids: ['h2'], tier: 'held', rank: 2, is_hand: true }),
+    ]
+    const m = metricsFor(units, [pub('u1', ['a'])])
+    expect(m.hand_stories).toBe(2)
+    expect(m.held_rate).toBe(0.5)
+  })
 })
 
 describe('aggregateRuns', () => {
+  const mk = (u: number, b: number): RunMetrics => ({
+    attribution: 'job', published_units: 9, published_attributable: 9, plan: { recommended: 10, bench: 10, held: 0 },
+    unit_recall_20: u, unit_recall_id_20: u, setzlisten_recall_10: 0.4, setzlisten_precision_10: 0.5, duplicate_rate_recommended: 0,
+    cut_rate: 0.3, additions: 1, additions_rate: 0.1, hand_stories: 2, held_rate: 0, baseline_total_score_unit_recall_20: b,
+    baseline_total_score_recall_10: 0.2, diff_vs_total_score_20: u - b,
+    outcomes: { kept: 0, relabeled: 0, merged: 0, dropped_after_selection: 0, dropped_never_selected: 0, added: 0 },
+  })
+
   it('mittelt nur attribuierte Tage; Gate-Felder', () => {
-    const mk = (u: number, b: number): RunMetrics => ({
-      attribution: 'job', published_units: 9, published_attributable: 9, plan: { recommended: 10, bench: 10, held: 0 },
-      unit_recall_20: u, unit_recall_id_20: u, setzlisten_recall_10: 0.4, setzlisten_precision_10: 0.5, duplicate_rate_recommended: 0,
-      cut_rate: 0.3, additions: 1, additions_rate: 0.1, hand_stories: 2, held_rate: 0, baseline_total_score_unit_recall_20: b,
-      baseline_total_score_recall_10: 0.2, diff_vs_total_score_20: u - b,
-      outcomes: { kept: 0, relabeled: 0, merged: 0, dropped_after_selection: 0, dropped_never_selected: 0, added: 0 },
-    })
     const list = [...Array.from({ length: 6 }, () => mk(0.6, 0.4)), { ...mk(0, 0), attribution: 'none' as const }]
     const a = aggregateRuns(list, 0.42)
     expect(a.n).toBe(6)
@@ -290,6 +353,14 @@ describe('aggregateRuns', () => {
     expect(a.gate.floor).toBe(true)
     expect(a.gate.duplicates_zero).toBe(true)
     expect(a.gate.precision_vs_hand).toBe(true)
+  })
+
+  it('Tage mit published_units = 0 zaehlen nicht (keine Messung)', () => {
+    const list = [...Array.from({ length: 5 }, () => mk(0.6, 0.4)), { ...mk(0, 0), published_units: 0 }]
+    const a = aggregateRuns(list, null)
+    expect(a.n).toBe(5)
+    expect(a.mean.unit_recall_20).toBeCloseTo(0.6)
+    expect(a.diff_vs_total_score_20.n).toBe(5)
   })
 })
 

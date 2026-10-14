@@ -12,17 +12,15 @@
  * verdrahtet beides und ist der einzige Schreibzugriff (published_units über
  * processPost, curation_units, curation_runs).
  *
- * Treffer-Währung (Spec „Treffer-Währung"): Story-Ebene für Plan und
- * Baseline gleichermaßen — dieselbe Clusterung (assignStoryKeys, 0,8) über
- * Plan-, Post- und Baseline-IDs. Zusätzlich zählen für den Plan die Outcomes:
- * ein `merged` (nur per Similarity gegen das Heading-Embedding) trifft auch
- * einen Abschnitt ohne Queue-Marker, den die Story-Ebene nie erreicht.
+ * Treffer-Währung (Spec „Treffer-Währung", Ruling R16): Plan und Baseline
+ * treffen einen Abschnitt nach derselben Regel — gemeinsame ID, derselbe
+ * Story-Cluster (assignStoryKeys, 0,8, über Plan-, Post- und Baseline-IDs)
+ * oder Similarity Item ↔ Abschnitts-Embedding ≥ 0,8. Die Outcomes der
+ * exklusiven Zuordnung (R13) tragen Precision, Cut-Rate und die Spalten je
+ * Einheit.
  */
-import {
-  coverageOf, meanFinite, neutralizeHandLabels, unitCappedMetricsOf, unitKeyOf, unitListsByK,
-  type BaselineUnit,
-} from '@/lib/curation/baseline-day'
-import { assignStoryKeys, pairedBootstrap, unitDuplicateRate } from '@/lib/curation/baseline-metrics'
+import { meanFinite, neutralizeHandLabels, unitKeyOf, unitListsByK } from '@/lib/curation/baseline-day'
+import { assignStoryKeys, pairedBootstrap } from '@/lib/curation/baseline-metrics'
 import { loadPoolEmbeddings } from '@/lib/curation/pool'
 import { berlinDay, precedentSelectedItems } from '@/lib/curation/precedents'
 import { getRunUnits, markReconciled, updateUnitOutcomes } from '@/lib/curation/service'
@@ -46,6 +44,8 @@ const POST_CREATED_WINDOW_MS = 36 * HOUR_MS
 const POST_COLUMNS = 'id, status, created_at, published_at'
 /** Setzlisten-Recall/-Precision@10 (Spec „Metriken je Tag"). */
 const SETZLISTE_K = 10
+/** Unit-Recall@20 für Setzliste + Bank (Spec „Metriken je Tag"). */
+const PLAN_K = 20
 /** Baseline je K in Einheiten wie totalScoreListsByK in run.ts (BASELINE_KS). */
 const BASELINE_KS = [10, 20] as const
 
@@ -57,7 +57,6 @@ const GATE_FLOOR_SETZLISTE_RECALL_10 = 0.35
 const GATE_MIN_DAYS = 5
 
 const HIT_OUTCOMES = new Set<UnitOutcome>(['kept', 'relabeled', 'merged'])
-const ID_HIT_OUTCOMES = new Set<UnitOutcome>(['kept', 'relabeled'])
 const TIER_ORDER: Record<CurationTier, number> = { recommended: 0, bench: 1, held: 2 }
 /** Zeilen ohne Tier (outcome 'added') stehen hinter allen Plan-Tiers. */
 const NO_TIER_ORDER = 3
@@ -339,39 +338,71 @@ function storyKeyOf(id: string, storyOf: Map<string, string>): string {
   return storyOf.get(id) ?? id
 }
 
-/** Der Abschnitt, auf den ein merged-Outcome zeigt: final_rank = position + 1 und dasselbe Heading. */
-function isMergedTarget(outcome: OutcomePatch | undefined, p: PublishedUnitRow): boolean {
-  if (!outcome || outcome.outcome !== 'merged') return false
-  return outcome.final_rank === p.position + 1 && outcome.matched_heading === p.heading
+/** Item-Vektor und Abschnitts-Embedding liegen ab der Merge-Schwelle beieinander (beide vorhanden, gleich lang). */
+function isSimilar(itemVector: number[] | null, unitEmbedding: number[] | null): boolean {
+  const similarity = safeCosine(itemVector, unitEmbedding)
+  return similarity !== null && similarity >= DEFAULT_DEDUP_THRESHOLD
 }
 
 /**
- * Abschnitte, die eine Plan-Liste trifft: Story-Ebene über die Member (wie
- * unitRecallAtK für die Baseline) ODER ein merged-Outcome einer ihrer
- * Einheiten auf genau diesen Abschnitt.
+ * IDs der Abschnitte, die eine Liste trifft (Ruling R16), für Plan und
+ * Baseline nach derselben Regel. Ein Listen-Item trifft, wenn es (a) Member
+ * des Abschnitts ist, (b) im selben Story-Cluster liegt wie eines seiner
+ * Member — (a) steckt darin, gleiche ID heißt gleicher Schlüssel — oder (c)
+ * per Similarity ≥ 0,8 zum Abschnitts-Embedding passt.
+ * WARUM (c) für beide Listen: Abschnitte ohne Marker oder mit Membern
+ * außerhalb des Pools erreichte vorher nur der Plan, über merged-Outcomes.
+ * Bei 9 Abschnitten wiegt ein solcher Treffer 0,11, mehr als die
+ * Gate-Schwelle +0,10 (Review Task 11, I3) — eine einseitige Regel hätte
+ * recall_gain allein entschieden.
  */
 function publishedHitsOf(
-  planUnits: UnitRow[],
+  ids: string[],
   published: PublishedUnitRow[],
-  outcomeByKey: Map<string, OutcomePatch>,
+  itemEmbeddings: Map<string, number[]>,
   storyOf: Map<string, string>,
-): PublishedUnitRow[] {
-  const planKeys = new Set(planUnits.flatMap((u) => u.member_ids).map((id) => storyKeyOf(id, storyOf)))
-  return published.filter((p) => {
-    if (p.member_ids.some((id) => planKeys.has(storyKeyOf(id, storyOf)))) return true
-    return planUnits.some((u) => isMergedTarget(outcomeByKey.get(u.unit_key), p))
-  })
+): Set<string> {
+  const listKeys = new Set(ids.map((id) => storyKeyOf(id, storyOf)))
+  const vectors = ids.map((id) => itemEmbeddings.get(id) ?? null)
+  const hits = new Set<string>()
+  for (const p of published) {
+    const storyHit = p.member_ids.some((id) => listKeys.has(storyKeyOf(id, storyOf)))
+    if (storyHit || vectors.some((vector) => isSimilar(vector, p.embedding))) hits.add(p.id)
+  }
+  return hits
 }
 
-/** Strenge ID-Variante: Abschnitte mit einem Member aus einer Einheit mit ID-Treffer (kept/relabeled). */
-function publishedIdHitsOf(planUnits: UnitRow[], published: PublishedUnitRow[], outcomeByKey: Map<string, OutcomePatch>): PublishedUnitRow[] {
-  const ids = new Set<string>()
-  for (const u of planUnits) {
-    const outcome = outcomeByKey.get(u.unit_key)?.outcome
-    if (!outcome || !ID_HIT_OUTCOMES.has(outcome)) continue
-    for (const id of u.member_ids) ids.add(id)
+/** Strenge ID-Variante: nur Kriterium (a) — Abschnitte mit einem Member aus der Liste. */
+function publishedIdHitsOf(ids: string[], published: PublishedUnitRow[]): Set<string> {
+  const idSet = new Set(ids)
+  return new Set(published.filter((p) => p.member_ids.some((id) => idSet.has(id))).map((p) => p.id))
+}
+
+/**
+ * Dubletten-Rate der Setzliste (Ruling R17): Anteil der recommended-Einheiten
+ * (Rang aufsteigend), die mit einer FRÜHEREN eine Member-ID teilen oder
+ * denselben Story-Schlüssel des ersten Members haben.
+ * WARUM nicht unitDuplicateRate: dort gehört jede ID nur ihrer ersten
+ * Einheit — eine spätere Einheit, deren Member schon vergeben sind,
+ * verschwindet aus der Rechnung. validatePlan dedupliziert IDs nur innerhalb
+ * einer Einheit, topic::a {a, b} und deep_dive::a {a} bleiben beide in der
+ * Setzliste, und das Gate duplicates_zero stand trotzdem auf true (Review
+ * Task 11, I1).
+ */
+function duplicateRateOf(recommended: UnitRow[], storyOf: Map<string, string>): number {
+  const seenIds = new Set<string>()
+  const seenStories = new Set<string>()
+  let duplicates = 0
+  for (const u of recommended) {
+    const lead = u.member_ids[0]
+    const story = lead === undefined ? null : storyKeyOf(lead, storyOf)
+    const sharesId = u.member_ids.some((id) => seenIds.has(id))
+    const sharesStory = story !== null && seenStories.has(story)
+    if (sharesId || sharesStory) duplicates++
+    for (const id of u.member_ids) seenIds.add(id)
+    if (story !== null) seenStories.add(story)
   }
-  return published.filter((p) => p.member_ids.some((id) => ids.has(id)))
+  return ratio(duplicates, recommended.length)
 }
 
 /**
@@ -414,31 +445,18 @@ function emptyMetrics(attribution: RunMetrics['attribution']): RunMetrics {
 }
 
 /**
- * total_score-Baseline des Runs gegen denselben Post, auf derselben
- * Story-Ebene. WARUM neutralizeHandLabels vor unitKeyOf: run.ts schneidet die
- * Liste mit totalScoreListsByK, also capByUnits über neutralisierte Labels
+ * total_score-Baseline des Runs je K, auf K Einheiten gekappt. WARUM
+ * neutralizeHandLabels vor unitKeyOf: run.ts schneidet die Liste mit
+ * totalScoreListsByK, also capByUnits über neutralisierte Labels
  * (totalScoreCandidates). Mit den Betreiber-Labels des Snapshots gruppiert,
  * fielen die Einheitengrenzen anders als beim Schnitt, und K = 10 deckte
  * andere IDs ab als die Gate-Referenz.
  */
-function baselineRecallOf(
-  baseline: BaselineLists | null,
-  snapshot: PoolSnapshot,
-  published: PublishedUnitRow[],
-  storyOf: Map<string, string>,
-): { recall20: number; recall10: number } | null {
+function baselineListsOf(baseline: BaselineLists | null, snapshot: PoolSnapshot): Record<string, string[]> | null {
   if (!baseline) return null
-  const ids = baseline.total_score['20'] ?? []
   const itemById = new Map(neutralizeHandLabels(snapshot.items).map((item) => [item.id, item]))
   const unitOf = (id: string) => unitKeyOf(id, itemById.get(id)?.bundle_type ?? null, itemById.get(id)?.metadata ?? null)
-  const lists = unitListsByK(ids, unitOf, BASELINE_KS)
-  const units: BaselineUnit[] = published.map((p) => ({
-    id: p.id, position: p.position, heading: p.heading, bundleType: p.bundle_type, memberIds: p.member_ids,
-  }))
-  const poolIds = new Set(snapshot.items.map((item) => item.id))
-  const { covered } = coverageOf(units, poolIds, new Set())
-  const metrics = unitCappedMetricsOf(lists, units, covered, storyOf, BASELINE_KS)
-  return { recall20: metrics.unit_recall['20'], recall10: metrics.unit_recall['10'] }
+  return unitListsByK(baseline.total_score['20'] ?? [], unitOf, BASELINE_KS)
 }
 
 /**
@@ -447,9 +465,10 @@ function baselineRecallOf(
  * zuerst, Techmeme vorgeclustert) gibt es für die Baseline nicht — mit ihnen
  * träfe der Plan in einer anderen Währung als total_score. storyOf entsteht
  * deshalb für alle drei Listen aus derselben assignStoryKeys-Clusterung.
- * Recall misst die Abdeckung des Posts (jeder Abschnitt zählt einmal, Story-
- * Ebene plus merged), Precision das Überleben je Setzlisten-Einheit nach der
- * exklusiven Zuordnung aus reconcileOutcomes (Ruling R13).
+ * Recall misst die Abdeckung des Posts, für Plan und Baseline in derselben
+ * Währung (publishedHitsOf, R16) und beide auf Einheiten gekappt (R18);
+ * Precision misst das Überleben je Setzlisten-Einheit nach der exklusiven
+ * Zuordnung aus reconcileOutcomes (R13).
  */
 export function metricsOf(input: {
   units: UnitRow[]
@@ -468,9 +487,15 @@ export function metricsOf(input: {
   const recommended = ordered.filter((u) => u.tier === 'recommended')
   const bench = ordered.filter((u) => u.tier === 'bench')
   const held = ordered.filter((u) => u.tier === 'held')
-  // Rang 1–10: validatePlan nummeriert die Ränge je Tier lückenlos neu (compose.ts).
-  const setzliste = recommended.slice(0, SETZLISTE_K)
-  const planAndBench = [...recommended, ...bench]
+  const setzliste = recommended.filter((u) => u.rank !== null && u.rank >= 1 && u.rank <= SETZLISTE_K)
+  // WARUM die Kappung auf 20 Einheiten (Ruling R18): die Baseline geht mit
+  // genau 20 Einheiten ein, der Plan ist aber nicht begrenzt — validatePlan
+  // kappt die Länge nicht, total_max ist nur ein Kritiker-Code, und die
+  // unit_key-Korrektur schiebt Einheiten zusätzlich in die Bank (Review
+  // Task 11, I2). Ein längerer Plan bekäme sonst einen Recall-Vorsprung.
+  const planList20 = [...recommended, ...bench].slice(0, PLAN_K).flatMap((u) => u.member_ids)
+  const setzlisteList10 = setzliste.flatMap((u) => u.member_ids)
+  const baselineLists = baselineListsOf(baseline, snapshot)
 
   const allIds = [
     ...ordered.flatMap((u) => u.member_ids),
@@ -478,30 +503,26 @@ export function metricsOf(input: {
     ...(baseline?.total_score['20'] ?? []),
   ]
   const storyOf = assignStoryKeys(allIds, itemEmbeddings, DEFAULT_DEDUP_THRESHOLD)
+  const recallOf = (ids: string[]) => ratio(publishedHitsOf(ids, published, itemEmbeddings, storyOf).size, published.length)
 
-  const recall20 = ratio(publishedHitsOf(planAndBench, published, outcomeByKey, storyOf).length, published.length)
-  const recallId20 = ratio(publishedIdHitsOf(planAndBench, published, outcomeByKey).length, published.length)
-  const setzlisteRecall10 = ratio(publishedHitsOf(setzliste, published, outcomeByKey, storyOf).length, published.length)
+  const recall20 = recallOf(planList20)
+  const recallId20 = ratio(publishedIdHitsOf(planList20, published).size, published.length)
+  const setzlisteRecall10 = recallOf(setzlisteList10)
+  const baselineRecall20 = baselineLists ? recallOf(baselineLists['20'] ?? []) : null
+  const baselineRecall10 = baselineLists ? recallOf(baselineLists['10'] ?? []) : null
   const setzlisteHits = setzliste.filter((u) => isUnitHit(u, outcomeByKey)).length
   const setzlistePrecision10 = ratio(setzlisteHits, Math.min(SETZLISTE_K, recommended.length))
 
-  const unitKeyById = new Map<string, string>()
-  for (const u of recommended) {
-    for (const id of u.member_ids) {
-      if (!unitKeyById.has(id)) unitKeyById.set(id, u.unit_key)
-    }
-  }
-  const recommendedIds = recommended.flatMap((u) => u.member_ids)
-  const duplicateRate = unitDuplicateRate(recommendedIds, (id) => unitKeyById.get(id) ?? id, storyOf)
-
   const cut = recommended.filter((u) => outcomeByKey.get(u.unit_key)?.outcome === 'dropped_after_selection').length
   const handStories = ordered.filter((u) => u.is_hand).length
+  // held_rate: nur Hand-Einheiten in held — eine Nicht-Hand-Einheit in held
+  // meldet der Kritiker (held_not_hand), korrigiert sie aber nicht; mit ihr
+  // läge die Quote über 1 (Review Task 11, M3).
+  const heldHand = held.filter((u) => u.is_hand).length
 
   const outcomeCounts = zeroOutcomes()
   for (const o of outcomes) outcomeCounts[o.outcome]++
   outcomeCounts.added += added.length
-
-  const base = baselineRecallOf(baseline, snapshot, published, storyOf)
 
   return {
     attribution,
@@ -512,15 +533,15 @@ export function metricsOf(input: {
     unit_recall_id_20: recallId20,
     setzlisten_recall_10: setzlisteRecall10,
     setzlisten_precision_10: setzlistePrecision10,
-    duplicate_rate_recommended: duplicateRate,
+    duplicate_rate_recommended: duplicateRateOf(recommended, storyOf),
     cut_rate: ratio(cut, recommended.length),
     additions: added.length,
     additions_rate: ratio(added.length, published.length),
     hand_stories: handStories,
-    held_rate: ratio(held.length, handStories),
-    baseline_total_score_unit_recall_20: base ? base.recall20 : null,
-    baseline_total_score_recall_10: base ? base.recall10 : null,
-    diff_vs_total_score_20: base ? recall20 - base.recall20 : null,
+    held_rate: ratio(heldHand, handStories),
+    baseline_total_score_unit_recall_20: baselineRecall20,
+    baseline_total_score_recall_10: baselineRecall10,
+    diff_vs_total_score_20: baselineRecall20 === null ? null : recall20 - baselineRecall20,
     outcomes: outcomeCounts,
   }
 }
@@ -699,13 +720,16 @@ export interface AggregateReport {
 /**
  * Mittel über die attribuierten Tage und die vier Gate-Regeln (Spec
  * „Entscheidungsregel"). Tage mit attribution 'none' fallen heraus — sie
- * haben keinen Post, ein Recall 0 dort wäre eine erfundene Messung.
+ * haben keinen Post, ein Recall 0 dort wäre eine erfundene Messung. Ebenso
+ * Tage mit published_units = 0 (kaputter content ohne gespeicherten Stand,
+ * Tag-Fallback auf einen Post ohne H2-Abschnitte): Recall 0 und diff 0
+ * verwässerten n, den Boden und den Bootstrap (Review Task 11, M1).
  * Mittel ohne Daten → NaN (meanFinite, Konvention baseline-metrics.ts: eine 0
  * sähe wie „Effekt 0, sicher" aus); jede Gate-Regel ist dann false.
  * recall_gain zählt die Tagesdifferenzen (Tage mit Baseline), nicht alle Tage.
  */
 export function aggregateRuns(metricsList: RunMetrics[], handPrecisionRef: number | null): AggregateReport {
-  const days = metricsList.filter((m) => m.attribution !== 'none')
+  const days = metricsList.filter((m) => m.attribution !== 'none' && m.published_units > 0)
 
   const mean = {} as Record<MeanField, number>
   for (const field of MEAN_FIELDS) mean[field] = meanFinite(days.map((d) => d[field]))
