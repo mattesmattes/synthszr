@@ -46,6 +46,9 @@ export type UseCase =
   | 'podcast_memory'
   | 'podcast_episode'
   | 'podcast_metadata_translation'
+  | 'curation_scout'
+  | 'curation_editor'
+  | 'curation_critic'
 
 export interface UseCaseInfo {
   label: string
@@ -281,4 +284,7 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
     defaultModel: 'claude-haiku-4-5-20251001',
     allowedProviders: ['anthropic'],
   },
+  curation_scout: { label: 'Kuration: Scout', description: 'Kernsatz je Meldung fuer die Morgenkonferenz (Phase 1 Shadow)', defaultModel: 'claude-haiku-4-5-20251001', allowedProviders: ['anthropic'] },
+  curation_editor: { label: 'Kuration: Chefredaktion', description: 'Setzliste, Bank und Zurueckgestelltes des Tages (compose_day)', defaultModel: 'claude-opus-5', allowedProviders: ['anthropic'] },
+  curation_critic: { label: 'Kuration: Kritiker', description: 'Harte und weiche Verstoesse des Tagesplans', defaultModel: 'claude-sonnet-5', allowedProviders: ['anthropic'] },
 }

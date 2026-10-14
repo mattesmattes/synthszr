@@ -41,6 +41,9 @@ const EXPECTED_USE_CASES: UseCase[] = [
   'podcast_memory',
   'podcast_episode',
   'podcast_metadata_translation',
+  'curation_scout',
+  'curation_editor',
+  'curation_critic',
 ]
 
 describe('USE_CASE_DEFINITIONS (lib/ai/use-cases.ts)', () => {

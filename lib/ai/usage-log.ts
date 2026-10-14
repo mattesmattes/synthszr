@@ -58,11 +58,17 @@ export async function logLlmUsage(
  * bleibt das alte Fire-and-forget als Fallback, statt den Aufruf scheitern
  * zu lassen.
  */
+/** Scripts ausserhalb eines Request-Scopes haben kein after() — ihre Inserts
+ *  liefen bisher fire-and-forget und gingen vor process.exit verloren
+ *  (s. flushUsageLog unten). Hier gesammelt, damit ein Skript darauf warten kann. */
+const pending = new Set<Promise<void>>()
+
 function scheduleUsageLog(useCase: string, model: string, rawUsage: unknown, meta?: Record<string, unknown>): void {
   try {
     after(() => logLlmUsage(useCase, model, rawUsage, meta))
   } catch {
-    void logLlmUsage(useCase, model, rawUsage, meta)
+    const p: Promise<void> = logLlmUsage(useCase, model, rawUsage, meta).finally(() => { pending.delete(p) })
+    pending.add(p)
   }
 }
 
@@ -127,3 +133,6 @@ export function withUsageLogging<T extends MessagesClient>(
     },
   })
 }
+
+/** Scripts warten hiermit vor process.exit auf offene Kosten-Inserts (BEFUND 2026-10-14: fire-and-forget verliert sie sonst). */
+export async function flushUsageLog(): Promise<void> { await Promise.allSettled([...pending]) }

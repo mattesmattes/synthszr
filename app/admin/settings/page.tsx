@@ -108,6 +108,10 @@ const USE_CASE_GROUPS: Array<{ title: string; useCases: string[] }> = [
     useCases: ['synthesis_scoring', 'edit_analysis', 'pattern_extraction', 'subscription_detect', 'comment_moderation', 'search_rerank', 'techmeme_relevance'],
   },
   {
+    title: 'Kuration (Morgenkonferenz)',
+    useCases: ['curation_scout', 'curation_editor', 'curation_critic'],
+  },
+  {
     title: 'Rankings (Synthszr Charts)',
     useCases: ['ranking_extract', 'ranking_attribution_qa', 'ranking_validity_qa', 'ranking_categorize', 'ranking_enrich', 'ranking_research', 'ranking_distill'],
   },
