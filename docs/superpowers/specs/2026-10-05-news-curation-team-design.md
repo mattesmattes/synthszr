@@ -1,7 +1,7 @@
 # Morgenkonferenz: Agenten-Team für die News-Queue — Design-Spec
 
 Datum: 2026-10-05
-Status: **v4, Design vom Betreiber freigegeben** (Entscheidungen 0–8 am Ende des Dokuments; offen nur Gate-Schwellen nach Phase 0). Entstehung: Design-Workflow mit drei Entwürfen und Jury (Morgenkonferenz 6,6 / Redaktionsturnier 6,4 / Lernender Kurator 6,3), zwei Gutachterrunden (50 Befunde, 34 Lücken), v3.1 nach zwei Restbefunden, v4 nach Betreiber-Entscheidung — Änderungsprotokolle am Ende.
+Status: **v4.1, Design vom Betreiber freigegeben** (Entscheidungen 0–8 am Ende des Dokuments; offen nur Gate-Schwellen nach Phase 0). v4.1 nach Betreiber-Entscheidungen 2026-10-14 (Phase 1). Entstehung: Design-Workflow mit drei Entwürfen und Jury (Morgenkonferenz 6,6 / Redaktionsturnier 6,4 / Lernender Kurator 6,3), zwei Gutachterrunden (50 Befunde, 34 Lücken), v3.1 nach zwei Restbefunden, v4 nach Betreiber-Entscheidung — Änderungsprotokolle am Ende.
 Baut auf: News-Taste-Modell (Spec 2026-09-29), assistiertes Ranking (Spec 2026-06-01)
 Code-Referenz: `/Users/mattes/dev/synthszr`. Tabellen, Spalten, Dateien und RPCs ohne Bestand sind mit **NEU** markiert.
 
@@ -233,3 +233,19 @@ Die Fragen 0–8 wurden dem Betreiber mit Empfehlung vorgelegt; Ergebnis:
 - **OE 4:** Termin bleibt 04:30 UTC; Berlin-Kette im Winter vorgezogen; Newsletter-Eingangszeiten in Phase 0; Betreiber-Aufgabe bis 25.10.
 - **OE 5/6/8:** Opus 5; keine Kontrollgruppe; kein zweiter Draft durch Button-Läufe.
 - Abschnitt „Offene Entscheidungen" → „Entscheidungen des Betreibers"; offen bleibt nur OE 7 (Gate-Schwellen final nach Phase 0).
+
+## Änderungsprotokoll v4 → v4.1 (Betreiber-Entscheidungen 2026-10-14)
+
+- **Betrieb:** Shadow läuft auf Vercel über die bestehende Job-Engine (`app/api/cron/curation-jobs/route.ts`, Minuten-Cron, `maxDuration = 800`), nicht per launchd vom Mac Studio — Pro-Plan, zwei fertige Job-Engine-Muster und der Bedarf von Phase 2 an derselben Engine sprechen dafür. Lokal bleibt nur der einmalige Backtest.
+- **Schreibrechte:** Phase 1 schreibt zusätzlich zu `curation_runs`/`curation_units` in `llm_usage` (Kostenkontrolle wie jeder Modellaufruf der App), in `published_units` für den in der Rekonziliation attribuierten Post (idempotent über `processPost`, sonst veraltet der Archivbrief nach dem ersten Tag) und in die Cache-Tabellen `curation_item_embeddings`/`curation_cards`. Keine Writes auf `news_queue`, `queue_item_events`, `article_jobs`, `generated_posts`, `ranking_*`.
+- **`get_precedent_units`:** nimmt keine Rolle als Parameter, sondern liefert in einem Aufruf die Top-`per_role`-Einheiten je Rolle — ein Round-Trip statt fünf.
+- **Kickoff:** in Phase 1 ein fester UTC-Zeitpunkt (`settings.curation.kickoff_utc`, Default `04:25`) ohne Analyse-Bedingung und Deadline; beides kommt erst in Phase 2 mit der Run-Phase `techmeme`.
+
+Code-Mapping-Befunde (korrigieren die Spec):
+
+- `callModelNonStreaming` liegt unexportiert in `lib/claude/ghostwriter-pipeline.ts:1183`.
+- Preise für Opus 5.5 (`claude-opus-5-5`) und Fable 5.1 (`claude-fable-5-1`) sind in `lib/ai/model-pricing.ts` eingetragen — der Abschnitt „Kosten" dieser Spec ist insofern überholt.
+- `excerpt` ist bei ~77 % des Pools leer (NULL) — der Scout liest den über `get_pool_excerpts` gekappten `content`.
+- Coverage as-of heißt nicht `getCoverageEmbeddingsAsOf(from, to)` in `semantic-dedup.ts` (so Abschnitt „Zeitbasis"), sondern `loadCoverageAsOf(supabase, from, to)` in `lib/curation/archive.ts`.
+- `daily_repo` trägt `collected_at`, nicht `created_at`.
+- Die Mindestlänge der Queue-UI (Slider-Default 1000) ist nicht persistiert; `settings.curation.min_content_length` hat einen eigenen Default von 500.

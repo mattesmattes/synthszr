@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-05-news-curation-team-design.md` — Abschnitte „Das Team", „Pool", „Herkunft und Hand-Begriff", „Drei Tiers", „Harte Regeln", „Datenquellen und Lernen", „Archivbrief", „Ablauf", „Output-Vertrag" (nur Lesestellen), „Umgang mit den Techmeme-Bündeln", „Evaluation und Gate", „Kosten", „Rollout → Phase 1". Schnittstellen-Vertrag der Tasks: **Anhang A** am Ende dieses Dokuments (verbindlich). Vorgänger: `docs/superpowers/plans/2026-10-06-curation-phase0.md` (Anhang A dort gilt weiter für alle Phase-0-Module).
 
-**Betreiber-Entscheidungen 2026-10-14, die von der Spec abweichen (Änderungsprotokoll v4 → v4.1, in die Spec zu übernehmen in Task 14):**
+**Betreiber-Entscheidungen 2026-10-14, die von der Spec abweichen (Änderungsprotokoll v4 → v4.1, in die Spec zu übernehmen in Task 15):**
 1. **Shadow läuft auf Vercel, nicht per launchd vom Mac Studio.** Begründung: Pro-Plan mit `maxDuration = 800` (heute schon `app/api/cron/article-jobs/route.ts:6`), zwei fertige Job-Engines als Muster, und Phase 2 braucht dieselbe Engine ohnehin. Lokal bleibt nur der einmalige Backtest.
 2. **Schreibrechte des Shadow:** zusätzlich zu `curation_runs`/`curation_units` schreibt Phase 1 (a) `llm_usage` über `withUsageLogging` (Kostenkontrolle, wie jeder Modellaufruf der App), (b) `published_units` für den in der Rekonziliation attribuierten Post (idempotent über `processPost` aus `scripts/lib/published-units-backfill.ts:102` — ohne das veraltet der Archivbrief nach dem ersten Tag, denn beim Publish schreibt kein Hook), (c) die Cache-Tabellen `curation_item_embeddings` und `curation_cards`. Keine Writes auf `news_queue`, `queue_item_events`, `article_jobs`, `generated_posts`, `ranking_*`.
 3. **`get_precedent_units` nimmt keine Rolle als Parameter**, sondern liefert in EINEM Aufruf die Top-`per_role` Einheiten je Rolle (ein Round-Trip statt fünf).
@@ -793,7 +793,22 @@ Tasks 4, 5, 6, 7 sind untereinander unabhängig (nach 1–3); 8 und 9 nach 5; 10
 
 ### 6. Nachträge aus den Tasks
 
-(leer — wird während der Umsetzung gefüllt)
+- **R6 (Task 1):** Der im Brief vorgeschlagene zweite grep-Prüfschritt war ein Präfix-Match und zählte die eigenen `if not exists`-Zeilen mit; korrekt ist `grep -E "^create (table|index|unique index) " $F | grep -vcE "if not exists"` = 0.
+- **R7 (Task 2):** Code in den Briefs ist zur Plan-Länge verdichtet; Repo-Konvention ist eine Anweisung je Zeile mit deutschen WARUM-Kommentaren an Verzweigungen — ab Task 3 schreiben alle Dispatches Brief-Code im Repo-Stil aus.
+- **R9 (C1):** Verwirft `clusterByEmbedding` einen Techmeme-Anführer als Duplikat eines früheren Hand- oder Techmeme-Anführers, werden beide Cluster unter einem gemeinsamen `tm:`-Key gemergt (der frühere Techmeme-Key gewinnt, ein Hand-Anführer bleibt `leaderOf`), statt zwei Cluster zur selben Story nebeneinander stehen zu lassen — Invariante: jede ID in genau einem `clusters`-Array.
+- **R10 (Concern A):** Die Cron-Route gibt das Lease frei, wenn `advanceRun` mit `finished:false` zurückkommt — der nächste Minutentick macht sofort weiter, das Lease schützt nur die laufende Arbeit.
+- **R11 (Concern B):** `phaseCompose` prüft vor jedem Compose-Versuch die Restzeit des Ticks; reicht sie nicht, wird der Zwischenstand (Plan, Kritik, Versuchszähler, Ausgaben) persistiert und die Revision im nächsten Tick mit vollem Budget fortgesetzt, statt als `compose_fallback` verloren zu gehen.
+- **R12 (Concern C):** Der Dry-Run (Task 14) ruft `phasePool` und `phaseCluster` direkt auf, nicht `advanceRun` — kein Scout-Aufruf nötig.
+- **R13 (Task 11):** Die Zuordnung veröffentlichte Einheit ↔ Plan-Einheit ist exklusiv (greedy, Rangfolge recommended→bench→held, ID-Pass vor Similarity-Pass); eine zweite Plan-Einheit zur selben veröffentlichten Einheit bekommt keinen Treffer und fällt in `dropped_*`.
+- **R14 (Task 11):** `dropped_after_selection` zählt alle IDs der `selected_items` des Tages-Jobs, auch automatisch selektierte Techmeme-Items — `cut_rate` ist damit konservativ (eher höher).
+- **R15 (Task 11):** Recall bleibt auf Story-Ebene (Treffer über denselben Cluster oder per Outcome-Zuordnung), Precision ist zuordnungsbasiert (R13).
+- **R16 (I3, ersetzt die Recall-Hälfte von R15):** Die Recall-Währung ist für Plan UND Baseline identisch — Treffer über gemeinsame ID, denselben Story-Cluster oder Similarity ≥ 0,8 zum veröffentlichten Embedding —, angewendet auf die gekappten Plan-Listen und auf die Baseline-Listen gleichermaßen.
+- **R17 (I1):** `duplicate_rate_recommended` zählt den Anteil der recommended-Einheiten, die mit einer früheren recommended-Einheit eine Member-ID oder denselben Story-Key teilen — unabhängig von `unitDuplicateRate` aus Phase 0, dessen first-wins-Zuordnung Dubletten verstecken würde.
+- **R18 (I2):** Plan-Listen für Recall werden wie die Baseline auf Einheiten gekappt: `unit_recall_20` über die ersten 20 Einheiten (recommended, dann bench), `setzlisten_recall_10` über recommended Rang 1–10.
+- **R19 (Task 12):** Äußerer try/catch um den Handler-Body der Cron-Route nach der Auth-Prüfung — Antwort `{ ok:false, error }` mit Status 200 plus `console.error`, damit ein DB-Fehler außerhalb der Arbeitseinheit den Cron nicht als fehlgeschlagen markiert.
+- **R20 (Task 14):** `processDay` in `backtest-curation.ts` wirft nie — `createRun` wandert in den try, die Recovery-Aufrufe im catch bekommen ein eigenes verschachteltes try/catch (Sekundärfehler werden geloggt, der Report-Eintrag notfalls lokal mit `spend 0` gebaut statt aus der DB), damit ein fehlschlagender Tag den Backtest nicht abbricht.
+- **Task 14:** `--force`-Flag für `BacktestArgs` (erlaubt den erneuten Lauf bereits `done`er Tage); Report-Helfer `backtestDayReportOf`/`buildBacktestReport`/`doneRunIdByDay`/`errorDayReportOf` in `lib/curation/backtest.ts`; `scripts/lib/curation-script-runner.ts` garantiert `flushUsageLog()` über `runScript(main)` im `finally`; `BacktestDayReport.run_id` ist `string | null`; `--report` in `reconcile-curation.ts` aggregiert alle rekonziliierten Läufe des angefragten Modus.
+- **Task 10:** Ein beim Kritiker mit Grund `budget` degradierter Lauf bedeutet nicht mehr „Plan ist Baseline" — reicht das Budget nur für den Kritiker-Aufruf nicht, bleibt der Plan des letzten Compose-Versuchs erhalten (sofern er ohne harte Verstöße durchläuft), nur der Kritiker-Durchgang entfällt; die Baseline kommt ausschließlich zum Zug, wenn der Compose-Aufruf selbst am Budget scheitert oder beide Versuche ohne gültigen Plan enden.
 
 ---
 

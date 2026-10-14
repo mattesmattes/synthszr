@@ -329,6 +329,118 @@ ein Effekt von +0,10 bei 20 Gate-Tagen nicht verlässlich nachweisbar (Task 14 E
 Rolle, mit Kontrast-Heading (0,65–0,8); Tokenzahl steht in
 `curation-baseline.json → negative_block.approx_tokens`.
 
+### Curation Phase 1 — Shadow (2026-10-14)
+Das Agenten-Team „Morgenkonferenz" (Scout, Cluster, Archivar, Chefredaktion,
+Kritiker) läuft täglich im Schatten auf Vercel und schreibt eine Setzliste
+plus Bank als `curation_runs`/`curation_units`. Kein Write auf `news_queue`,
+`queue_item_events`, `article_jobs`, `generated_posts` oder `ranking_*` — die
+Queue, der Draft und der Techmeme-Lauf bleiben unangetastet.
+
+**Tabellen** (Migration `supabase/migrations/20261014090000_curation_phase1.sql`,
+RLS ohne Policy = nur Service-Role):
+- `curation_runs` — ein Lauf je Tag und Modus (`shadow`/`backtest`) mit Phase,
+  Lease, Versuchszähler, Protokoll und den Zwischenergebnissen jeder Phase als
+  JSONB-Spalten (`pool`, `cards`, `story_keys`, `brief`, `baseline`, `plan`,
+  `critique`) sowie dem Rekonziliations-Ergebnis.
+- `curation_units` — eine Zeile je Plan-Einheit (Tier, Rang, Mitglieder,
+  Grund, Alternative, Präzedenzen), nach der Rekonziliation um Outcome und
+  finale Rolle/Rang ergänzt.
+- `curation_item_embeddings` / `curation_cards` — Caches für Embeddings ohne
+  `daily_repo`-Pendant und für Scout-Cards je Item und Modell.
+- `get_precedent_units` (RPC) — liefert in einem Round-Trip die Top-`per_role`-
+  Präzedenzeinheiten je Rolle für einen Satz Kandidaten-Embeddings.
+- `get_pool_excerpts` (RPC) — Excerpt je Item, auf `max_chars` gekappt (spart
+  den Volltext-Egress; `excerpt` ist bei ~77 % des Pools NULL).
+
+**Engine** (`lib/curation/run.ts`, `lib/curation/service.ts`, Cron
+`app/api/cron/curation-jobs/route.ts`):
+- Minuten-Cron (`vercel.json`, `*/1 * * * *`), `maxDuration = 800`.
+- Phasenfolge `pool → scout → cluster → archive → compose → units → finished`
+  (`advanceRun`), jede Phase persistiert ihr Ergebnis sofort.
+- Lease `LEASE_STALE_MS` = 15 min gegen überlappende Ticks.
+- Tick-Budget `TICK_BUDGET_MS` = 600 s; `COMPOSE_MIN_REMAINING_MS` = 420 s —
+  reicht die Restzeit des Ticks nicht, vertagt `phaseCompose` den Versuch
+  (inkl. Zwischenstand) in den nächsten Tick, statt ins Timeout zu laufen.
+- Unter `POOL_MIN_ITEMS` = 40 endet der Run als `error` (`pool_small`), ohne
+  Modellaufruf.
+- `MAX_ATTEMPTS` = 10 erfolglose Ticks in Folge, dann gibt der Run auf.
+
+**Settings** (`settings.curation`, `loadCurationSettings`, Defaults aus
+`DEFAULT_CURATION_SETTINGS`):
+- `shadow_enabled` (Default `false`) — **[FREIGABE]** schaltet scharf.
+- `kickoff_utc` (Default `'04:25'`) — fester UTC-Kickoff ohne
+  Analyse-Bedingung/Deadline (die kommen erst in Phase 2 mit der Techmeme-Phase).
+- `budget_usd` (Default 4, je Run) / `daily_budget_usd` (Default 12, je Tag).
+- `min_content_length` (Default 500) / `pool_window_hours` (Default 48) /
+  `scout_batch_size` (Default 25) / `critic_enabled` (Default `true`).
+- `settings.curation_operator_rules` (`{text: string}`, `loadOperatorRules`) —
+  freier Markdown-Text für den Archivbrief; fehlende Zeile = leer, kein Fehler.
+
+**Modelle über Use Cases** (`lib/ai/use-cases.ts`, im Admin einstellbar):
+`curation_scout` (Default `claude-haiku-4-5-20251001`, Kernsatz je Meldung),
+`curation_editor` (Default `claude-opus-5`, Setzliste/Bank über `compose_day`),
+`curation_critic` (Default `claude-sonnet-5`, harte/weiche Verstöße).
+
+**Kosten:** Budget 4 USD je Run, 12 USD je Tag (`daily_budget_usd`,
+`spentTodayUsd`); `reserveBudget` reserviert vor JEDEM Modellaufruf (Compose,
+Kritiker) — reicht das Budget nicht, degradiert die Phase (`'budget'`), statt
+den Lauf abzubrechen. Ein Kritiker-Degrade mit Grund `'budget'` heißt NICHT,
+dass der Plan die Baseline ist: nur der Kritiker-Durchgang entfällt, der
+zuletzt komponierte Plan bleibt stehen, solange er keine harten Verstöße hat;
+die `total_score`-Baseline kommt nur zum Zug, wenn der Compose-Aufruf selbst
+am Budget scheitert oder beide Versuche ohne gültigen Plan enden.
+
+**Rekonziliation** (`lib/curation/reconcile.ts`, `reconcileRun`, über
+`getRunsToReconcile` zehn Minuten nach `asof`): Attribution-Kaskade
+(`pickMatchingPost`) — zuerst der jüngste manuell zugeordnete
+`article_jobs`-Eintrag (`job`), sonst der nächste `published_at` danach
+(`published_at`), sonst derselbe Berlin-Tag (`created_at_day`), sonst kein
+Treffer. Pflegt `published_units` über `processPost`
+(`scripts/lib/published-units-backfill.ts`) nach — ohne das veraltet der
+Archivbrief nach dem ersten Tag, weil beim Publish kein Hook schreibt.
+
+**Admin:** `/admin/curation` (read-only, `app/api/admin/curation/runs/route.ts`)
+— Läufe, drei Tiers, Metriken, Protokoll.
+
+**Scripts** (`tsx`, Env `~/.synthszr.env.prod` vor `.env.local`; alle mit
+`--dry-run`: nur `phasePool`/`phaseCluster`, ohne Modellaufruf, Run endet
+`cancelled`):
+- `pnpm curation:backtest` (`scripts/backtest-curation.ts`) — Gate-Fenster
+  plus letzte 30 Tage, `runDayInline` je Tag mit sofortiger Rekonziliation;
+  u. a. `--last`, `--brief`, `--sequential`, `--max-usd`, `--force`.
+- `pnpm curation:shadow-once` (`scripts/shadow-once-curation.ts`) — ein Lauf
+  in einem Rutsch, von Hand angestoßen; `--asof`.
+- `pnpm curation:reconcile` (`scripts/reconcile-curation.ts`) — Nachschlag für
+  liegen gebliebene Läufe; `--mode shadow|backtest`, `--since YYYY-MM-DD`,
+  `--report` (aggregiert alle rekonziliierten Läufe des angefragten Modus).
+
+**Testregel:** Tests laufen mit `SUPABASE_SERVICE_ROLE_KEY=` (leer
+vorangestellt), damit kein Test auf Prod schreibt.
+
+**Gate-Regel:** Shadow → Assist nach ≥ 20 Shadow-Tagen, wenn Unit-Recall@20 ≥
+`total_score`-Baseline + 0,10 (gepaarter Bootstrap, 90 % > 0), Boden 0,5
+(Unit-Recall@20) / 0,35 (Setzlisten-Recall@10), Precision ≥ Hand, Dubletten-
+Rate 0. Abbruch (kein Rollout), wenn Unit-Recall@20 nach 20 Tagen weiterhin
+unter der `total_score`-Baseline liegt.
+
+**Runbook „Shadow scharf schalten":**
+1. Migration 20261014090000 eingespielt (Task 1 Step 8) und Phase-0-Migration
+   vorhanden.
+2. `pnpm curation:shadow-once -- --dry-run` (lesend): Pool und Cluster
+   plausibel.
+3. **[FREIGABE]** `pnpm curation:shadow-once` (ein echter Lauf, ~1–2 USD) →
+   `/admin/curation` prüfen.
+4. **[FREIGABE]** Settings setzen (SQL, lesend prüfbar):
+   ```sql
+   insert into settings (key, value) values ('curation', '{"shadow_enabled": true}'::jsonb)
+     on conflict (key) do update set value = settings.value || '{"shadow_enabled": true}'::jsonb;
+   insert into settings (key, value) values ('curation_operator_rules', '{"text": ""}'::jsonb) on conflict (key) do nothing;
+   ```
+5. Deploy auf `main` (Vercel-Cron `*/1` ist in `vercel.json`); am nächsten
+   Morgen ab 04:26 UTC entsteht der Run, Rekonziliation läuft nach dem Publish.
+6. Nach 20 Shadow-Tagen: `aggregateRuns` über `/admin/curation` oder
+   `pnpm curation:reconcile -- --report`; Gate-Entscheidung durch den Betreiber.
+
 ## Recent Changes (2026-01-14)
 
 ### Ghostwriter Queue Fix
