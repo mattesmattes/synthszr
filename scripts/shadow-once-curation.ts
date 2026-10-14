@@ -13,7 +13,8 @@
  *
  * `--dry-run`: nur phasePool und phaseCluster, OHNE advanceRun und OHNE
  * Modellaufruf (Ruling R12, wie backtest-curation.ts) — zeigt Pool-Groesse,
- * Ausschluesse, Stories und Hand-Anteil, Run endet als `cancelled`.
+ * Ausschluesse, Stories und Hand-Anteil, Run endet als `cancelled` mit
+ * error_message `dry_run` (DRY_RUN_MARKER) — der Cron-Kickoff zaehlt ihn nicht.
  *
  * Rekonziliation (Final-Review 2026-10-14 (R21)): nur, wenn das
  * Abgleichfenster (24 h nach `asof`) geschlossen ist — sonst fehlt der Post
@@ -68,7 +69,7 @@ async function main(): Promise<number> {
   const { createAdminClient } = await import('@/lib/supabase/admin')
   const { createCaller } = await import('@/lib/ai/call')
   const { generateEmbeddings } = await import('@/lib/embeddings/generator')
-  const { claimRun, createRun, finishRun, loadCurationSettings } = await import('@/lib/curation/service')
+  const { claimRun, createRun, finishRun, loadCurationSettings, DRY_RUN_MARKER } = await import('@/lib/curation/service')
   const { phaseCluster, phasePool, runDayInline, RunClaimLostError } = await import('@/lib/curation/run')
   const { isMatchWindowOpen, reconcileRun } = await import('@/lib/curation/reconcile')
   const supabase = createAdminClient()
@@ -122,7 +123,10 @@ async function main(): Promise<number> {
     patched = { ...patched, ...clusterPatch }
 
     console.log(dryRunPoolLine(day, patched.pool!, patched.story_keys!))
-    await finishRun(supabase, run.id, 'cancelled')
+    // Marker statt leerer Meldung (Final-Review 2026-10-14 (R28), Minor 10):
+    // der Cron-Kickoff ignoriert diesen Run, ein Dry-Run am Go-live-Tag
+    // blockiert den echten Lauf nicht.
+    await finishRun(supabase, run.id, 'cancelled', DRY_RUN_MARKER)
     return 0
   }
 

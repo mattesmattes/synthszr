@@ -5,7 +5,7 @@ import { createCaller } from '@/lib/ai/call'
 import { generateEmbeddings } from '@/lib/embeddings/generator'
 import { berlinDay } from '@/lib/curation/precedents'
 import {
-  appendRunLog, claimRun, createRun, finishRun, getNextOpenRun, getRunsToReconcile,
+  appendRunLog, claimRun, createRun, finishRun, getNextOpenRun, getRunsToReconcile, isDryRunRun,
   kickoffAsOf, listRuns, loadCurationSettings, markReconciled, releaseLease, spentTodayUsd, stamp, MAX_ATTEMPTS,
 } from '@/lib/curation/service'
 import { advanceRun, TICK_BUDGET_MS } from '@/lib/curation/run'
@@ -62,7 +62,8 @@ export async function GET(request: NextRequest) {
       const asof = kickoffAsOf(nowIso, settings.kickoff_utc)
       if (asof) {
         const day = berlinDay(asof)
-        const today = (await listRuns(supabase, { limit: 5, mode: 'shadow' })).filter((r) => r.day === day)
+        // Dry-Runs zaehlen nicht als Lauf des Tages (isDryRunRun, R28 Minor 10).
+        const today = (await listRuns(supabase, { limit: 5, mode: 'shadow' })).filter((r) => r.day === day && !isDryRunRun(r))
         const spent = await spentTodayUsd(supabase, day)
         // Nur anlegen, wenn weder heute schon ein Run existiert noch die
         // Tageskappe ausgeschoepft ist — sonst legte jeder Minutentick nach dem

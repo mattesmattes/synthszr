@@ -92,6 +92,19 @@ describe('GET /api/cron/curation-jobs', () => {
     expect(body.kickoff).toBe('r')
   })
 
+  it('R28 (Minor 10): ein Dry-Run-Run des Tages (cancelled/dry_run) blockiert den Kickoff nicht, ein echter schon', async () => {
+    m.createRun.mockResolvedValue({ id: 'r', status: 'pending' })
+    m.listTodayRuns.mockResolvedValueOnce([{ id: 'dry', day: '2026-10-15', mode: 'shadow', status: 'cancelled', error_message: 'dry_run' }])
+    const { GET } = await import('@/app/api/cron/curation-jobs/route')
+    const body = await (await GET(req())).json()
+    expect(m.createRun).toHaveBeenCalledTimes(1)
+    expect(body.kickoff).toBe('r')
+
+    m.listTodayRuns.mockResolvedValueOnce([{ id: 'stop', day: '2026-10-15', mode: 'shadow', status: 'cancelled', error_message: 'cancel_requested' }])
+    await GET(req())
+    expect(m.createRun).toHaveBeenCalledTimes(1)
+  })
+
   it('kein Kickoff bei shadow_enabled=false, vor der Zeit oder bei erschoepfter Tageskappe', async () => {
     const { GET } = await import('@/app/api/cron/curation-jobs/route')
     m.loadCurationSettings.mockResolvedValueOnce({ ...DEFAULT_CURATION_SETTINGS, shadow_enabled: false })

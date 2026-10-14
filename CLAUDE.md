@@ -421,7 +421,8 @@ abgeschlossen (zählt in keinem Aggregat).
 
 **Scripts** (`tsx`, Env `~/.synthszr.env.prod` vor `.env.local`; alle mit
 `--dry-run`: nur `phasePool`/`phaseCluster`, ohne Modellaufruf, Run endet
-`cancelled`):
+`cancelled` mit `error_message = 'dry_run'` — der Cron-Kickoff zählt ihn
+nicht als Lauf des Tages):
 - `pnpm curation:backtest` (`scripts/backtest-curation.ts`) — Gate-Fenster
   plus letzte 30 Tage, `runDayInline` je Tag mit sofortiger Rekonziliation;
   u. a. `--last`, `--brief`, `--sequential`, `--max-usd`, `--force`,
@@ -464,8 +465,13 @@ unter der `total_score`-Baseline liegt.
 5. Deploy auf `main` (Vercel-Cron `*/1` ist in `vercel.json`); am nächsten
    Morgen ab 04:26 UTC entsteht der Run. Am Folgetag ab 04:26 UTC
    rekonziliiert der Kickoff-Tick den Vortag vor dem neuen Run.
-6. Nach 20 Shadow-Tagen: `aggregateRuns` über `/admin/curation` oder
-   `pnpm curation:reconcile -- --report`; Gate-Entscheidung durch den Betreiber.
+6. Nach 20 Shadow-Tagen: `pnpm curation:reconcile -- --report` (Gate-Aggregat
+   je Arm; `/admin/curation` zeigt nur die Tage einzeln); Gate-Entscheidung
+   durch den Betreiber.
+
+Not-Aus: `update curation_runs set cancel_requested = true where id = …` —
+`advanceRun` schließt den Run beim nächsten Tick als `cancelled` ab, bevor er
+weiterarbeitet. `shadow_enabled = false` stoppt nur neue Kickoffs.
 
 ## Recent Changes (2026-01-14)
 

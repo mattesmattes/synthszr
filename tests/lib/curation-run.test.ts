@@ -163,6 +163,16 @@ describe('advanceRun', () => {
     expect(last.degraded).toContain('budget')
   })
 
+  it('R28 (Minor 9): cancel_requested → finishRun cancelled am Eintritt, keine Arbeit', async () => {
+    const d = deps()
+    const r = await advanceRun(d, run({ cancel_requested: true, phase: 'compose' }))
+    expect(r).toEqual({ phase: 'compose', finished: true, note: 'cancel_requested' })
+    expect(m.finishRun).toHaveBeenCalledWith(d.supabase, 'r', 'cancelled', 'cancel_requested')
+    expect(m.saveRunState).not.toHaveBeenCalled()
+    expect(m.spentTodayUsd).not.toHaveBeenCalled()
+    expect(m.loadPoolAsOf).not.toHaveBeenCalled()
+  })
+
   it('andere Fehler werden geworfen, der Run bleibt offen (Route zaehlt attempts)', async () => {
     m.loadPoolAsOf.mockRejectedValueOnce(new Error('news_queue: timeout'))
     await expect(advanceRun(deps(), run())).rejects.toThrow('news_queue: timeout')
@@ -319,6 +329,21 @@ describe('phaseCompose', () => {
     expect(patch.plan?.source).toBe('baseline')
     expect(patch.degraded).toContain('compose_fallback')
     expect(patch.compose_attempts).toBe(2)
+  })
+
+  it('R28 (Minor 12): Baseline-Fallback wird gegen die harten Regeln geprueft, Verstoesse stehen in critique', async () => {
+    m.composeDay.mockResolvedValue({ plan: plan(), costUsd: 0.5, model: 'o' })
+    m.checkHardRules
+      .mockReturnValueOnce(['cover_count:2'])
+      .mockReturnValueOnce(['cover_count:2'])
+      .mockReturnValueOnce(['story_duplicate:x'])
+    m.checkSoftRules.mockReturnValue(['held_many:6'])
+    m.critiqueWithModel.mockResolvedValue({ hard: ['m'], soft: ['w'], costUsd: 0.05 })
+    const patch = await phaseCompose(deps(), ready())
+    expect(patch.plan?.source).toBe('baseline')
+    expect(m.checkHardRules).toHaveBeenCalledTimes(3)
+    expect(m.checkHardRules.mock.calls[2][0]).toBe(patch.plan)
+    expect(patch.critique).toEqual({ hard: ['story_duplicate:x'], soft: ['held_many:6'], model_hard: [], model_soft: [] })
   })
 
   it('Budget reicht nicht fuer den Kritiker → degraded critic, Plan bleibt', async () => {

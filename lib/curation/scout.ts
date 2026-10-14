@@ -3,20 +3,23 @@
  * in Batches, mit Card-Cache (curation_cards). SCOUT_TOOL/SCOUT_SYSTEM sind
  * woertlich aus Anhang A §4.1 uebernommen — nur dort geaendert, nicht hier.
  *
- * WARUM nur CallInvalidError gefangen wird: callTool (lib/ai/call.ts) hat
- * bei einer leeren/ungueltigen Tool-Antwort schon EINEN Retry selbst
- * unternommen (Modul-Kommentar dort) — CallInvalidError heisst „auch nach
- * diesem Retry nichts Brauchbares", und genau dafuer gibt es den
+ * WARUM nur CallInvalidError und CallRefusedError gefangen werden: callTool
+ * (lib/ai/call.ts) hat bei einer leeren/ungueltigen Tool-Antwort schon EINEN
+ * Retry selbst unternommen (Modul-Kommentar dort) — CallInvalidError heisst
+ * „auch nach diesem Retry nichts Brauchbares", und genau dafuer gibt es den
  * Batch-Fallback (alle Items `missing`, Engine setzt spaeter fallbackCard
- * ein, Task 10 phaseScout). Jeder ANDERE Fehler (Netzwerk, CallRefusedError,
- * ein Tippfehler im Aufruf) ist kein Tool-Antwort-Problem, sondern ein
- * echter Ausfall — den soll scoutBatch NICHT stillschweigend in „alle
+ * ein, Task 10 phaseScout). Eine Refusal ist deterministisch fuer diesen
+ * Batch: geworfen, verwarf Promise.all die schon bezahlten Batches der
+ * Gruppe, und der Run scheiterte nach zehn Ticks an demselben Batch — sie
+ * bekommt deshalb denselben Fallback (Final-Review 2026-10-14 (R28),
+ * Minor 2). Jeder ANDERE Fehler (Netzwerk, ein Tippfehler im Aufruf) ist
+ * ein echter Ausfall — den soll scoutBatch NICHT stillschweigend in „alle
  * Items fehlen" uebersetzen, sonst verschleiert ein Netzwerkfehler sich als
  * normale Teil-Degradierung. Deshalb rethrow.
  */
 import { z } from 'zod'
 import type Anthropic from '@anthropic-ai/sdk'
-import { CallInvalidError, type CallToolFn } from '@/lib/ai/call'
+import { CallInvalidError, CallRefusedError, type CallToolFn } from '@/lib/ai/call'
 import type { SupabaseAdmin } from '@/lib/news-queue/events'
 import type { PoolSnapshotItem, ScoutCard } from '@/lib/curation/types'
 
@@ -94,8 +97,8 @@ export function fallbackCard(item: PoolSnapshotItem): ScoutCard {
 
 /**
  * EIN Modellaufruf fuer einen Batch. `missing` sind Batch-IDs ohne Card —
- * nach CallInvalidError alle, sonst die vom Modell ausgelassenen. Andere
- * Fehler wirft die Funktion weiter (s. Modul-Kommentar oben).
+ * nach CallInvalidError/CallRefusedError alle, sonst die vom Modell
+ * ausgelassenen. Andere Fehler wirft die Funktion weiter (s. Modul-Kommentar oben).
  */
 export async function scoutBatch(
   callTool: CallToolFn,
@@ -120,7 +123,8 @@ export async function scoutBatch(
   } catch (err) {
     // costUsd des Fehlers statt 0: beide Antworten waren bezahlt, die
     // Fallback-Cards tragen ihre Kosten (Final-Review 2026-10-14 (R24)).
-    if (err instanceof CallInvalidError) {
+    if (err instanceof CallInvalidError || err instanceof CallRefusedError) {
+      if (err instanceof CallRefusedError) console.warn(`[Curation] Scout-Batch abgelehnt (${err.category ?? 'ohne Kategorie'}) — Fallback-Cards`)
       return { cards: [], missing: [...ids], costUsd: err.costUsd }
     }
     throw err

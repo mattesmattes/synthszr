@@ -21,9 +21,10 @@ import type { CallToolFn } from '@/lib/ai/call'
 import { mulberry32 } from '@/lib/curation/baseline-metrics'
 import { neutralizeHandLabels, unitKeyOf } from '@/lib/curation/baseline-day'
 import { handStoriesOf } from '@/lib/curation/cluster'
-import type {
-  ArchiveBrief, BaselineLists, ClusterResult, ComposePlan, ComposeUnit, CurationRole, CurationTier,
-  HandStoryDecision, PoolSnapshot, ScoutCard, TechmemeDecision,
+import {
+  CURATION_ROLES,
+  type ArchiveBrief, type BaselineLists, type ClusterResult, type ComposePlan, type ComposeUnit, type CurationRole,
+  type CurationTier, type HandStoryDecision, type PoolSnapshot, type ScoutCard, type TechmemeDecision,
 } from '@/lib/curation/types'
 
 const ROLE_ENUM = ['topic', 'recap', 'deep_dive', 'cover_story', 'none']
@@ -287,7 +288,16 @@ export function validatePlan(
     const story_key = cluster.storyKeyOf[member_ids[0]] ?? member_ids[0]
     if (capped) fixes.push(`Quellen auf 5 gekappt (${story_key})`)
 
-    const role: CurationRole | null = u.role === 'none' ? null : (u.role as CurationRole)
+    // Unbekannte Rolle → null statt ungeprueftem Cast (Final-Review
+    // 2026-10-14 (R28), Minor 3): faellt `strict` weg (strictDropped,
+    // lib/ai/call.ts), kann das Modell eine Rolle erfinden — sie verletzte den
+    // CHECK auf curation_units.role, insertUnits scheiterte jeden Tick, und
+    // der Run endete als error.
+    let role: CurationRole | null = null
+    if (u.role !== 'none') {
+      if (CURATION_ROLES.includes(u.role as CurationRole)) role = u.role as CurationRole
+      else fixes.push(`unbekannte Rolle '${u.role}' → keine Rolle`)
+    }
 
     let tier: CurationTier = VALID_TIERS.has(u.tier) ? (u.tier as CurationTier) : 'bench'
     if (!VALID_TIERS.has(u.tier)) fixes.push(`tier '${u.tier}' → bench`)

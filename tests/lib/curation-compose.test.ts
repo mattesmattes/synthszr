@@ -47,6 +47,16 @@ describe('validatePlan', () => {
     expect(plan.fixes.join(' ')).toMatch(/unbekannt|leer|tier/i)
     expect(plan.source).toBe('model')
   })
+  it('R28 (Minor 3): unbekannte Rolle → role null + fixes-Eintrag (CHECK auf curation_units.role)', () => {
+    const plan = validatePlan(raw([
+      { member_ids: ['a'], role: 'feature', rank: 1, tier: 'recommended', reason: 'r', alternative: '', precedent_ids: [] },
+      { member_ids: ['b'], role: 'recap', rank: 2, tier: 'recommended', reason: 'r', alternative: '', precedent_ids: [] },
+    ]), snapshot, cluster, {})
+    expect(plan.units[0].role).toBeNull()
+    expect(plan.units[0].unit_key).toBe('single::a')
+    expect(plan.units[1].role).toBe('recap')
+    expect(plan.fixes).toContain("unbekannte Rolle 'feature' → keine Rolle")
+  })
   it('kappt > 5 Quellen auf die 5 mit hoechstem total_score', () => {
     const big = snap(['1', '2', '3', '4', '5', '6', '7'].map((id) => item(id, { total_score: Number(id) })))
     const cl: ClusterResult = { storyKeyOf: Object.fromEntries(big.items.map((i) => [i.id, '1'])), clusters: { '1': big.items.map((i) => i.id) }, related: [] }

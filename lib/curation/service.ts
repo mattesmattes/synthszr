@@ -42,6 +42,12 @@ const IN_CHUNK = 200
 /** Offene Status eines Laufs — ein Run in 'done'/'error'/'cancelled' zaehlt nicht mehr als belegt. */
 const OPEN_STATUSES = ['pending', 'processing'] as const
 
+/**
+ * error_message, mit dem ein Dry-Run (shadow-once, backtest) seinen Run als
+ * 'cancelled' abschliesst (Final-Review 2026-10-14 (R28), Minor 10).
+ */
+export const DRY_RUN_MARKER = 'dry_run'
+
 /** Postgres-Code fuer unique_violation (hier: curation_runs_one_open_per_day). */
 const UNIQUE_VIOLATION = '23505'
 
@@ -402,6 +408,17 @@ export async function loadCurationSettings(supabase: SupabaseAdmin): Promise<Cur
   if (error || !data) return { ...DEFAULT_CURATION_SETTINGS }
   const value = (data as { value?: Partial<CurationSettings> }).value ?? {}
   return { ...DEFAULT_CURATION_SETTINGS, ...value }
+}
+
+/**
+ * Ein Dry-Run-Lauf (cancelled mit DRY_RUN_MARKER)? Der Kickoff zaehlt ihn
+ * nicht als „heute schon gelaufen" (Final-Review 2026-10-14 (R28), Minor 10)
+ * — sonst fiele der Cron-Kickoff an einem Tag mit Dry-Run (etwa am
+ * Go-live-Tag, Runbook Schritt 2) aus. Ein anderer cancelled-Run (Not-Aus)
+ * zaehlt weiter: der Betreiber wollte diesen Tag stoppen.
+ */
+export function isDryRunRun(run: Pick<RunSummary, 'status' | 'error_message'>): boolean {
+  return run.status === 'cancelled' && run.error_message === DRY_RUN_MARKER
 }
 
 /**

@@ -55,6 +55,19 @@ const shortId = (id: string) => `${id.slice(0, 8)}…`
 /** Zwei Dezimalstellen, „–" fuer null/undefined — wie im Brief verlangt (keine Prozent-Umrechnung). */
 const num2 = (n: number | null | undefined) => (n == null ? '–' : n.toFixed(2))
 
+/**
+ * Abgeglichen, aber ohne Messung? Dann einen Hinweis statt der KPI zeigen
+ * (Final-Review 2026-10-14 (R28), Minor 7): attribution 'none' hat Nullen in
+ * allen Metriken, die wie eine Messung mit Ergebnis 0 aussaehen; metrics null
+ * mit reconciled_at heisst, der Abgleich wurde nach drei Fehlversuchen
+ * aufgegeben (R22). null = normale Anzeige.
+ */
+function reconcileNote(run: Pick<RunSummary, 'metrics' | 'reconciled_at'>): string | null {
+  if (run.metrics?.attribution === 'none') return 'kein Post zugeordnet'
+  if (!run.metrics && run.reconciled_at) return 'Abgleich fehlgeschlagen'
+  return null
+}
+
 export default function CurationAdminPage() {
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [loadingRuns, setLoadingRuns] = useState(true)
@@ -207,11 +220,17 @@ function RunsTable({
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{run.spend_usd.toFixed(2)} $</TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {num2(run.metrics?.unit_recall_20)}
-                    {run.metrics?.baseline_total_score_unit_recall_20 != null && (
-                      <span className="ml-1 text-muted-foreground">
-                        (Baseline {num2(run.metrics.baseline_total_score_unit_recall_20)})
-                      </span>
+                    {reconcileNote(run) ? (
+                      <span className="text-muted-foreground">{reconcileNote(run)}</span>
+                    ) : (
+                      <>
+                        {num2(run.metrics?.unit_recall_20)}
+                        {run.metrics?.baseline_total_score_unit_recall_20 != null && (
+                          <span className="ml-1 text-muted-foreground">
+                            (Baseline {num2(run.metrics.baseline_total_score_unit_recall_20)})
+                          </span>
+                        )}
+                      </>
                     )}
                   </TableCell>
                   <TableCell>{run.metrics?.attribution ?? '–'}</TableCell>
@@ -241,6 +260,7 @@ function kpiItems(metrics: RunMetrics): Array<{ label: string; value: string }> 
 
 function RunDetail({ detail }: { detail: Detail }) {
   const { run, units, titles } = detail
+  const note = reconcileNote(run)
 
   return (
     <div className="space-y-6">
@@ -252,7 +272,13 @@ function RunDetail({ detail }: { detail: Detail }) {
         </Card>
       )}
 
-      {run.metrics ? (
+      {note ? (
+        <p className="text-sm text-muted-foreground">
+          {note === 'kein Post zugeordnet'
+            ? 'Kein Post zugeordnet — für diesen Tag gibt es keine Messung.'
+            : 'Abgleich fehlgeschlagen — nach drei Fehlversuchen aufgegeben, Details im Protokoll.'}
+        </p>
+      ) : run.metrics ? (
         <div className="grid gap-4 md:grid-cols-3">
           {kpiItems(run.metrics).map((kpi) => (
             <Card key={kpi.label}>

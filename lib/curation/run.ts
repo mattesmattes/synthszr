@@ -369,6 +369,17 @@ export async function phaseCompose(deps: RunDeps, run: RunRow): Promise<Partial<
   if (!plan) {
     plan = baselinePlan(pool, cluster, baseline)
     degraded = withDegradation(degraded, outOfBudget ? 'budget' : 'compose_fallback')
+    // Auch der Fallback wird geprüft (Final-Review 2026-10-14 (R28),
+    // Minor 12): er kann Story-Dubletten oder gesplittete Hand-Stories
+    // enthalten und duplicates_zero kippen — das muss in der Kritik stehen.
+    // Die Kritik beschreibt den gespeicherten Plan; die des verworfenen
+    // Modellplans (inkl. Modell-Kritiker) gehört nicht dazu.
+    critique = {
+      hard: checkHardRules(plan, pool, cluster, embeddings),
+      soft: checkSoftRules(plan, pool, cluster),
+      model_hard: [],
+      model_soft: [],
+    }
   }
   return { plan, critique, spend_usd: spend, compose_attempts: attempts, degraded, phase: 'units' }
 }
@@ -394,6 +405,15 @@ const PHASES: Record<Exclude<RunPhase, 'finished'>, Phase> = {
  * die Route zählt attempts und gibt nach MAX_ATTEMPTS auf (Task 12).
  */
 export async function advanceRun(deps: RunDeps, run: RunRow): Promise<{ phase: RunPhase; finished: boolean; note: string }> {
+  // Not-Aus (Final-Review 2026-10-14 (R28), Minor 9): shadow_enabled=false
+  // stoppt nur neue Kickoffs — ein offener Run endet erst über
+  // cancel_requested, geprüft vor jeder Arbeit und vor jedem Modellaufruf.
+  if (run.cancel_requested) {
+    await finishRun(deps.supabase, run.id, 'cancelled', 'cancel_requested')
+    deps.log?.(`[Curation] ${run.day}: cancel_requested — Run abgebrochen`)
+    return { phase: run.phase, finished: true, note: 'cancel_requested' }
+  }
+
   const now = deps.now ?? Date.now
   const budgetMs = deps.budgetMs ?? TICK_BUDGET_MS
   // Das Tick-Ende als absolute Zeit an die Phasen: phaseCompose prüft es vor

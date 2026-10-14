@@ -18,6 +18,7 @@ import {
   getRunsToReconcile,
   getRunUnits,
   insertUnits,
+  isDryRunRun,
   kickoffAsOf,
   listRuns,
   loadCurationSettings,
@@ -74,6 +75,15 @@ const RUN = {
   model_critic: 's', error_message: null, created_at: '2026-10-15T04:25:01.000Z',
   finished_at: null,
 }
+
+describe('isDryRunRun', () => {
+  it('R28 (Minor 10): nur cancelled mit error_message dry_run ist ein Dry-Run', () => {
+    expect(isDryRunRun({ status: 'cancelled', error_message: 'dry_run' })).toBe(true)
+    expect(isDryRunRun({ status: 'cancelled', error_message: null })).toBe(false)
+    expect(isDryRunRun({ status: 'cancelled', error_message: 'cancel_requested' })).toBe(false)
+    expect(isDryRunRun({ status: 'error', error_message: 'dry_run' })).toBe(false)
+  })
+})
 
 describe('kickoffAsOf', () => {
   it('heutiger Kickoff als ISO, wenn erreicht', () => {

@@ -13,7 +13,7 @@ import {
   scoutBatch,
   SCOUT_TOOL,
 } from '@/lib/curation/scout'
-import { CallInvalidError } from '@/lib/ai/call'
+import { CallInvalidError, CallRefusedError } from '@/lib/ai/call'
 import type { PoolSnapshotItem } from '@/lib/curation/types'
 
 const state = vi.hoisted(() => ({
@@ -86,6 +86,14 @@ describe('scoutBatch', () => {
     expect(r2.missing).toEqual(['a', 'b', 'c', 'd'])
     // R24: beide Antworten waren bezahlt — die Fallback-Cards tragen die Kosten des Fehlers.
     expect(r2.costUsd).toBe(0.02)
+  })
+
+  it('R28 (Minor 2): CallRefusedError → Fallback wie CallInvalidError, mit Kosten, kein Wurf', async () => {
+    const refused = vi.fn(async () => { throw new CallRefusedError('curation_scout', 'cyber', 0.01) })
+    const r = await scoutBatch(refused as any, items)
+    expect(r.cards).toEqual([])
+    expect(r.missing).toEqual(['a', 'b', 'c', 'd'])
+    expect(r.costUsd).toBe(0.01)
   })
 
   it('wirft andere Fehler weiter (kein eigener Retry)', async () => {
