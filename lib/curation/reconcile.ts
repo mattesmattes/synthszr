@@ -48,12 +48,24 @@ const PLAN_K = 20
 /** Baseline je K in Einheiten wie totalScoreListsByK in run.ts (BASELINE_KS). */
 const BASELINE_KS = [10, 20] as const
 
-/** Gate (Spec „Entscheidungsregel", Betreiber-Vorgabe 2026-10-05). */
+/**
+ * Gate (Spec „Entscheidungsregel", Schwellen final nach Phase 0, Betreiber
+ * 2026-10-15). Die Böden gelten für die pool-normierten Recalls
+ * (unit_recall_covered_20, setzlisten_recall_covered_10): der Agent sieht nur
+ * den Pool; roh lägen 0,5/0,35 fast auf der Gesamtauswahl des Betreibers
+ * (Baseline 0,56/0,43), pool-normiert bei 0,70/0,54 gegen 0,31/0,22 für
+ * total_score. Entscheidung erst ab 30 Tagesdifferenzen: die Baseline-Streuung
+ * (sd 0,233) ergibt einen MDE bei 80 % Power von 0,129 für n = 20 und 0,106
+ * für n = 30 — +0,10 ist mit 20 Tagen nicht verlässlich nachweisbar. Der
+ * Abbruch-Check der Spec („nach 20 Tagen unter total_score") bleibt bei 20.
+ */
 const GATE_RECALL_GAIN = 0.10
-const GATE_FLOOR_UNIT_RECALL_20 = 0.5
-const GATE_FLOOR_SETZLISTE_RECALL_10 = 0.35
+const GATE_FLOOR_UNIT_RECALL_COVERED_20 = 0.5
+const GATE_FLOOR_SETZLISTE_RECALL_COVERED_10 = 0.35
 /** Anhang A §3.10: recall_gain null bei n < 5 — unter 5 Tagesdifferenzen trägt das Bootstrap-Intervall keine Aussage. */
 const GATE_MIN_DAYS = 5
+const GATE_ABORT_DAYS = 20
+const GATE_DECISION_DAYS = 30
 
 const HIT_OUTCOMES = new Set<UnitOutcome>(['kept', 'relabeled', 'merged'])
 const TIER_ORDER: Record<CurationTier, number> = { recommended: 0, bench: 1, held: 2 }
@@ -442,6 +454,9 @@ function emptyMetrics(attribution: RunMetrics['attribution']): RunMetrics {
     setzlisten_recall_10: 0,
     setzlisten_precision_10: 0,
     duplicate_rate_recommended: 0,
+    published_covered: 0,
+    unit_recall_covered_20: 0,
+    setzlisten_recall_covered_10: 0,
     cut_rate: 0,
     additions: 0,
     additions_rate: 0,
@@ -514,6 +529,17 @@ export function metricsOf(input: {
   ]
   const storyOf = assignStoryKeys(allIds, itemEmbeddings, DEFAULT_DEDUP_THRESHOLD)
   const recallOf = (ids: string[]) => ratio(publishedHitsOf(ids, published, itemEmbeddings, storyOf).size, published.length)
+  // Pool-normiert (Gate-Boden, Betreiber 2026-10-15): abgedeckt ist ein
+  // Abschnitt mit mindestens einem Member im Pool-Snapshot — dieselbe
+  // Definition wie coverage.units_covered der Phase-0-Baseline. Zähler und
+  // Nenner beschränkt; ein Similarity-Treffer auf einen nicht abgedeckten
+  // Abschnitt zählt hier nicht.
+  const poolIds = new Set(snapshot.items.map((item) => item.id))
+  const coveredIds = new Set(published.filter((p) => p.member_ids.some((id) => poolIds.has(id))).map((p) => p.id))
+  const coveredRecallOf = (ids: string[]) => {
+    const hits = publishedHitsOf(ids, published, itemEmbeddings, storyOf)
+    return ratio([...hits].filter((id) => coveredIds.has(id)).length, coveredIds.size)
+  }
 
   const recall20 = recallOf(planList20)
   const recallId20 = ratio(publishedIdHitsOf(planList20, published).size, published.length)
@@ -544,6 +570,9 @@ export function metricsOf(input: {
     setzlisten_recall_10: setzlisteRecall10,
     setzlisten_precision_10: setzlistePrecision10,
     duplicate_rate_recommended: duplicateRateOf(recommended, storyOf),
+    published_covered: coveredIds.size,
+    unit_recall_covered_20: coveredRecallOf(planList20),
+    setzlisten_recall_covered_10: coveredRecallOf(setzlisteList10),
     cut_rate: ratio(cut, recommended.length),
     additions: added.length,
     additions_rate: ratio(added.length, published.length),
@@ -716,6 +745,7 @@ export async function reconcileRun(
 
 const MEAN_FIELDS = [
   'unit_recall_20', 'setzlisten_recall_10', 'setzlisten_precision_10', 'duplicate_rate_recommended',
+  'unit_recall_covered_20', 'setzlisten_recall_covered_10',
   'cut_rate', 'additions_rate', 'held_rate', 'baseline_total_score_unit_recall_20',
 ] as const
 type MeanField = typeof MEAN_FIELDS[number]
@@ -724,7 +754,16 @@ export interface AggregateReport {
   n: number
   mean: Record<MeanField, number>
   diff_vs_total_score_20: { n: number; mean: number; bootstrap_90: { mean: number; lo90: number; hi90: number } }
-  gate: { recall_gain: boolean | null; floor: boolean; duplicates_zero: boolean; precision_vs_hand: boolean | null }
+  gate: {
+    recall_gain: boolean | null
+    floor: boolean
+    duplicates_zero: boolean
+    precision_vs_hand: boolean | null
+    /** Spec „Abbruch": ab 20 Tagesdifferenzen true, wenn das Mittel unter total_score liegt; davor null. */
+    abort: boolean | null
+    /** Gate-Entscheidung erst ab 30 Tagesdifferenzen (MDE80 n30 = 0,106); davor sind recall_gain/floor nur Zwischenstand. */
+    decision_ready: boolean
+  }
 }
 
 /**
@@ -754,14 +793,20 @@ export function aggregateRuns(metricsList: ReadonlyArray<RunMetrics | null>, han
   const diff = { n: diffs.length, mean: bootstrap_90.mean, bootstrap_90 }
 
   const recallGain = diff.n >= GATE_MIN_DAYS ? diff.mean >= GATE_RECALL_GAIN && bootstrap_90.lo90 > 0 : null
-  const floor = mean.unit_recall_20 >= GATE_FLOOR_UNIT_RECALL_20 && mean.setzlisten_recall_10 >= GATE_FLOOR_SETZLISTE_RECALL_10
+  const floor = mean.unit_recall_covered_20 >= GATE_FLOOR_UNIT_RECALL_COVERED_20
+    && mean.setzlisten_recall_covered_10 >= GATE_FLOOR_SETZLISTE_RECALL_COVERED_10
   const duplicatesZero = mean.duplicate_rate_recommended === 0
   const precisionVsHand = handPrecisionRef == null ? null : mean.setzlisten_precision_10 >= handPrecisionRef
+  const abort = diff.n >= GATE_ABORT_DAYS ? diff.mean < 0 : null
+  const decisionReady = diff.n >= GATE_DECISION_DAYS
 
   return {
     n: days.length,
     mean,
     diff_vs_total_score_20: diff,
-    gate: { recall_gain: recallGain, floor, duplicates_zero: duplicatesZero, precision_vs_hand: precisionVsHand },
+    gate: {
+      recall_gain: recallGain, floor, duplicates_zero: duplicatesZero, precision_vs_hand: precisionVsHand,
+      abort, decision_ready: decisionReady,
+    },
   }
 }

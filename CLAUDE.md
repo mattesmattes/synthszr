@@ -313,16 +313,16 @@ live ist (die alte `BUNDLE_MARKER_RE` erkennt den Typ nur am Zeilenende).
   `timeline.analysis_end_days_without_scheduled_run`. Nur volle Berlin-Tage
   der letzten 30 (angeschnittener erster und laufender Tag fallen weg).
 
-**Gate-Referenz (Spec „Entscheidungsregel", Schwellen final nach Phase 0):**
+**Gate-Referenz (Spec „Entscheidungsregel“, Schwellen final — Betreiber 2026-10-15 nach der Phase-0-Baseline):**
 Shadow → Assist, wenn Unit-Recall@20 ≥ `baselines.total_score_top20.unit_recall["20"]`
-+ 0,10 (gepaarter Bootstrap, 90 % > 0), Boden 0,5 / Setzlisten-Recall@10 ≥ 0,35
-(pool-normiert daneben: `unit_recall_covered["10"]` / `["20"]`),
-Precision@10 ≥ `baselines.hand.precision_full` (n = `baselines.hand.n`; Untergrenze, siehe Lesehinweis Hand-Leaks), Dubletten-Rate 0
-(Referenz: `baselines.hand.duplicate_rate_mean`, nur gemessener Job je Tag).
-`stats.diff_hand_minus_total_score_unit_recall_20` liefert `sd`, `mde50_n20`/`mde50_n30`
-(z = 1,645, 50 % Power) und `mde80_n20`/`mde80_n30` (z = 1,645 + 0,8416, 80 % Power).
-**Die +0,10-Schwelle wird am 80-%-Wert kalibriert:** liegt `mde80_n20` über 0,10, ist
-ein Effekt von +0,10 bei 20 Gate-Tagen nicht verlässlich nachweisbar (Task 14 Entscheidung 7).
++ 0,10 (Baseline 0,240 → 0,34; gepaarter Bootstrap, 90 % > 0), Böden **pool-normiert**
+`unit_recall_covered_20` ≥ 0,5 und `setzlisten_recall_covered_10` ≥ 0,35 (Baseline covered:
+Gesamtauswahl 0,70/0,54, total_score 0,31/0,22), Precision@10 ≥ `baselines.hand.precision_full`
+(0,243, n = 49; Untergrenze, siehe Lesehinweis Hand-Leaks), Dubletten-Rate 0
+(Referenz `baselines.hand.duplicate_rate_mean` = 0,016, nur gemessener Job je Tag).
+`stats.diff_hand_minus_total_score_unit_recall_20`: sd 0,233, `mde80_n20` = 0,129, `mde80_n30` = 0,106
+(z = 1,645 + 0,8416, 80 % Power). **Deshalb Gate-Entscheidung erst ab 30 Tagesdifferenzen**
+(`gate.decision_ready`), der Abbruch-Check ab 20 (`gate.abort`); Alternative „20 Tage mit +0,13“ verworfen.
 
 **Negativ-Block** „Gewählt, aber gestrichen" (`lib/curation/negatives.ts`,
 `loadNegativeBlock(supabase, { days: 14 })`): Stufe-2-Einheiten, ≤ 20, ≤ 8 je
@@ -443,11 +443,11 @@ nicht als Lauf des Tages):
 **Testregel:** Tests laufen mit `SUPABASE_SERVICE_ROLE_KEY=` (leer
 vorangestellt), damit kein Test auf Prod schreibt.
 
-**Gate-Regel:** Shadow → Assist nach ≥ 20 Shadow-Tagen, wenn Unit-Recall@20 ≥
-`total_score`-Baseline + 0,10 (gepaarter Bootstrap, 90 % > 0), Boden 0,5
-(Unit-Recall@20) / 0,35 (Setzlisten-Recall@10), Precision ≥ Hand, Dubletten-
-Rate 0. Abbruch (kein Rollout), wenn Unit-Recall@20 nach 20 Tagen weiterhin
-unter der `total_score`-Baseline liegt.
+**Gate-Regel (final 2026-10-15):** Shadow → Assist nach ≥ 30 Shadow-Tagen (`gate.decision_ready`),
+wenn Unit-Recall@20 ≥ `total_score`-Baseline + 0,10 (gepaarter Bootstrap, 90 % > 0),
+Böden pool-normiert 0,5 (`unit_recall_covered_20`) / 0,35 (`setzlisten_recall_covered_10`),
+Precision@10 ≥ Hand (0,243), Dubletten-Rate 0. Abbruch (`gate.abort`, kein Rollout), wenn
+Unit-Recall@20 nach 20 Tagen weiterhin unter der `total_score`-Baseline liegt.
 
 **Runbook „Shadow scharf schalten":**
 1. Migration 20261014090000 eingespielt (Task 1 Step 8) und Phase-0-Migration
@@ -466,7 +466,8 @@ unter der `total_score`-Baseline liegt.
    Morgen ab 04:26 UTC entsteht der Run. Am Folgetag ab 04:26 UTC
    rekonziliiert der Kickoff-Tick den Vortag vor dem neuen Run.
 6. Nach 20 Shadow-Tagen: `pnpm curation:reconcile -- --report` (Gate-Aggregat
-   je Arm; `/admin/curation` zeigt nur die Tage einzeln); Gate-Entscheidung
+   je Arm; `/admin/curation` zeigt nur die Tage einzeln) — Abbruch-Check
+   (`gate.abort`); nach 30 Tagen (`gate.decision_ready`) Gate-Entscheidung
    durch den Betreiber.
 
 Not-Aus: `update curation_runs set cancel_requested = true where id = …` —

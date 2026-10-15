@@ -1,7 +1,7 @@
 # Morgenkonferenz: Agenten-Team für die News-Queue — Design-Spec
 
 Datum: 2026-10-05
-Status: **v4.1, Design vom Betreiber freigegeben** (Entscheidungen 0–8 am Ende des Dokuments; offen nur Gate-Schwellen nach Phase 0). v4.1 nach Betreiber-Entscheidungen 2026-10-14 (Phase 1). Entstehung: Design-Workflow mit drei Entwürfen und Jury (Morgenkonferenz 6,6 / Redaktionsturnier 6,4 / Lernender Kurator 6,3), zwei Gutachterrunden (50 Befunde, 34 Lücken), v3.1 nach zwei Restbefunden, v4 nach Betreiber-Entscheidung — Änderungsprotokolle am Ende.
+Status: **v4.2, Design vom Betreiber freigegeben, Gate-Schwellen final (2026-10-15)** (Entscheidungen 0–8 am Ende des Dokuments). v4.1 nach Betreiber-Entscheidungen 2026-10-14 (Phase 1). Entstehung: Design-Workflow mit drei Entwürfen und Jury (Morgenkonferenz 6,6 / Redaktionsturnier 6,4 / Lernender Kurator 6,3), zwei Gutachterrunden (50 Befunde, 34 Lücken), v3.1 nach zwei Restbefunden, v4 nach Betreiber-Entscheidung — Änderungsprotokolle am Ende.
 Baut auf: News-Taste-Modell (Spec 2026-09-29), assistiertes Ranking (Spec 2026-06-01)
 Code-Referenz: `/Users/mattes/dev/synthszr`. Tabellen, Spalten, Dateien und RPCs ohne Bestand sind mit **NEU** markiert.
 
@@ -149,7 +149,7 @@ Die Run-Phase `techmeme` sorgt dafür, dass die Stories des Morgens vor dem Scou
 
 **Online.** Rekonziliation täglich; Hauptmetrik je Modus: Assist — Konferenz-Draft published vs. anderer Draft published; Full — Tag gilt als Fehlschlag, wenn ein `article_job` mit `source='manual'` ohne `curation_run_id` angelegt oder der Konferenz-Draft archiviert wird.
 
-**Entscheidungsregel.** Shadow → Assist nach ≥20 Shadow-Tagen: (1) Unit-Recall@20 ≥ `total_score`-Top-20 + 0,10 absolut, gepaarter Bootstrap der Tagesdifferenzen mit 90-%-Intervall > 0; (2) absoluter Boden Unit-Recall@20 ≥ 0,5 und Setzlisten-Recall@10 ≥ 0,35; (3) Setzlisten-Precision@10 ≥ Handauswahl-Precision; (4) Dubletten-Rate der Setzliste = 0. Nachtlauf (~10 % Überschneidung) ist nur Referenzzeile — „1,5× Status quo" wäre bei 0,15 trivial. **Abbruch:** nach 20 Shadow-Tagen unter `total_score`-Top-20 wird das Konzept gestoppt, nicht iteriert. Assist → Full: ≥15 Tage, Konferenz-Draft an ≥50 % der Tage veröffentlicht, Zugaben ≤0,3, Überlebensquote der Setzliste ≥60 %. Rückfall bei Fehlschlag an >50 % der Tage über 14 Tage. Phase 0 schätzt aus 30 Baseline-Tagen die Streuung und weist den minimal nachweisbaren Effekt bei n=20/30 aus.
+**Entscheidungsregel.** Shadow → Assist nach ≥30 Shadow-Tagen (Entscheidung 7, final 2026-10-15; `gate.decision_ready`): (1) Unit-Recall@20 ≥ `total_score`-Top-20 + 0,10 absolut (Baseline 0,240 → 0,34), gepaarter Bootstrap der Tagesdifferenzen mit 90-%-Intervall > 0; (2) absoluter Boden **pool-normiert** (abgedeckt = Abschnitt mit mindestens einem Member im Pool-Snapshot, Zähler und Nenner beschränkt; `unit_recall_covered_20`, `setzlisten_recall_covered_10`): Unit-Recall@20 ≥ 0,5 und Setzlisten-Recall@10 ≥ 0,35 (Baseline covered: Gesamtauswahl des Betreibers 0,70/0,54, `total_score` 0,31/0,22); (3) Setzlisten-Precision@10 ≥ Handauswahl-Precision der Baseline (0,243, Untergrenze wegen Füll-Items); (4) Dubletten-Rate der Setzliste = 0 (Referenz Hand 0,016). Nachtlauf (~10 % Überschneidung) ist nur Referenzzeile — „1,5× Status quo" wäre bei 0,15 trivial. **Abbruch:** nach 20 Shadow-Tagen unter `total_score`-Top-20 (`gate.abort`, Mittel der Tagesdifferenzen < 0) wird das Konzept gestoppt, nicht iteriert. Assist → Full: ≥15 Tage, Konferenz-Draft an ≥50 % der Tage veröffentlicht, Zugaben ≤0,3, Überlebensquote der Setzliste ≥60 %. Rückfall bei Fehlschlag an >50 % der Tage über 14 Tage. Phase 0 hat aus 49 Baseline-Tagen (25.08.–15.10.) die Streuung gemessen: sd der Tagesdifferenz Hand − `total_score` 0,233, minimal nachweisbarer Effekt bei 80 % Power 0,129 (n = 20) und 0,106 (n = 30) — deshalb 30 Entscheidungstage statt 20.
 
 ## Kosten
 
@@ -208,7 +208,7 @@ Die Fragen 0–8 wurden dem Betreiber mit Empfehlung vorgelegt; Ergebnis:
 4. **Zeitanker — entschieden: Termin bleibt 04:30 UTC, Berlin-Kette im Winter eine Stunde vorziehen** (03:00/03:30/04:00 Berlin = 02:00/02:30/03:00 UTC wie im Sommer). Gegen die Empfehlung „06:30 Berlin". Betreiber-Aufgabe: `schedule_config` bis 25.10. umstellen; Phase 0 misst die Newsletter-Eingangszeiten für den vorgezogenen Slot.
 5. **Modell der Chefredaktion — entschieden: Opus 5** im Backtest, Fable 5.1 als Ablation.
 6. **Kontrollgruppe — entschieden: nein**, die Hauptmetrik (Konferenz-Draft published vs. anderer Draft) reicht.
-7. **Gate-Schwellen — vorläufig wie vorgeschlagen** (+0,10 über `total_score`-Top-20, Boden 0,5/0,35, Überleben ≥60 %), **endgültig nach Phase 0** — die einzige noch offene Stelle, bewusst, weil erst die 30 Baseline-Tage Streuung und MDE liefern.
+7. **Gate-Schwellen — final (Betreiber 2026-10-15, nach der Phase-0-Baseline):** +0,10 über `total_score`-Top-20 mit Bootstrap bleibt, Entscheidung nach 30 statt 20 Shadow-Tagen (MDE80 n20 = 0,129 > 0,10, n30 = 0,106); Böden 0,5/0,35 pool-normiert; Precision@10 ≥ Hand (0,243); Dubletten 0; Abbruch-Check nach 20 Tagen unverändert; Überleben ≥60 % (Assist → Full) unverändert. Verworfene Alternative: 20 Tage mit +0,13.
 8. **Budget — entschieden:** Tageskappe Kuration + Draft 12 USD (angehoben von 10 wegen Entscheidung 1); Button-Läufe tagsüber erzeugen keinen zweiten Draft.
 
 ## Änderungsprotokoll v2 → v3
@@ -250,3 +250,11 @@ Code-Mapping-Befunde (korrigieren die Spec):
 - Coverage as-of heißt nicht `getCoverageEmbeddingsAsOf(from, to)` in `semantic-dedup.ts` (so Abschnitt „Zeitbasis"), sondern `loadCoverageAsOf(supabase, from, to)` in `lib/curation/archive.ts`.
 - `daily_repo` trägt `collected_at`, nicht `created_at`.
 - Die Mindestlänge der Queue-UI (Slider-Default 1000) ist nicht persistiert; `settings.curation.min_content_length` hat einen eigenen Default von 500.
+
+## Änderungsprotokoll v4.1 → v4.2 (Betreiber-Entscheidung 2026-10-15, Gate-Schwellen final)
+
+- **Entscheidung 7 geschlossen.** Phase-0-Baseline (`scripts/curation-baseline.json`, 49 Tage 25.08.–15.10., `precedents_agreement` 49/49, Pool-Abdeckung 0,93): Unit-Recall@20 `total_score` 0,240 / Nachtlauf 0,274 / Hand 0,260 / Gesamtauswahl 0,556 / Zufall 0,033; Hand-Precision 0,243; sd der Tagesdifferenz Hand − `total_score` 0,233; MDE bei 80 % Power 0,129 (n = 20) und 0,106 (n = 30).
+- **Entscheidungstage 30 statt 20:** +0,10 bleibt, ist aber mit 20 Tagen nicht verlässlich nachweisbar (Kalibrierregel Plan Task 14 Entscheidung 7). Nach 20 Tagesdifferenzen nur der Abbruch-Check (`gate.abort`), die Gate-Entscheidung ab 30 (`gate.decision_ready`). Verworfene Alternative: 20 Tage mit +0,13.
+- **Böden pool-normiert:** `RunMetrics` erhält `published_covered`, `unit_recall_covered_20`, `setzlisten_recall_covered_10` (abgedeckt = mindestens ein Member im Pool-Snapshot, wie `coverage.units_covered` der Baseline; ein Similarity-Treffer auf einen nicht abgedeckten Abschnitt zählt nicht); `gate.floor` prüft diese Felder. Begründung: der Agent sieht nur den Pool; roh lägen 0,5/0,35 fast auf der Gesamtauswahl des Betreibers (0,56/0,43).
+- **Precision-Referenz** `baselines.hand.precision_full` = 0,243 (Untergrenze, Füll-Items nicht trennbar); Dubletten-Referenz 0,016.
+- **merged-Schwelle 0,8 bestätigt** (Positivkontrolle in `build-curation-precedents`: p50 published-Item ↔ eigene Einheit 0,823, 62 % ≥ 0,8; gestrichene Items max p90 0,725, 0 % ≥ 0,8); Neubewertung nach den Shadow-Daten.

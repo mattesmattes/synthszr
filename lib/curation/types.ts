@@ -106,6 +106,9 @@ export interface RunMetrics {
   setzlisten_recall_10: number
   setzlisten_precision_10: number
   duplicate_rate_recommended: number
+  published_covered: number                          // Abschnitte mit mindestens einem Member im Pool-Snapshot
+  unit_recall_covered_20: number                     // Treffer auf abgedeckte Abschnitte / abgedeckte (Gate-Boden, Betreiber 2026-10-15)
+  setzlisten_recall_covered_10: number
   cut_rate: number                                   // Setzlisten-Einheiten mit outcome dropped_after_selection / Setzliste
   additions: number
   additions_rate: number                             // added / published

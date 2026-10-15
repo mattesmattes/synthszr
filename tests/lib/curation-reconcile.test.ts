@@ -125,12 +125,12 @@ const snapshotOf = (ids: string[]) => ({
 const metricsFor = (
   units: UnitRow[],
   published: ReturnType<typeof pub>[],
-  opts: { emb?: Map<string, number[]>; baseline?: { total_score: Record<string, string[]> } } = {},
+  opts: { emb?: Map<string, number[]>; baseline?: { total_score: Record<string, string[]> }; pool?: string[] } = {},
 ) => {
   const emb = opts.emb ?? new Map<string, number[]>()
   const r = reconcileOutcomes(units, published, emb, new Set(), 'post')
   return metricsOf({
-    units, outcomes: r.outcomes, published, added: r.added, baseline: opts.baseline ?? null, snapshot: snapshotOf([]),
+    units, outcomes: r.outcomes, published, added: r.added, baseline: opts.baseline ?? null, snapshot: snapshotOf(opts.pool ?? []),
     cluster: { storyKeyOf: {}, clusters: {}, related: [] }, itemEmbeddings: emb, attribution: 'job',
   })
 }
@@ -333,12 +333,34 @@ describe('metricsOf', () => {
     expect(m.hand_stories).toBe(2)
     expect(m.held_rate).toBe(0.5)
   })
+
+  it('pool-normierte Recalls (Gate 2026-10-15): Abschnitte ohne Member im Pool fallen aus dem Nenner', () => {
+    const units = [unit({ unit_key: 'single::a', member_ids: ['a'], tier: 'recommended' })]
+    const published = [pub('u1', ['a'], null, null, 0), pub('u2', ['x'], null, null, 1)]
+    const m = metricsFor(units, published, { pool: ['a', 'b'] })
+    expect(m.published_covered).toBe(1)
+    expect(m.unit_recall_20).toBe(0.5)
+    expect(m.unit_recall_covered_20).toBe(1)
+    expect(m.setzlisten_recall_covered_10).toBe(1)
+  })
+
+  it('pool-normiert: ein Similarity-Treffer auf einen Abschnitt ausserhalb des Pools zaehlt nicht im Zaehler', () => {
+    const units = [unit({ unit_key: 'single::y', member_ids: ['y'], tier: 'recommended' })]
+    const published = [pub('u1', [], null, [1, 0, 0], 0), pub('u2', ['q'], null, null, 1)]
+    const emb = new Map([['y', [1, 0.1, 0]]])
+    const m = metricsFor(units, published, { emb, pool: ['y', 'q'] })
+    expect(m.unit_recall_20).toBe(0.5)
+    expect(m.published_covered).toBe(1)
+    expect(m.unit_recall_covered_20).toBe(0)
+    expect(m.setzlisten_recall_covered_10).toBe(0)
+  })
 })
 
 describe('aggregateRuns', () => {
   const mk = (u: number, b: number): RunMetrics => ({
     attribution: 'job', published_units: 9, published_attributable: 9, plan: { recommended: 10, bench: 10, held: 0 },
     unit_recall_20: u, unit_recall_id_20: u, setzlisten_recall_10: 0.4, setzlisten_precision_10: 0.5, duplicate_rate_recommended: 0,
+    published_covered: 9, unit_recall_covered_20: u, setzlisten_recall_covered_10: 0.4,
     cut_rate: 0.3, additions: 1, additions_rate: 0.1, hand_stories: 2, held_rate: 0, baseline_total_score_unit_recall_20: b,
     baseline_total_score_recall_10: 0.2, diff_vs_total_score_20: u - b,
     outcomes: { kept: 0, relabeled: 0, merged: 0, dropped_after_selection: 0, dropped_never_selected: 0, added: 0 },
@@ -368,6 +390,24 @@ describe('aggregateRuns', () => {
     expect(a.n).toBe(5)
     expect(a.mean.unit_recall_20).toBeCloseTo(0.6)
     expect(a.diff_vs_total_score_20.n).toBe(5)
+  })
+
+  it('Boden (Gate 2026-10-15) prueft die pool-normierten Recalls, nicht die rohen', () => {
+    const covered = Array.from({ length: 6 }, () => ({ ...mk(0.45, 0.3), unit_recall_covered_20: 0.6, setzlisten_recall_covered_10: 0.4 }))
+    expect(aggregateRuns(covered, null).gate.floor).toBe(true)
+    const raw = Array.from({ length: 6 }, () => ({ ...mk(0.6, 0.3), unit_recall_covered_20: 0.45 }))
+    expect(aggregateRuns(raw, null).gate.floor).toBe(false)
+  })
+
+  it('decision_ready erst ab 30 Tagesdifferenzen (MDE80 bei n = 30: 0,106)', () => {
+    expect(aggregateRuns(Array.from({ length: 29 }, () => mk(0.6, 0.4)), null).gate.decision_ready).toBe(false)
+    expect(aggregateRuns(Array.from({ length: 30 }, () => mk(0.6, 0.4)), null).gate.decision_ready).toBe(true)
+  })
+
+  it('abort: null unter 20 Tagesdifferenzen, danach Mittel der Differenz unter null', () => {
+    expect(aggregateRuns(Array.from({ length: 19 }, () => mk(0.3, 0.4)), null).gate.abort).toBeNull()
+    expect(aggregateRuns(Array.from({ length: 20 }, () => mk(0.3, 0.4)), null).gate.abort).toBe(true)
+    expect(aggregateRuns(Array.from({ length: 20 }, () => mk(0.45, 0.4)), null).gate.abort).toBe(false)
   })
 })
 

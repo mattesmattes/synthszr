@@ -120,6 +120,7 @@ function metrics(over: Partial<RunMetrics> = {}): RunMetrics {
     attribution: 'job', published_units: 9, published_attributable: 9,
     plan: { recommended: 10, bench: 10, held: 0 },
     unit_recall_20: 0.7, unit_recall_id_20: 0.6, setzlisten_recall_10: 0.6, setzlisten_precision_10: 0.8,
+    published_covered: 9, unit_recall_covered_20: 0.7, setzlisten_recall_covered_10: 0.6,
     duplicate_rate_recommended: 0, cut_rate: 0.1, additions: 0, additions_rate: 0, hand_stories: 2, held_rate: 0,
     baseline_total_score_unit_recall_20: 0.5, baseline_total_score_recall_10: 0.4, diff_vs_total_score_20: 0.2,
     outcomes: { kept: 8, relabeled: 0, merged: 0, dropped_after_selection: 1, dropped_never_selected: 0, added: 0 },
@@ -243,6 +244,7 @@ describe('aggregateByArm', () => {
   const metrics = (u: number): RunMetrics => ({
     attribution: 'job', published_units: 9, published_attributable: 9, plan: { recommended: 10, bench: 10, held: 0 },
     unit_recall_20: u, unit_recall_id_20: u, setzlisten_recall_10: 0.4, setzlisten_precision_10: 0.5, duplicate_rate_recommended: 0,
+    published_covered: 9, unit_recall_covered_20: u, setzlisten_recall_covered_10: 0.4,
     cut_rate: 0.3, additions: 1, additions_rate: 0.1, hand_stories: 2, held_rate: 0, baseline_total_score_unit_recall_20: 0.4,
     baseline_total_score_recall_10: 0.2, diff_vs_total_score_20: u - 0.4,
     outcomes: { kept: 0, relabeled: 0, merged: 0, dropped_after_selection: 0, dropped_never_selected: 0, added: 0 },
