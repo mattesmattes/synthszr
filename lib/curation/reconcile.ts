@@ -38,6 +38,16 @@ import {
 const HOUR_MS = 3600 * 1000
 /** Ein Tages-Job darf bis zu 2 h vor dem Kickoff angelegt sein (Anhang A §3.10). */
 const JOB_LEAD_MS = 2 * HOUR_MS
+/**
+ * Ende des Job-Fensters: asOf + 22 h, exklusiv (Betreiber 2026-10-15). Mit
+ * +24 h überlappten sich die Fenster zweier Tage um die 2 h Vorlauf, und der
+ * jüngste Job gewann — ein Frühjob des Folgetags (seit 25.08. dreimal: 03:55,
+ * 04:21, 04:23 UTC) wurde dem Vortag zugeschlagen. Im Cron-Pfad fiel das nur
+ * nicht auf, weil der Folgepost um 04:26 UTC noch unveröffentlicht ist; im
+ * Backtest sind beide Posts da. [asOf − 2 h, asOf + 22 h) schließt lückenlos
+ * an das Fenster des nächsten Tages an.
+ */
+const JOB_WINDOW_END_MS = 22 * HOUR_MS
 /** Kandidaten-Fenster auf generated_posts.created_at (Anhang A §3.10), deckt den Tag-Fallback ab. */
 const POST_CREATED_WINDOW_MS = 36 * HOUR_MS
 const POST_COLUMNS = 'id, status, created_at, published_at'
@@ -79,14 +89,14 @@ export interface MatchPost { id: string; status: string; created_at: string; pub
 export interface MatchCandidates { jobs: MatchJob[]; posts: MatchPost[] }
 export interface MatchResult { post_id: string; job_id: string | null; attribution: 'job' | 'published_at' | 'created_at_day' }
 
-/** Jüngster manueller Job im Fenster [asOf − 2 h, asOf + 24 h], dessen Post veröffentlicht ist. */
+/** Jüngster manueller Job im Fenster [asOf − 2 h, asOf + 22 h), dessen Post veröffentlicht ist. */
 function newestManualJob(asOfMs: number, jobs: MatchJob[], publishedIds: Set<string>): { id: string; postId: string } | null {
   let best: { id: string; postId: string; at: number } | null = null
   for (const job of jobs) {
     if (job.source !== 'manual') continue
     if (!job.generated_post_id || !publishedIds.has(job.generated_post_id)) continue
     const at = Date.parse(job.created_at)
-    if (at < asOfMs - JOB_LEAD_MS || at > asOfMs + MATCH_WINDOW_MS) continue
+    if (at < asOfMs - JOB_LEAD_MS || at >= asOfMs + JOB_WINDOW_END_MS) continue
     if (!best || at > best.at) best = { id: job.id, postId: job.generated_post_id, at }
   }
   return best

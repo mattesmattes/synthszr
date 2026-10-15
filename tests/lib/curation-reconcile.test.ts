@@ -92,7 +92,7 @@ describe('pickMatchingPost', () => {
     expect(autoJob).toMatchObject({ attribution: 'published_at' })
   })
 
-  it('Job ausserhalb [asof − 2 h, asof + 24 h] oder mit unveroeffentlichtem Post zaehlt nicht', () => {
+  it('Job ausserhalb [asof − 2 h, asof + 22 h) oder mit unveroeffentlichtem Post zaehlt nicht', () => {
     const early = { id: 'early', created_at: '2026-10-15T02:24:59.000Z', generated_post_id: 'p', selected_items: [], source: 'manual' }
     const draft = { id: 'draft', created_at: '2026-10-15T05:00:00.000Z', generated_post_id: 'q', selected_items: [], source: 'manual' }
     const r = pickMatchingPost(ASOF, {
@@ -100,6 +100,17 @@ describe('pickMatchingPost', () => {
       posts: [post('p', '2026-10-15T05:00:00.000Z', null), post('q', '2026-10-15T05:00:00.000Z', null, 'draft')],
     })
     expect(r).toMatchObject({ post_id: 'p', job_id: null, attribution: 'created_at_day' })
+  })
+
+  it('Job-Fenster endet bei asof + 22 h (Betreiber 2026-10-15): der Fruehjob des Folgetags gehoert nicht zum Vortag', () => {
+    const own = { id: 'own', created_at: '2026-10-15T05:10:00.000Z', generated_post_id: 'p', selected_items: [], source: 'manual' }
+    const nextDay = { id: 'next', created_at: '2026-10-16T04:21:00.000Z', generated_post_id: 'q', selected_items: [], source: 'manual' }
+    const posts = [post('p', '2026-10-15T05:00:00.000Z', '2026-10-15T07:00:00.000Z'), post('q', '2026-10-16T04:00:00.000Z', '2026-10-16T06:00:00.000Z')]
+    expect(pickMatchingPost(ASOF, { jobs: [own, nextDay], posts })).toEqual({ post_id: 'p', job_id: 'own', attribution: 'job' })
+    const atEnd = { ...nextDay, id: 'end', created_at: '2026-10-16T02:25:00.000Z' }
+    const beforeEnd = { ...nextDay, id: 'before', created_at: '2026-10-16T02:24:59.000Z' }
+    expect(pickMatchingPost(ASOF, { jobs: [atEnd], posts })).toMatchObject({ post_id: 'p', attribution: 'published_at' })
+    expect(pickMatchingPost(ASOF, { jobs: [beforeEnd], posts })).toEqual({ post_id: 'q', job_id: 'before', attribution: 'job' })
   })
 })
 
