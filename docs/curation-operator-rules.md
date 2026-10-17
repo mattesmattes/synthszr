@@ -1,5 +1,7 @@
 # Betreiber-Regeln der Morgenkonferenz
 
+**Status: getestet am 2026-10-17 (Label `bt-rules-20261017`, 20 Tage 27.09.–16.10.) — verschlechterte den Unit-Recall@20 um 0,055 [−0,108, −0,006] gegenüber demselben Arm ohne Regeln, Precision@10 fiel unter die Hand-Referenz. Nicht in Produktion setzen; Befund im Spec-Protokoll v4.2 → v4.3.**
+
 Stand 2026-10-17, Fassung 1 für die Backtest-Iteration (Spec v4.3, Weg 2). Quelle für `settings.curation_operator_rules` (`{"text": …}`). Abgeleitet aus dem Backtest precedents-only/full: Treffer, verpasste Abschnitte und nie gewählte Setzlisten-Einheiten über 53 Tage.
 
 ## Regeln
