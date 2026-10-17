@@ -390,6 +390,9 @@ RLS ohne Policy = nur Service-Role):
   `scout_batch_size` (Default 25) / `critic_enabled` (Default `true`).
 - `settings.curation_operator_rules` (`{text: string}`, `loadOperatorRules`) —
   freier Markdown-Text für den Archivbrief; fehlende Zeile = leer, kein Fehler.
+  Wortlaut und Belege: `docs/curation-operator-rules.md` (Fassung 1, 2026-10-17,
+  acht Regeln aus dem Backtest); der Regelblock steht im Brief an erster Stelle.
+  Upsert-SQL daraus erzeugen, nicht von Hand pflegen.
 
 **Modelle über Use Cases** (`lib/ai/use-cases.ts`, im Admin einstellbar):
 `curation_scout` (Default `claude-haiku-4-5-20251001`, Kernsatz je Meldung),
@@ -475,6 +478,8 @@ Phase-0-Baseline misst `total_score` dort mit 0,24 statt 0,45 und ist nicht verg
      on conflict (key) do update set value = settings.value || '{"shadow_enabled": true}'::jsonb;
    insert into settings (key, value) values ('curation_operator_rules', '{"text": ""}'::jsonb) on conflict (key) do nothing;
    ```
+   Die Betreiber-Regeln selbst kommen per Upsert aus `docs/curation-operator-rules.md`
+   (seit 2026-10-17 gesetzt; das `do nothing` oben überschreibt sie nicht).
 5. Deploy auf `main` (Vercel-Cron `*/1` ist in `vercel.json`); am nächsten
    Morgen ab 04:26 UTC entsteht der Run. Am Folgetag ab 04:26 UTC
    rekonziliiert der Kickoff-Tick den Vortag vor dem neuen Run.
