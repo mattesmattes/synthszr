@@ -91,6 +91,19 @@ const SCOUT_PARALLEL = 4
 /** Anteil der Items ohne Scout-Card, ab dem der Lauf 'scout_partial' meldet (Vertrag 3.9: „> 10 %"). */
 const SCOUT_PARTIAL_SHARE = 0.1
 
+/**
+ * Nachpass-Batchgröße = scout_batch_size / SCOUT_RETRY_DIVISOR (25 → 5).
+ * BEFUND 2026-10-17 (Backtest precedents-only, 49 Tage): Haiku ließ je Batch
+ * verstreut Items aus — 18,8 % des Pools (p50 je Tag 19 %, p90 28 %) bekamen
+ * die Titel-Fallback-Card, 46 von 49 Läufen meldeten scout_partial. Eine
+ * Wiederholung derselben Items mit demselben Prompt holte 90–100 % nach
+ * (Batch 25) bzw. 95–100 % (Batch 5) für ≈ 0,1 USD je Tag: die Auslassungen
+ * sind Zufall des Modells, keine Eigenschaft der Items. Deshalb genau EIN
+ * zweiter Durchgang über die Fehlenden in kleineren Batches; was danach
+ * fehlt, bleibt Fallback.
+ */
+const SCOUT_RETRY_DIVISOR = 5
+
 /** maxTokens je Scout-Batch — derselbe Wert wie in scoutBatch (scout.ts). */
 const SCOUT_MAX_TOKENS = 4096
 
@@ -190,28 +203,18 @@ export async function phaseScout(deps: RunDeps, run: RunRow): Promise<Partial<Ru
   const items = need(run.pool, 'pool').items
   const coreById = await loadCachedCards(deps.supabase, items.map((i) => i.id), deps.models.scout)
   const todo = items.filter((i) => !coreById.has(i.id))
-  const batches = batchesOf(todo, deps.settings.scout_batch_size)
 
-  let spend = run.spend_usd
-  let outOfBudget = false
-  for (let i = 0; i < batches.length; i += SCOUT_PARALLEL) {
-    const group = batches.slice(i, i + SCOUT_PARALLEL)
-    // Reserviert wird je Gruppe, weil ihre Batches gleichzeitig starten —
-    // nach dem Start lässt sich keiner mehr zurückhalten.
-    const estimate = group.reduce((sum, batch) => sum + scoutEstimateUsd(deps.models.scout, batch), 0)
-    if (!reserveBudget({ ...run, spend_usd: spend }, estimate, deps)) {
-      outOfBudget = true
-      break
-    }
-    const results = await Promise.all(group.map((batch) => scoutBatch(deps.callTool, batch)))
-    for (const result of results) {
-      spend += result.costUsd
-      for (const card of result.cards) coreById.set(card.id, card.core)
-      if (result.cards.length > 0) await saveCards(deps.supabase, result.cards, deps.models.scout)
-    }
+  let { spend, outOfBudget } = await scoutPass(deps, run, todo, deps.settings.scout_batch_size, run.spend_usd, coreById)
+  // Nachpass (SCOUT_RETRY_DIVISOR): nur was der erste Durchgang versucht und
+  // nicht beantwortet hat — nach einem Budgetstopp gibt es nichts nachzuholen,
+  // die restlichen Items wurden nie gescoutet.
+  if (!outOfBudget) {
+    const retry = items.filter((i) => !coreById.has(i.id))
+    const retrySize = Math.max(1, Math.ceil(deps.settings.scout_batch_size / SCOUT_RETRY_DIVISOR))
+    ;({ spend, outOfBudget } = await scoutPass(deps, run, retry, retrySize, spend, coreById))
   }
 
-  // Fehlend ist jedes Item ohne Card — vom Modell ausgelassen, Batch nach
+  // Fehlend ist jedes Item ohne Card — vom Modell zweimal ausgelassen, Batch nach
   // CallInvalidError leer, oder nie gescoutet, weil das Budget fehlte. Die
   // Cards stehen in Pool-Reihenfolge, damit der Seed-Shuffle in compose
   // (buildComposeMessages) nicht davon abhängt, welche Cards aus dem Cache kamen.
@@ -225,6 +228,37 @@ export async function phaseScout(deps: RunDeps, run: RunRow): Promise<Partial<Ru
   if (outOfBudget) degraded = withDegradation(degraded, 'budget')
   if (missing.length > items.length * SCOUT_PARTIAL_SHARE) degraded = withDegradation(degraded, 'scout_partial')
   return { cards, spend_usd: spend, degraded, phase: 'cluster' }
+}
+
+/**
+ * Ein Scout-Durchgang über `todo` in Batches à `batchSize`, höchstens
+ * SCOUT_PARALLEL gleichzeitig; Cards landen in `coreById` und im Cache.
+ * Bricht beim ersten Batch ab, für den das Budget nicht reicht
+ * (outOfBudget), der Rest bleibt ohne Card.
+ */
+async function scoutPass(
+  deps: RunDeps,
+  run: RunRow,
+  todo: PoolSnapshotItem[],
+  batchSize: number,
+  spend: number,
+  coreById: Map<string, string>,
+): Promise<{ spend: number; outOfBudget: boolean }> {
+  const batches = batchesOf(todo, batchSize)
+  for (let i = 0; i < batches.length; i += SCOUT_PARALLEL) {
+    const group = batches.slice(i, i + SCOUT_PARALLEL)
+    // Reserviert wird je Gruppe, weil ihre Batches gleichzeitig starten —
+    // nach dem Start lässt sich keiner mehr zurückhalten.
+    const estimate = group.reduce((sum, batch) => sum + scoutEstimateUsd(deps.models.scout, batch), 0)
+    if (!reserveBudget({ ...run, spend_usd: spend }, estimate, deps)) return { spend, outOfBudget: true }
+    const results = await Promise.all(group.map((batch) => scoutBatch(deps.callTool, batch)))
+    for (const result of results) {
+      spend += result.costUsd
+      for (const card of result.cards) coreById.set(card.id, card.core)
+      if (result.cards.length > 0) await saveCards(deps.supabase, result.cards, deps.models.scout)
+    }
+  }
+  return { spend, outOfBudget: false }
 }
 
 export async function phaseCluster(deps: RunDeps, run: RunRow): Promise<Partial<RunRow>> {

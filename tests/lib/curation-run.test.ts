@@ -105,9 +105,10 @@ describe('advanceRun', () => {
     const d = deps({ now: () => t, budgetMs: 600_000 })
     m.loadPoolAsOf.mockResolvedValue(snap(POOL_MIN_ITEMS))
     m.loadCachedCards.mockResolvedValue(new Map())
-    m.scoutBatch.mockImplementation(async () => {
+    m.scoutBatch.mockImplementation(async (_call: unknown, batch: Array<{ id: string }>) => {
       t += 200_000
-      return { cards: [], missing: [], costUsd: 0.1 }
+      // Cards fuer alle Items, sonst liefe der Nachpass (2026-10-17) und verschoebe die Uhr noch einmal.
+      return { cards: batch.map((i) => ({ id: i.id, core: 'k' })), missing: [], costUsd: 0.1 }
     })
     m.loadPoolEmbeddings.mockResolvedValue({ embeddings: new Map(), generated: 0, failed: 0 })
     m.clusterPool.mockReturnValue(emptyCluster())
@@ -198,15 +199,65 @@ describe('phaseScout', () => {
     const d = deps({ settings: { ...DEFAULT_CURATION_SETTINGS, scout_batch_size: 2 } })
     const patch = await phaseScout(d, run({ phase: 'scout', pool: snap(5), spend_usd: 1 }))
     expect(m.loadCachedCards).toHaveBeenCalledWith(d.supabase, ['i0', 'i1', 'i2', 'i3', 'i4'], 'h')
-    expect(m.scoutBatch.mock.calls.map((c) => c[1].map((i: { id: string }) => i.id))).toEqual([['i1', 'i2'], ['i3', 'i4']])
+    // Nachpass (2026-10-17): i3/i4 blieben ohne Card → einmal einzeln nachgescoutet (ceil(2 / 5) = 1), hier wieder ohne Erfolg
+    expect(m.scoutBatch.mock.calls.map((c) => c[1].map((i: { id: string }) => i.id))).toEqual([['i1', 'i2'], ['i3', 'i4'], ['i3'], ['i4']])
     expect(m.saveCards).toHaveBeenCalledTimes(1)
     expect(m.saveCards).toHaveBeenCalledWith(d.supabase, [{ id: 'i1', core: 'k1' }, { id: 'i2', core: 'k2' }], 'h')
     expect(patch.cards).toEqual([
       { id: 'i0', core: 'gecacht' }, { id: 'i1', core: 'k1' }, { id: 'i2', core: 'k2' }, { id: 'i3', core: 'T3' }, { id: 'i4', core: 'T4' },
     ])
-    expect(patch.spend_usd).toBeCloseTo(1.03)
+    expect(patch.spend_usd).toBeCloseTo(1.07)
     expect(patch.degraded).toEqual(['scout_partial'])
     expect(patch.phase).toBe('cluster')
+  })
+
+  it('Nachpass (2026-10-17): vom Modell ausgelassene Items werden einmal in kleineren Batches nachgescoutet', async () => {
+    m.loadCachedCards.mockResolvedValue(new Map())
+    m.scoutBatch.mockImplementation(async (_call: unknown, batch: Array<{ id: string }>) => {
+      if (batch.length === 5) {
+        const miss = batch.filter((i) => i.id === 'i2' || i.id === 'i7')
+        return { cards: batch.filter((i) => !miss.includes(i)).map((i) => ({ id: i.id, core: 'k' })), missing: miss.map((i) => i.id), costUsd: 0.1 }
+      }
+      return { cards: [{ id: batch[0].id, core: 'nach' }], missing: [], costUsd: 0.01 }
+    })
+    const d = deps({ settings: { ...DEFAULT_CURATION_SETTINGS, scout_batch_size: 5 } })
+    const patch = await phaseScout(d, run({ phase: 'scout', pool: snap(10) }))
+    expect(m.scoutBatch.mock.calls.map((c) => c[1].map((i: { id: string }) => i.id))).toEqual([
+      ['i0', 'i1', 'i2', 'i3', 'i4'], ['i5', 'i6', 'i7', 'i8', 'i9'], ['i2'], ['i7'],
+    ])
+    expect(patch.cards!.find((c) => c.id === 'i2')).toEqual({ id: 'i2', core: 'nach' })
+    expect(patch.cards!.find((c) => c.id === 'i7')).toEqual({ id: 'i7', core: 'nach' })
+    expect(m.saveCards).toHaveBeenCalledTimes(4)
+    expect(m.saveCards).toHaveBeenLastCalledWith(d.supabase, [{ id: 'i7', core: 'nach' }], 'h')
+    expect(patch.spend_usd).toBeCloseTo(0.22)
+    expect(patch.degraded).toEqual([])
+  })
+
+  it('Nachpass: danach noch fehlende Items bekommen die Fallback-Card; ueber 10 % → scout_partial', async () => {
+    m.loadCachedCards.mockResolvedValue(new Map())
+    m.scoutBatch.mockImplementation(async (_call: unknown, batch: Array<{ id: string }>) => {
+      if (batch.length === 5) {
+        const miss = batch.filter((i) => ['i0', 'i1', 'i2'].includes(i.id))
+        return { cards: batch.filter((i) => !miss.includes(i)).map((i) => ({ id: i.id, core: 'k' })), missing: miss.map((i) => i.id), costUsd: 0.1 }
+      }
+      return batch[0].id === 'i0'
+        ? { cards: [{ id: 'i0', core: 'nach' }], missing: [], costUsd: 0.01 }
+        : { cards: [], missing: [batch[0].id], costUsd: 0.01 }
+    })
+    const patch = await phaseScout(deps({ settings: { ...DEFAULT_CURATION_SETTINGS, scout_batch_size: 5 } }), run({ phase: 'scout', pool: snap(10) }))
+    expect(m.scoutBatch).toHaveBeenCalledTimes(5)
+    expect(patch.cards!.slice(0, 3)).toEqual([{ id: 'i0', core: 'nach' }, { id: 'i1', core: 'T1' }, { id: 'i2', core: 'T2' }])
+    expect(patch.spend_usd).toBeCloseTo(0.23)
+    expect(patch.degraded).toEqual(['scout_partial'])
+  })
+
+  it('Nachpass respektiert das Run-Budget: reicht es nach dem ersten Durchgang nicht mehr → kein zweiter Call, budget + scout_partial', async () => {
+    m.loadCachedCards.mockResolvedValue(new Map())
+    m.scoutBatch.mockResolvedValue({ cards: [], missing: ['i0'], costUsd: 0.05 })
+    const patch = await phaseScout(deps({ settings: { ...DEFAULT_CURATION_SETTINGS, scout_batch_size: 1 } }), run({ phase: 'scout', pool: snap(1), spend_usd: 3.85 }))
+    expect(m.scoutBatch).toHaveBeenCalledTimes(1)
+    expect(patch.degraded).toEqual(['budget', 'scout_partial'])
+    expect(patch.spend_usd).toBeCloseTo(3.9)
   })
 
   it('genau 10 % ohne Card → kein scout_partial', async () => {
@@ -221,12 +272,12 @@ describe('phaseScout', () => {
     let active = 0
     let peak = 0
     m.loadCachedCards.mockResolvedValue(new Map())
-    m.scoutBatch.mockImplementation(async () => {
+    m.scoutBatch.mockImplementation(async (_call: unknown, batch: Array<{ id: string }>) => {
       active++
       peak = Math.max(peak, active)
       await new Promise((resolve) => setTimeout(resolve, 0))
       active--
-      return { cards: [], missing: [], costUsd: 0 }
+      return { cards: batch.map((i) => ({ id: i.id, core: 'k' })), missing: [], costUsd: 0 }
     })
     await phaseScout(deps({ settings: { ...DEFAULT_CURATION_SETTINGS, scout_batch_size: 1 } }), run({ phase: 'scout', pool: snap(6) }))
     expect(m.scoutBatch).toHaveBeenCalledTimes(6)

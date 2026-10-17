@@ -363,7 +363,11 @@ RLS ohne Policy = nur Service-Role):
 `app/api/cron/curation-jobs/route.ts`):
 - Minuten-Cron (`vercel.json`, `*/1 * * * *`), `maxDuration = 800`.
 - Phasenfolge `pool → scout → cluster → archive → compose → units → finished`
-  (`advanceRun`), jede Phase persistiert ihr Ergebnis sofort.
+  (`advanceRun`), jede Phase persistiert ihr Ergebnis sofort. `scout` macht
+  nach dem ersten Durchgang genau einen Nachpass über alle Items ohne Card in
+  Batches à `scout_batch_size`/5 (Befund 2026-10-17: Haiku ließ 19 % der
+  Items aus, eine Wiederholung holt 90–100 % nach); was dann noch fehlt,
+  bekommt die Titel-Card, über 10 % → `scout_partial`.
 - Lease `LEASE_STALE_MS` = 15 min gegen überlappende Ticks; `claimRun` ist
   ein Compare-and-Set (nur ohne oder mit abgelaufenem Lease), verliert ein
   Tick den Claim, endet er ohne Arbeit. `runDayInline` (Scripts) claimt

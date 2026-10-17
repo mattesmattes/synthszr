@@ -95,7 +95,7 @@ Phase `techmeme` **NEU** ruft `runTechmemeJob(supabase, { budgetMs: 200_000 })` 
 |---|---|---|
 | Kickoff | Analyse bis `kickoff_deadline_utc` nicht fertig | Start `degraded`, `missing:['analysis']`, Panel-Hinweis „Kandidaten vom Vortag + Techmeme" — Ausnahmefall; ≥3 Treffer in 7 Tagen → `system_alert` „Zeitkette passt nicht" (s. Zeitachse) |
 | Techmeme | wirft / Budget erschöpft | Run läuft weiter mit den Stories des letzten `10 */4`-Laufs, `degraded`, Log-Zeile |
-| Scout | Batch ungültig | Batch einmal wiederholen, danach Items „ohne Card" |
+| Scout | Batch ungültig oder Items vom Modell ausgelassen | Batch einmal wiederholen; danach genau ein Nachpass über alle Items ohne Card in Batches à `scout_batch_size`/5 (seit 2026-10-17); was dann noch fehlt, bekommt die Titel-Card |
 | Scout | endgültig gescheitert / Pool < 40 | kein Commit, Panel „Konferenz ausgefallen" |
 | Archivar | RPC fehlt/wirft | Compose ohne Archivbrief, `degraded`, Log-Zeile |
 | Compose | kein `tool_use` nach `createToolCall`-Retry | zählt als Versuch; 2 Versuche → Baseline-Plan, `degraded` |
@@ -269,4 +269,5 @@ Code-Mapping-Befunde (korrigieren die Spec):
 - **Böden nachkalibriert:** `GATE_FLOOR_UNIT_RECALL_COVERED_20` 0,60 (statt 0,5), `GATE_FLOOR_SETZLISTE_RECALL_COVERED_10` 0,45 (statt 0,35), jeweils Mitte zwischen `total_score` (0,53/0,45) und Gesamtauswahl (0,69/0,48) im Backtest. Begründung: mit 0,5/0,35 bestand `total_score` den Boden selbst.
 - **Streuung in der Gate-Währung:** sd der Tagesdifferenz Agent − `total_score` 0,169 (Backtest, n = 49), MDE80 0,094 (n = 20) / 0,077 (n = 30); 30 Entscheidungstage bleiben.
 - **Nicht geändert:** Treffer-Regel (Nachrechnung in sieben Varianten, Differenz Agent − `total_score` stets < 0,01 außer bei reiner ID-Gleichheit), +0,10, Precision- und Dubletten-Kriterium, Abbruch-Check.
+- **Scout-Nachpass** (`phaseScout`, `SCOUT_RETRY_DIVISOR`): im Backtest bekamen 18,8 % aller Pool-Items (6.897 von 36.749) die Titel-Fallback-Card, 46 von 49 Läufen meldeten `scout_partial`; die Lücken sind verstreute Auslassungen des Modells (Laufweite p50 1, p90 3 Items), keine Batch-Ausfälle, Schwerpunkte Manning 37 %, Edgars 48 %, CRAFTD 48 %, Business Insider 23 %, The Information 22 %. Experiment 25./26.08.: Wiederholung derselben Items mit demselben Prompt holt 90–100 % (Batch 25) bzw. 95–100 % (Batch 5) nach, ≈ 0,1 USD je Tag. Daher genau ein zweiter Durchgang über die Fehlenden in Batches à `scout_batch_size`/5, innerhalb des Run-Budgets; Prompt (Anhang A §4.1) unverändert.
 
