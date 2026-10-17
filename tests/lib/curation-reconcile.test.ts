@@ -371,7 +371,7 @@ describe('aggregateRuns', () => {
   const mk = (u: number, b: number): RunMetrics => ({
     attribution: 'job', published_units: 9, published_attributable: 9, plan: { recommended: 10, bench: 10, held: 0 },
     unit_recall_20: u, unit_recall_id_20: u, setzlisten_recall_10: 0.4, setzlisten_precision_10: 0.5, duplicate_rate_recommended: 0,
-    published_covered: 9, unit_recall_covered_20: u, setzlisten_recall_covered_10: 0.4,
+    published_covered: 9, unit_recall_covered_20: u, setzlisten_recall_covered_10: 0.5,
     cut_rate: 0.3, additions: 1, additions_rate: 0.1, hand_stories: 2, held_rate: 0, baseline_total_score_unit_recall_20: b,
     baseline_total_score_recall_10: 0.2, diff_vs_total_score_20: u - b,
     outcomes: { kept: 0, relabeled: 0, merged: 0, dropped_after_selection: 0, dropped_never_selected: 0, added: 0 },
@@ -404,10 +404,19 @@ describe('aggregateRuns', () => {
   })
 
   it('Boden (Gate 2026-10-15) prueft die pool-normierten Recalls, nicht die rohen', () => {
-    const covered = Array.from({ length: 6 }, () => ({ ...mk(0.45, 0.3), unit_recall_covered_20: 0.6, setzlisten_recall_covered_10: 0.4 }))
+    const covered = Array.from({ length: 6 }, () => ({ ...mk(0.45, 0.3), unit_recall_covered_20: 0.6, setzlisten_recall_covered_10: 0.45 }))
     expect(aggregateRuns(covered, null).gate.floor).toBe(true)
     const raw = Array.from({ length: 6 }, () => ({ ...mk(0.6, 0.3), unit_recall_covered_20: 0.45 }))
     expect(aggregateRuns(raw, null).gate.floor).toBe(false)
+  })
+
+  it('Boden nach Backtest-Kalibrierung (2026-10-17): 0,60 / 0,45 — Backtest-Agent 0,55 / 0,46 liegt darunter', () => {
+    const agent = Array.from({ length: 6 }, () => ({ ...mk(0.455, 0.453), unit_recall_covered_20: 0.552, setzlisten_recall_covered_10: 0.463 }))
+    expect(aggregateRuns(agent, null).gate.floor).toBe(false)
+    const exact = Array.from({ length: 6 }, () => ({ ...mk(0.6, 0.3), unit_recall_covered_20: 0.6, setzlisten_recall_covered_10: 0.45 }))
+    expect(aggregateRuns(exact, null).gate.floor).toBe(true)
+    const setzliste = Array.from({ length: 6 }, () => ({ ...mk(0.6, 0.3), unit_recall_covered_20: 0.62, setzlisten_recall_covered_10: 0.44 }))
+    expect(aggregateRuns(setzliste, null).gate.floor).toBe(false)
   })
 
   it('decision_ready erst ab 30 Tagesdifferenzen (MDE80 bei n = 30: 0,106)', () => {

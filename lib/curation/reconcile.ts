@@ -60,18 +60,25 @@ const BASELINE_KS = [10, 20] as const
 
 /**
  * Gate (Spec „Entscheidungsregel", Schwellen final nach Phase 0, Betreiber
- * 2026-10-15). Die Böden gelten für die pool-normierten Recalls
- * (unit_recall_covered_20, setzlisten_recall_covered_10): der Agent sieht nur
- * den Pool; roh lägen 0,5/0,35 fast auf der Gesamtauswahl des Betreibers
- * (Baseline 0,56/0,43), pool-normiert bei 0,70/0,54 gegen 0,31/0,22 für
- * total_score. Entscheidung erst ab 30 Tagesdifferenzen: die Baseline-Streuung
+ * 2026-10-15; Böden nachkalibriert 2026-10-17). Die Böden gelten für die
+ * pool-normierten Recalls (unit_recall_covered_20, setzlisten_recall_covered_10):
+ * der Agent sieht nur den Pool. WARUM 0,60/0,45 statt der Phase-0-Werte
+ * 0,5/0,35: die Phase-0-Baseline misst in einer anderen Währung (as-of
+ * Job-Zeit, Embeddings nur aus daily_repo, keine Abschnitts-Similarity) und
+ * sah total_score bei 0,31/0,22; in DIESER Währung (publishedHitsOf, Pool des
+ * Kickoffs) lag total_score im Backtest precedents-only (49 Tage) bei 0,53/0,45
+ * und bestand die alten Böden selbst. Die neuen Böden liegen wie zuvor in der
+ * Mitte zwischen total_score (0,53/0,45) und der Gesamtauswahl des Betreibers
+ * (0,69/0,48). Entscheidung erst ab 30 Tagesdifferenzen: die Baseline-Streuung
  * (sd 0,233) ergibt einen MDE bei 80 % Power von 0,129 für n = 20 und 0,106
- * für n = 30 — +0,10 ist mit 20 Tagen nicht verlässlich nachweisbar. Der
- * Abbruch-Check der Spec („nach 20 Tagen unter total_score") bleibt bei 20.
+ * für n = 30 — +0,10 ist mit 20 Tagen nicht verlässlich nachweisbar (in der
+ * Gate-Währung streut die Differenz Agent − total_score mit sd 0,169, MDE80
+ * 0,077 bei n = 30). Der Abbruch-Check der Spec („nach 20 Tagen unter
+ * total_score") bleibt bei 20.
  */
 const GATE_RECALL_GAIN = 0.10
-const GATE_FLOOR_UNIT_RECALL_COVERED_20 = 0.5
-const GATE_FLOOR_SETZLISTE_RECALL_COVERED_10 = 0.35
+const GATE_FLOOR_UNIT_RECALL_COVERED_20 = 0.60
+const GATE_FLOOR_SETZLISTE_RECALL_COVERED_10 = 0.45
 /** Anhang A §3.10: recall_gain null bei n < 5 — unter 5 Tagesdifferenzen trägt das Bootstrap-Intervall keine Aussage. */
 const GATE_MIN_DAYS = 5
 const GATE_ABORT_DAYS = 20

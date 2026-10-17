@@ -313,15 +313,22 @@ live ist (die alte `BUNDLE_MARKER_RE` erkennt den Typ nur am Zeilenende).
   `timeline.analysis_end_days_without_scheduled_run`. Nur volle Berlin-Tage
   der letzten 30 (angeschnittener erster und laufender Tag fallen weg).
 
-**Gate-Referenz (Spec „Entscheidungsregel“, Schwellen final — Betreiber 2026-10-15 nach der Phase-0-Baseline):**
-Shadow → Assist, wenn Unit-Recall@20 ≥ `baselines.total_score_top20.unit_recall["20"]`
-+ 0,10 (Baseline 0,240 → 0,34; gepaarter Bootstrap, 90 % > 0), Böden **pool-normiert**
-`unit_recall_covered_20` ≥ 0,5 und `setzlisten_recall_covered_10` ≥ 0,35 (Baseline covered:
-Gesamtauswahl 0,70/0,54, total_score 0,31/0,22), Precision@10 ≥ `baselines.hand.precision_full`
+**Gate-Referenz (Spec „Entscheidungsregel“, Schwellen final — Betreiber 2026-10-15; Böden nachkalibriert 2026-10-17):**
+Shadow → Assist, wenn Unit-Recall@20 ≥ `total_score`-Top-20 desselben Runs + 0,10 (gepaarter
+Bootstrap, 90 % > 0), Böden **pool-normiert** `unit_recall_covered_20` ≥ 0,60 und
+`setzlisten_recall_covered_10` ≥ 0,45, Precision@10 ≥ `baselines.hand.precision_full`
 (0,243, n = 49; Untergrenze, siehe Lesehinweis Hand-Leaks), Dubletten-Rate 0
 (Referenz `baselines.hand.duplicate_rate_mean` = 0,016, nur gemessener Job je Tag).
+**Währung:** alle Recall-Zahlen des Gates entstehen in der Rekonziliation (`publishedHitsOf`:
+Member-ID, Story-Cluster oder Similarity ≥ 0,8 zum Abschnitts-Embedding; Pool des Kickoffs).
+Die Phase-0-Baseline (`baselines.total_score_top20.unit_recall["20"]` = 0,240, covered 0,31/0,22,
+Gesamtauswahl 0,70/0,54) misst anders (as-of Job-Zeit, Embeddings nur aus `daily_repo`, ohne
+Abschnitts-Similarity) und ist mit den Gate-Zahlen nicht vergleichbar. Referenzen in der
+Gate-Währung aus dem Backtest precedents-only (49 Tage, `scripts/curation-backtest.json`):
+`total_score` 0,45 roh, covered 0,53/0,45; Gesamtauswahl covered 0,69/0,48; Agent 0,55/0,46.
 `stats.diff_hand_minus_total_score_unit_recall_20`: sd 0,233, `mde80_n20` = 0,129, `mde80_n30` = 0,106
-(z = 1,645 + 0,8416, 80 % Power). **Deshalb Gate-Entscheidung erst ab 30 Tagesdifferenzen**
+(z = 1,645 + 0,8416, 80 % Power); in der Gate-Währung sd 0,169, MDE80 0,094 / 0,077.
+**Deshalb Gate-Entscheidung erst ab 30 Tagesdifferenzen**
 (`gate.decision_ready`), der Abbruch-Check ab 20 (`gate.abort`); Alternative „20 Tage mit +0,13“ verworfen.
 
 **Negativ-Block** „Gewählt, aber gestrichen" (`lib/curation/negatives.ts`,
@@ -443,11 +450,13 @@ nicht als Lauf des Tages):
 **Testregel:** Tests laufen mit `SUPABASE_SERVICE_ROLE_KEY=` (leer
 vorangestellt), damit kein Test auf Prod schreibt.
 
-**Gate-Regel (final 2026-10-15):** Shadow → Assist nach ≥ 30 Shadow-Tagen (`gate.decision_ready`),
+**Gate-Regel (final 2026-10-15, Böden nachkalibriert 2026-10-17):** Shadow → Assist nach ≥ 30 Shadow-Tagen (`gate.decision_ready`),
 wenn Unit-Recall@20 ≥ `total_score`-Baseline + 0,10 (gepaarter Bootstrap, 90 % > 0),
-Böden pool-normiert 0,5 (`unit_recall_covered_20`) / 0,35 (`setzlisten_recall_covered_10`),
+Böden pool-normiert 0,60 (`unit_recall_covered_20`) / 0,45 (`setzlisten_recall_covered_10`),
 Precision@10 ≥ Hand (0,243), Dubletten-Rate 0. Abbruch (`gate.abort`, kein Rollout), wenn
-Unit-Recall@20 nach 20 Tagen weiterhin unter der `total_score`-Baseline liegt.
+Unit-Recall@20 nach 20 Tagen weiterhin unter der `total_score`-Baseline liegt. Alle Gate-Zahlen
+gelten in der Währung der Rekonziliation (`publishedHitsOf`, Pool-Snapshot des Kickoffs) — die
+Phase-0-Baseline misst `total_score` dort mit 0,24 statt 0,45 und ist nicht vergleichbar.
 
 **Runbook „Shadow scharf schalten":**
 1. Migration 20261014090000 eingespielt (Task 1 Step 8) und Phase-0-Migration
