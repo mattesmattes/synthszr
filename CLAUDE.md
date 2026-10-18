@@ -337,6 +337,16 @@ Rolle, mit Kontrast-Heading (0,65–0,8); Tokenzahl steht in
 `curation-baseline.json → negative_block.approx_tokens`.
 
 ### Curation Phase 1 — Shadow (2026-10-14)
+**Status: GESTOPPT (Betreiber 2026-10-18).** Drei Offline-Backtests (precedents-only,
+full mit Lernkreis, Betreiber-Regeln; 53/53/20 Tage, ≈ 220 USD) brachten keinen
+Vorsprung vor `total_score`-Top-20 (+0,01 / +0,02 / Regeln −0,055 gegen denselben
+Arm); Shadow wurde nie eingeschaltet. Abschlussbefund in der Spec
+`docs/superpowers/specs/2026-10-05-news-curation-team-design.md`. Der Code bleibt
+(Engine, Tabellen, Scripts, Admin-Seite), der Minuten-Cron `/api/cron/curation-jobs`
+ist aus `vercel.json` entfernt; `settings.curation` existiert nicht, die Route täte
+ohne `shadow_enabled` ohnehin nichts. Das Runbook unten gilt nur, falls das Thema
+wieder aufgegriffen wird — dann Cron wieder eintragen.
+
 Das Agenten-Team „Morgenkonferenz" (Scout, Cluster, Archivar, Chefredaktion,
 Kritiker) läuft täglich im Schatten auf Vercel und schreibt eine Setzliste
 plus Bank als `curation_runs`/`curation_units`. Kein Write auf `news_queue`,

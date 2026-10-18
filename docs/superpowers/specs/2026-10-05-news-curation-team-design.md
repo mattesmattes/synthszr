@@ -1,9 +1,29 @@
 # Morgenkonferenz: Agenten-Team für die News-Queue — Design-Spec
 
 Datum: 2026-10-05
-Status: **v4.3, Design vom Betreiber freigegeben, Gate-Böden nach dem Backtest nachkalibriert (2026-10-17)** (Entscheidungen 0–8 am Ende des Dokuments). v4.2 Gate-Schwellen final (2026-10-15), v4.1 nach Betreiber-Entscheidungen 2026-10-14 (Phase 1). Entstehung: Design-Workflow mit drei Entwürfen und Jury (Morgenkonferenz 6,6 / Redaktionsturnier 6,4 / Lernender Kurator 6,3), zwei Gutachterrunden (50 Befunde, 34 Lücken), v3.1 nach zwei Restbefunden, v4 nach Betreiber-Entscheidung — Änderungsprotokolle am Ende.
+Status: **GESTOPPT (Betreiber 2026-10-18) — nach drei Offline-Backtests ohne Vorsprung vor `total_score`, siehe Abschlussbefund.** Zuvor v4.3, Design vom Betreiber freigegeben, Gate-Böden nach dem Backtest nachkalibriert (2026-10-17) (Entscheidungen 0–8 am Ende des Dokuments). v4.2 Gate-Schwellen final (2026-10-15), v4.1 nach Betreiber-Entscheidungen 2026-10-14 (Phase 1). Entstehung: Design-Workflow mit drei Entwürfen und Jury (Morgenkonferenz 6,6 / Redaktionsturnier 6,4 / Lernender Kurator 6,3), zwei Gutachterrunden (50 Befunde, 34 Lücken), v3.1 nach zwei Restbefunden, v4 nach Betreiber-Entscheidung — Änderungsprotokolle am Ende.
 Baut auf: News-Taste-Modell (Spec 2026-09-29), assistiertes Ranking (Spec 2026-06-01)
 Code-Referenz: `/Users/mattes/dev/synthszr`. Tabellen, Spalten, Dateien und RPCs ohne Bestand sind mit **NEU** markiert.
+
+## Abschlussbefund (2026-10-18): Projekt gestoppt
+
+**Entscheidung.** Der Betreiber hat das Konzept am 2026-10-18 gestoppt („stopp bestätigt“), nach der Logik dieser Spec: Kein getesteter Aufbau der Morgenkonferenz erreicht Kriterium (1) der Entscheidungsregel, und die Iteration mit Betreiber-Regeln hat den Agenten verschlechtert. Phase 1 (Shadow) wurde nicht gestartet, Phase 2 und 3 entfallen.
+
+**Gemessen wurde** offline über 53 Tage (25.08.–16.10.2026, Pool-Snapshot 04:25 UTC, Unit-Recall@20 in der Gate-Währung der Rekonziliation, gepaart gegen `total_score`-Top-20 desselben Runs):
+
+| Arm | Tage | Agent | `total_score` | Differenz [Bootstrap90] | Kosten |
+|---|---|---|---|---|---|
+| `precedents-only` (`bt-precedents-only-20261015`) | 53 | 0,471 | 0,459 | +0,012 [−0,026, +0,051] | 106 USD |
+| `full --sequential` mit Lernkreis (`bt-full-20261017`) | 53 | 0,477 | 0,455 | +0,022 [−0,010, +0,057] | 85 USD |
+| `precedents-only` + Betreiber-Regeln (`bt-rules-20261017`), 27.09.–16.10. | 20 | 0,436 | 0,429 | +0,007; gegen Arm 1 auf denselben Tagen **−0,055 [−0,108, −0,006]** | 29 USD |
+
+Gefordert waren +0,10 mit 90-%-Intervall über null. Der volle Brief war dem Präzedenz-Brief gepaart um +0,006 überlegen (32 von 53 Tagen identisch), der Lernkreis zeigte über die Zeit keinen Trend. Precision@10 lag mit 0,30 über der Hand-Referenz 0,243, Dubletten bei 0,002, Zugaben-Quote bei 0,58. Nur bei reiner ID-Gleichheit lag der Agent vorn (+0,07): Er trifft häufiger die exakte Quelle des Betreibers, nicht häufiger die Story.
+
+**Warum es nicht gereicht hat.** (1) Der Agent gewichtet Agentur-, Finanz- und Rechtsmeldungen (Reuters, CNBC, WSJ: Bewertungen, Klagen, Quartale), der Betreiber Entwickler-, Produkt- und Sicherheitsmeldungen aus KI-Newslettern und Stimmen mit These; weder 40 Präzedenz-Einheiten noch 60 eigene Korrektur-Paare noch acht explizite Regeln haben diesen Geschmack übertragen — die Regeln verschoben die Setzliste zu Newsletter- und Meinungsquellen und kosteten die Treffer aus The Verge, VentureBeat und CNBC. (2) 127 von 278 verpassten Abschnitten hatten kein Item im 04:25-Pool; die Pool-Abdeckung lag im Mittel bei 0,66. Ein Agent zum Kickoff sieht einen großen Teil dessen nicht, was der Betreiber später am Morgen veröffentlicht. (3) `total_score` ist in der Gate-Währung mit 0,45 eine stärkere Baseline als die Phase-0-Zahl 0,24 nahelegte; der Spielraum nach oben war kleiner als geplant.
+
+**Was bleibt.** Phase 0 (Migration 20261006090000, `published_units`, `curation_precedents`, Baseline-Script) ist deployt und harmlos. Phase 1 (Engine, Tabellen `curation_runs`/`curation_units`/Caches, Migration 20261014090000, Admin-Seite, Scripts, 2430 Tests) liegt auf `main` lokal, **nicht gepusht**; die Prod-Tabellen enthalten die 146 Backtest-Runs. `settings.curation` existiert nicht (Shadow aus), `settings.curation_operator_rules` ist zu leeren (`scripts/_curation_operator_rules_clear.sql`). Vor einem späteren Push von `main` ist der Minuten-Cron `/api/cron/curation-jobs` in `vercel.json` zu entfernen, sonst läuft er leer. Die Betreiber-Aufgabe „Berlin-Kette im Winter vorziehen“ (OE 4) entfällt mit dem Stopp. Reports: `scripts/curation-backtest.json`, `-full.json`, `-rules.json`, Tageslisten `scripts/_bt_full_quali.txt`, `_bt_rules_quali.txt` (untracked).
+
+**Falls das Thema wieder aufgegriffen wird:** Der Hebel liegt nicht im Brief, sondern im Geschmacksmodell und im Zeitpunkt. Ansätze, die sich aus den Daten anbieten: ein Lauf nach der Handauswahl statt vor ihr (Assist auf der fertigen Auswahl, wo Precision@10 0,30 schon heute über der Hand liegt), ein gelerntes Ranking auf `curation_precedents` statt Prompt-Regeln, und eine Messung der Setzliste gegen die exakte Quelle, weil der Draft genau diese braucht.
 
 ---
 
