@@ -563,6 +563,32 @@ This ensures Synthszr Vote badges appear when the post is viewed, even for compa
 - `{Company}` tags are stripped from visible text via `hideExplicitCompanyTags()`
 - Tags still detected for rating lookup before removal
 
+### Zeitplan-Zeitzone (2026-10-18)
+Die Kette Newsletter-Abruf → WebCrawl → Analyse/Synthese → Draft läuft über
+`app/api/cron/scheduled-tasks/route.ts` (Vercel-Cron alle 15 min, UTC) und
+vergleicht die Uhrzeiten aus `settings.schedule_config` mit der Uhr in
+`schedule_config.timezone` (IANA, Default `Europe/Berlin`; Helfer
+`lib/scheduler/clock.ts`: `localClock`, `localDay`, `dayKeys`,
+`isValidTimeZone`). Admin: `/admin/settings` → Zeitplan → „Zeitzone des
+Zeitplans“ (volle IANA-Liste des Browsers, nach Region gruppiert); die
+Schedule-API weist ungültige Namen mit 400 ab, der Scheduler fällt bei einem
+ungültigen Wert auf Berlin zurück.
+- Tagesmarke (`hasRunToday`, `last_run_*`) und `daily_digests.digest_date`
+  folgen dem lokalen Datum der Zone; das Analyse-Fenster bleibt bei zwei
+  UTC-Tagen (`newsletter_date`), damit nach einem Zonenwechsel weder ein
+  Digest kollidiert noch Mails der Stunden vor UTC-Mitternacht herausfallen.
+  „Synthese lief schon“ prüft seit `created_at` des Digests, nicht seit
+  UTC-Mitternacht.
+- Reise-Muster (Betreiber, China ab 25.10.2026): nach dem Berliner Morgenlauf
+  auf `Asia/Shanghai` stellen, Zeiten z. B. 04:30/04:35/04:45/05:00 — kein
+  Doppellauf am Wechseltag, erster Lauf in der folgenden Nacht (20:30 UTC),
+  Queue gegen 05:00 Ortszeit voll. Rückweg: nach dem Berliner Morgen
+  zurückstellen; an diesem einen Tag zeigt die Queue die Analyse aus der
+  China-Nacht, Abruf und Crawl laufen trotzdem. US-Nachmittags-Newsletter
+  liegen zur Laufzeit 20:30 UTC noch nicht vor und kommen einen Tag später.
+- Techmeme-Cron (`0 */4`, UTC) und Health-Check sind zonenunabhängig;
+  Anzeigen wie `lib/admin/fetch-status.ts` rechnen weiter in Berlin.
+
 ## Development
 
 ```bash

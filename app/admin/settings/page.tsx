@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -45,6 +45,8 @@ interface GmailStatus {
 }
 
 interface ScheduleConfig {
+  /** IANA-Zone, in der alle Uhrzeiten gelten (2026-10-18); fehlt → Europe/Berlin. */
+  timezone?: string
   newsletterFetch: {
     enabled: boolean
     hour: number
@@ -129,7 +131,10 @@ const USE_CASE_GROUPS: Array<{ title: string; useCases: string[] }> = [
   },
 ]
 
+const DEFAULT_TIMEZONE = 'Europe/Berlin'
+
 const DEFAULT_SCHEDULE: ScheduleConfig = {
+  timezone: DEFAULT_TIMEZONE,
   newsletterFetch: { enabled: true, hour: 4, minute: 0 },
   webcrawlFetch: { enabled: true, hour: 4, minute: 30 },
   dailyAnalysis: { enabled: true, hour: 5, minute: 0 },
@@ -284,6 +289,7 @@ export default function SettingsPage() {
         const newsletterFetchMinute = data.newsletterFetch.minute ?? 0
 
         setSchedule({
+          timezone: data.timezone ?? DEFAULT_TIMEZONE,
           newsletterFetch: {
             enabled: data.newsletterFetch.enabled,
             hour: newsletterFetchHour,
@@ -315,7 +321,7 @@ export default function SettingsPage() {
     setSavingSchedule(true)
     setScheduleSuccess(false)
     try {
-      // Zeiten werden direkt als Berlin/MEZ gespeichert (DST-sicher)
+      // Zeiten gelten in schedule.timezone (IANA, DST-sicher); die API prüft den Namen
       const response = await fetch('/api/admin/schedule', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -688,6 +694,10 @@ export default function SettingsPage() {
                 </div>
               ) : (
                 <>
+                  <TimezoneRow
+                    value={schedule.timezone ?? DEFAULT_TIMEZONE}
+                    onChange={(timezone) => setSchedule({ ...schedule, timezone })}
+                  />
                   <ScheduleRow
                     label="Daily Repo Crawl"
                     description="Wann sollen Newsletter und WebCrawl-Artikel abgerufen werden?"
@@ -977,6 +987,77 @@ function ExportSubscribers() {
 }
 
 // --- Schedule Row Sub-Component ---
+
+/** Alle IANA-Zonen des Browsers nach Region gruppiert; Fallback, falls Intl.supportedValuesOf fehlt. */
+const FALLBACK_TIMEZONES = [
+  'Europe/Berlin', 'Europe/London', 'Europe/Paris', 'America/New_York', 'America/Chicago', 'America/Denver',
+  'America/Los_Angeles', 'Asia/Shanghai', 'Asia/Tokyo', 'Asia/Singapore', 'Asia/Dubai', 'Australia/Sydney',
+  'Pacific/Auckland', 'UTC',
+]
+
+function timezoneGroups(): Array<{ region: string; zones: string[] }> {
+  const supported = (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf
+  const zones = typeof supported === 'function' ? supported.call(Intl, 'timeZone') : FALLBACK_TIMEZONES
+  const groups = new Map<string, string[]>()
+  for (const zone of zones) {
+    const region = zone.includes('/') ? zone.split('/')[0] : 'Sonstige'
+    groups.set(region, [...(groups.get(region) ?? []), zone])
+  }
+  return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([region, list]) => ({ region, zones: list }))
+}
+
+function timeIn(zone: string): string {
+  try {
+    return new Date().toLocaleTimeString('de-DE', { timeZone: zone, hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return '–'
+  }
+}
+
+/**
+ * Zeitzone des Zeitplans (2026-10-18): alle Uhrzeiten unten gelten in dieser
+ * Zone. Auf Reisen umstellen (z. B. Asia/Shanghai), damit die Kette vor dem
+ * lokalen Morgen läuft; nach einem Wechsel läuft sie am selben Tag nicht
+ * doppelt, weil die Tagesmarke in der neuen Zone noch „heute“ ist.
+ */
+function TimezoneRow({ value, onChange }: { value: string; onChange: (zone: string) => void }) {
+  const groups = timezoneGroups()
+  const known = groups.some((g) => g.zones.includes(value))
+  return (
+    <div className="space-y-3 pb-4 border-b">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <Label className="text-base">Zeitzone des Zeitplans</Label>
+          <p className="text-sm text-muted-foreground">
+            Alle Uhrzeiten unten gelten in dieser Zone. Jetzt dort: {timeIn(value)} Uhr.
+            Auf Reisen umstellen, damit die Queue vor dem lokalen Morgen gefüllt ist.
+          </p>
+        </div>
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger className="w-[260px]">
+            <SelectValue placeholder="Zeitzone wählen" />
+          </SelectTrigger>
+          <SelectContent className="max-h-80">
+            {!known && (
+              <SelectGroup>
+                <SelectLabel>Gespeichert</SelectLabel>
+                <SelectItem value={value}>{value}</SelectItem>
+              </SelectGroup>
+            )}
+            {groups.map((group) => (
+              <SelectGroup key={group.region}>
+                <SelectLabel>{group.region}</SelectLabel>
+                {group.zones.map((zone) => (
+                  <SelectItem key={zone} value={zone}>{zone.replace(/_/g, ' ')}</SelectItem>
+                ))}
+              </SelectGroup>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  )
+}
 
 function ScheduleRow({
   label,

@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
+import { DEFAULT_SCHEDULE_TIMEZONE, isValidTimeZone } from '@/lib/scheduler/clock'
 
 export interface ScheduleConfig {
+  /** IANA-Zone, in der alle Uhrzeiten gelten (2026-10-18); fehlt → Europe/Berlin. */
+  timezone?: string
   newsletterFetch: {
     enabled: boolean
     hour: number
@@ -33,7 +36,8 @@ export interface ScheduleConfig {
 
 // Zeiten in Berlin/MEZ (nicht UTC) — der Scheduler rechnet zur Laufzeit um
 const DEFAULT_SCHEDULE: ScheduleConfig = {
-  newsletterFetch: { enabled: true,  hour: 4, minute: 0  },   // 04:00 MEZ
+  timezone: DEFAULT_SCHEDULE_TIMEZONE,
+  newsletterFetch: { enabled: true,  hour: 4, minute: 0  },   // 04:00 in der Zeitplan-Zone
   webcrawlFetch:   { enabled: true,  hour: 4, minute: 30 },   // 04:30 MEZ
   dailyAnalysis:   { enabled: true,  hour: 5, minute: 0  },   // 05:00 MEZ
   postGeneration: {
@@ -72,6 +76,11 @@ export async function PUT(request: NextRequest) {
 
   try {
     const config: ScheduleConfig = await request.json()
+    // Ein Tippfehler in der Zone darf die Kette nicht stillschweigend nach
+    // Berlin zurückfallen lassen — der Scheduler täte genau das.
+    if (config.timezone !== undefined && !isValidTimeZone(config.timezone)) {
+      return NextResponse.json({ error: `Ungültige Zeitzone: ${config.timezone}` }, { status: 400 })
+    }
 
     const supabase = createAdminClient()
     const { error } = await supabase

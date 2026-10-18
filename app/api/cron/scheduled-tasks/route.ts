@@ -9,11 +9,14 @@ import { MAX_DIGEST_SECTIONS, MIN_ANALYSIS_LENGTH } from '@/lib/constants/thresh
 import { verifyCronAuth } from '@/lib/security/cron-auth'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { isStepComplete, dependencyGate } from '@/lib/scheduler/gating'
+import { DEFAULT_SCHEDULE_TIMEZONE, dayKeys, isValidTimeZone, localClock, localDay } from '@/lib/scheduler/clock'
 
 export const runtime = 'nodejs'
 export const maxDuration = 800 // 13 minutes max (Vercel Pro limit)
 
 interface ScheduleConfig {
+  /** IANA-Zone, in der alle Uhrzeiten unten gelten (2026-10-18); fehlt → Europe/Berlin. */
+  timezone?: string
   newsletterFetch: {
     enabled: boolean
     hour: number
@@ -45,7 +48,7 @@ interface ScheduleConfig {
   }
 }
 
-// Zeiten in Berlin/MEZ (nicht UTC) — Vergleich gegen berlinHour/berlinMinute
+// Uhrzeiten in der Zeitplan-Zone (schedule_config.timezone, Default Europe/Berlin), Vergleich gegen localClock
 const DEFAULT_SCHEDULE: ScheduleConfig = {
   newsletterFetch: { enabled: true, hour: 4, minute: 0 },    // 04:00 MEZ
   webcrawlFetch:   { enabled: true, hour: 4, minute: 30 },   // 04:30 MEZ
@@ -63,15 +66,12 @@ function isTimeMatch(hour: number, minute: number, currentHour: number, currentM
   return currentHour > hour || (currentHour === hour && currentMinute >= minute)
 }
 
-/** Lief die Task heute schon (Berlin-Datum)? Verhindert Mehrfachläufe, obwohl
+/** Lief die Task heute schon (Datum in der Zeitplan-Zone)? Verhindert Mehrfachläufe, obwohl
  *  isTimeMatch nach der geplanten Zeit ganztägig true bleibt. */
-async function hasRunToday(supabase: ReturnType<typeof createAdminClient>, taskKey: string): Promise<boolean> {
+async function hasRunToday(supabase: ReturnType<typeof createAdminClient>, taskKey: string, tz: string): Promise<boolean> {
   const { data } = await supabase.from('settings').select('value').eq('key', `last_run_${taskKey}`).single()
   if (!data?.value?.timestamp) return false
-  const tz = 'Europe/Berlin'
-  const lastRunDay = new Date(data.value.timestamp).toLocaleDateString('en-CA', { timeZone: tz })
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: tz })
-  return lastRunDay === today
+  return localDay(new Date(data.value.timestamp), tz) === localDay(new Date(), tz)
 }
 
 async function markTaskRun(supabase: ReturnType<typeof createAdminClient>, taskKey: string) {
@@ -108,13 +108,6 @@ export async function GET(request: NextRequest) {
   const runAll = searchParams.get('runAll') === 'true'
   const forceRun = searchParams.get('force') === 'true' // Bypass hasRunRecently checks
 
-  // DB speichert Zeiten in Berlin/MEZ (DST-sicher), Vergleich gegen Berlin-Zeit
-  const berlinTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }))
-  const currentHour = berlinTime.getHours()
-  const currentMinute = berlinTime.getMinutes()
-
-  console.log(`[Scheduler] Running at ${currentHour}:${String(currentMinute).padStart(2, '0')} MEZ (${now.getUTCHours()}:${String(now.getUTCMinutes()).padStart(2, '0')} UTC)${runAll ? ' [runAll]' : ''}${forceRun ? ' [force]' : ''}`)
-
   // Get schedule config
   const { data: configData } = await supabase
     .from('settings')
@@ -130,6 +123,13 @@ export async function GET(request: NextRequest) {
     webcrawlFetch: savedConfig.webcrawlFetch ?? DEFAULT_SCHEDULE.webcrawlFetch,
   }
 
+  // Die Uhrzeiten der Settings gelten in der konfigurierten Zone (DST-sicher);
+  // ein ungültiger Name fällt auf Berlin zurück statt die Kette anzuhalten.
+  const tz = isValidTimeZone(config.timezone) ? config.timezone : DEFAULT_SCHEDULE_TIMEZONE
+  const { hour: currentHour, minute: currentMinute } = localClock(now, tz)
+
+  console.log(`[Scheduler] Running at ${currentHour}:${String(currentMinute).padStart(2, '0')} ${tz} (${now.getUTCHours()}:${String(now.getUTCMinutes()).padStart(2, '0')} UTC)${runAll ? ' [runAll]' : ''}${forceRun ? ' [force]' : ''}`)
+
   const results: Record<string, string> = {}
 
   // Newsletter Fetch
@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
     const fetchHour = config.newsletterFetch.hour ?? config.newsletterFetch.hours?.[0] ?? 4
     const fetchMinute = config.newsletterFetch.minute ?? 0
     const shouldRun = runAll || isTimeMatch(fetchHour, fetchMinute, currentHour, currentMinute)
-    const recentlyRan = !forceRun && await hasRunToday(supabase, 'newsletter_fetch')
+    const recentlyRan = !forceRun && await hasRunToday(supabase, 'newsletter_fetch', tz)
     if (shouldRun && !recentlyRan) {
       console.log('[Scheduler] Running newsletter fetch...')
       try {
@@ -169,7 +169,7 @@ export async function GET(request: NextRequest) {
   // WebCrawl Fetch
   if (config.webcrawlFetch.enabled) {
     const shouldRun = runAll || isTimeMatch(config.webcrawlFetch.hour, config.webcrawlFetch.minute, currentHour, currentMinute)
-    const recentlyRan = !forceRun && await hasRunToday(supabase, 'webcrawl_fetch')
+    const recentlyRan = !forceRun && await hasRunToday(supabase, 'webcrawl_fetch', tz)
     if (shouldRun && !recentlyRan) {
       console.log('[Scheduler] Running webcrawl fetch...')
       try {
@@ -195,11 +195,11 @@ export async function GET(request: NextRequest) {
   // Daily Analysis + News-Synthese
   if (config.dailyAnalysis.enabled) {
     const shouldRun = runAll || isTimeMatch(config.dailyAnalysis.hour, config.dailyAnalysis.minute, currentHour, currentMinute)
-    const recentlyRan = !forceRun && await hasRunToday(supabase, 'daily_analysis')
+    const recentlyRan = !forceRun && await hasRunToday(supabase, 'daily_analysis', tz)
     if (shouldRun && !recentlyRan) {
       console.log('[Scheduler] Triggering daily analysis and synthesis...')
       try {
-        const digestResult = await runDailyAnalysisAndSynthesis(supabase, baseUrl)
+        const digestResult = await runDailyAnalysisAndSynthesis(supabase, baseUrl, tz)
         if (digestResult.success) await markTaskRun(supabase, 'daily_analysis')
         // Fehlendes Quellmaterial ist KEIN Fehler, sondern ein Warten: der
         // Abruf kann sich verspaeten (s. 2026-08-23). Der Unterschied ist nicht
@@ -222,7 +222,7 @@ export async function GET(request: NextRequest) {
   // Post Generation (requires daily analysis)
   if (config.postGeneration.enabled) {
     const shouldRun = runAll || isTimeMatch(config.postGeneration.hour, config.postGeneration.minute, currentHour, currentMinute)
-    const recentlyRan = !forceRun && await hasRunToday(supabase, 'post_generation')
+    const recentlyRan = !forceRun && await hasRunToday(supabase, 'post_generation', tz)
     const gate = dependencyGate(results.dailyAnalysis)
     if (shouldRun && !recentlyRan) {
       if (gate === 'waiting' && config.dailyAnalysis.enabled) {
@@ -309,7 +309,7 @@ export async function GET(request: NextRequest) {
   // Newsletter Send
   if (config.newsletterSend?.enabled) {
     const shouldRunSend = runAll || isTimeMatch(config.newsletterSend.hour, config.newsletterSend.minute, currentHour, currentMinute)
-    const sendRecentlyRan = !forceRun && await hasRunToday(supabase, 'newsletter_send')
+    const sendRecentlyRan = !forceRun && await hasRunToday(supabase, 'newsletter_send', tz)
 
     if (shouldRunSend && !sendRecentlyRan) {
       console.log('[Scheduler] Triggering newsletter send...')
@@ -418,7 +418,7 @@ export async function GET(request: NextRequest) {
   // below this comment, since it's a DB-wide DELETE and doesn't need to run
   // more than once a day).
   try {
-    const retentionRecentlyRan = !forceRun && await hasRunToday(supabase, 'analytics_retention')
+    const retentionRecentlyRan = !forceRun && await hasRunToday(supabase, 'analytics_retention', tz)
     if (!retentionRecentlyRan) {
       const { error: retentionError } = await supabase.rpc('cleanup_analytics_retention')
       if (retentionError) {
@@ -442,7 +442,7 @@ export async function GET(request: NextRequest) {
   // cannot be reversed, but there is no reason to keep them either. Daily,
   // gated like the tasks above.
   try {
-    const tokenCleanupRan = !forceRun && await hasRunToday(supabase, 'subscriber_token_cleanup')
+    const tokenCleanupRan = !forceRun && await hasRunToday(supabase, 'subscriber_token_cleanup', tz)
     if (!tokenCleanupRan) {
       const { error: tokenError } = await supabase.rpc('cleanup_expired_subscriber_action_tokens')
       if (tokenError) {
@@ -462,7 +462,7 @@ export async function GET(request: NextRequest) {
 
   // Admin session cleanup (SEC-015): expired and long-revoked session rows.
   try {
-    const sessionCleanupRan = !forceRun && await hasRunToday(supabase, 'admin_session_cleanup')
+    const sessionCleanupRan = !forceRun && await hasRunToday(supabase, 'admin_session_cleanup', tz)
     if (!sessionCleanupRan) {
       const { error: sessionError } = await supabase.rpc('cleanup_expired_admin_sessions')
       if (sessionError) {
@@ -506,13 +506,14 @@ export async function GET(request: NextRequest) {
     success: true,
     timestamp: now.toISOString(),
     currentTimeMEZ: `${currentHour}:${String(currentMinute).padStart(2, '0')}`,
+    timezone: tz,
     currentTimeUTC: `${now.getUTCHours()}:${String(now.getUTCMinutes()).padStart(2, '0')}`,
     results,
   })
 }
 
 // Run daily analysis, save digest, and trigger synthesis
-async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAdminClient>, baseUrl: string): Promise<{
+async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAdminClient>, baseUrl: string, tz: string): Promise<{
   success: boolean
   digestId?: string
   synthesesCreated?: number
@@ -520,27 +521,29 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
   /** Es fehlte nur an Quellmaterial — der Scheduler wartet dann, statt zu melden. */
   waitingForSources?: boolean
 }> {
-  // Use today's date for analysis (we analyze newsletters collected earlier today)
-  const today = new Date()
-  const dateStr = today.toISOString().split('T')[0]
+  // Digest-Datum = lokaler Tag der Zeitplan-Zone, Analyse-Fenster = UTC-Tag
+  // (Begründung in lib/scheduler/clock.ts, dayKeys).
+  const { digestDate, analysisDate } = dayKeys(new Date(), tz)
 
-  console.log(`[DailyAnalysis] Starting analysis for ${dateStr}`)
+  console.log(`[DailyAnalysis] Starting analysis for digest ${digestDate} (Fenster bis ${analysisDate} UTC, Zone ${tz})`)
 
   // Check if we already have a digest for this date
   const { data: existingDigest } = await supabase
     .from('daily_digests')
-    .select('id')
-    .eq('digest_date', dateStr)
+    .select('id, created_at')
+    .eq('digest_date', digestDate)
     .single()
 
   if (existingDigest) {
-    console.log(`[DailyAnalysis] Digest already exists for ${dateStr}, skipping analysis`)
-    // Check if synthesis already ran today via news_queue (pipeline no longer writes to developed_syntheses)
-    const todayStart = dateStr + 'T00:00:00.000Z'
+    console.log(`[DailyAnalysis] Digest already exists for ${digestDate}, skipping analysis`)
+    // Check if synthesis already ran for this digest via news_queue (pipeline no
+    // longer writes to developed_syntheses). Seit dem Digest-Zeitpunkt statt seit
+    // UTC-Mitternacht: in Zonen östlich von UTC liegt das lokale Digest-Datum
+    // vor seiner UTC-Mitternacht, und die Synthese liefe ein zweites Mal.
     const { count: queueCount } = await supabase
       .from('news_queue')
       .select('id', { count: 'exact', head: true })
-      .gte('queued_at', todayStart)
+      .gte('queued_at', existingDigest.created_at)
 
     if (!queueCount || queueCount === 0) {
       console.log(`[DailyAnalysis] Running synthesis for existing digest ${existingDigest.id}`)
@@ -565,7 +568,7 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
   // Previous HTTP fetch hit Vercel's deployment→production redirect which strips
   // the Authorization header, causing silent 401s and missing digests.
   console.log('[DailyAnalysis] Running analysis in-process...')
-  const analysisResult = await processAnalysis(dateStr)
+  const analysisResult = await processAnalysis(analysisDate)
 
   if (!analysisResult.success || !analysisResult.content) {
     // Fehlendes Material getrennt melden: der Abruf kann sich verspaeten, und
@@ -592,7 +595,7 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
   const { data: newDigest, error: insertError } = await supabase
     .from('daily_digests')
     .insert({
-      digest_date: dateStr,
+      digest_date: digestDate,
       analysis_content: analysisContent,
       word_count: analysisContent.split(/\s+/).length,
       sources_used: analyzedItemIds.length > 0 ? analyzedItemIds : null,
