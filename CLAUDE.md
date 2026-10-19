@@ -167,6 +167,11 @@ streicht sonst den letzten Satz. Umgesetzt (alle in `lib/claude/`):
    Korrekturlauf mit den konkreten Problemen, danach die Fassung mit weniger
    Problemen; scheitert der Aufruf, bleibt der Take des Abschnitts-Aufrufs.
    Läuft vor Lektorat, `capTake` und „Wer“-Rewrite (Sicherheitsnetz).
+   **Bündel-Kompensation** (`shortenBySentences(section, 2, { take: false })`
+   in `writeSectionsBatch` und im Streaming-Pfad): bei aktiven Bündeln werden
+   nur noch zwei Sätze der Zusammenfassung gekürzt, der Take bleibt ganz. Bis
+   zum 2026-10-19 nahm sie auch dem Take zwei Sätze (fünf → drei; nach der
+   Reform drei bis vier → ein bis zwei, Betreiber-Befund am ersten Post).
 **Messen:** `pnpm takes:measure -- --posts 20` bzw. `--since <Datum>`
 (`scripts/measure-takes.ts`, lesend): Wörter, Wörter je Satz, kurze Sätze,
 Doppelpunkte, Zahl im Take und Schlusssatz, Prognosen, Überleben des letzten

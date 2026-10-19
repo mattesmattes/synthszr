@@ -1752,12 +1752,15 @@ export async function writeSectionsBatch(
       // Platzhalter" in ghostwriter-queue-id-marker.test.ts).
       section = ensureUnitMarkers(section, unit)
       // Kompensation: bei aktiven Bündeln wird jeder NORMALE Abschnitt (nicht die
-      // Bündel-Section selbst) um genau einen Satz gekürzt (Zusammenfassung + Take),
-      // damit der Artikel durch die zusätzliche Bündel-Section nicht insgesamt länger wird.
+      // Bündel-Section selbst) um zwei Sätze der ZUSAMMENFASSUNG gekürzt, damit der
+      // Artikel durch die zusätzliche Bündel-Section nicht insgesamt länger wird.
+      // Der Take bleibt seit der Take-Reform (2026-10-19) unangetastet: er hat ein
+      // eigenes Wortbudget, und die Kürzung nahm ihm den Prüfstein (Betreiber-
+      // Befund: Takes nur noch ein bis zwei Sätze).
       // shortenBySentences erhält die Heading-Zeile samt Kommentaren (splitHeading
       // in bundle-length.ts nimmt `#{1,6}[^\n]*`), die Marker überleben also.
       if (unit.kind === 'single' && bundlesActive) {
-        section = shortenBySentences(section, 2)
+        section = shortenBySentences(section, 2, { take: false })
       }
 
       return section
@@ -1903,10 +1906,10 @@ export async function* runGhostwriterPipeline(
       try {
         results[i] = await writeUnit(unit, model, companiesPerItem, { cacheableUserPrefix, effort, repoIntensity })
         // Kompensation: bei aktiven Bündeln wird jeder NORMALE Abschnitt (nicht die
-        // Bündel-Section selbst) um genau einen Satz gekürzt (Zusammenfassung + Take),
-        // damit der Artikel durch die zusätzliche Bündel-Section nicht insgesamt länger wird.
+        // Bündel-Section selbst) um zwei Sätze der Zusammenfassung gekürzt; der Take
+        // bleibt unangetastet (s. writeSectionsBatch, Take-Reform 2026-10-19).
         if (unit.kind === 'single' && bundlesActive) {
-          results[i] = shortenBySentences(results[i]!, 2)
+          results[i] = shortenBySentences(results[i]!, 2, { take: false })
         }
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err)

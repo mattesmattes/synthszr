@@ -57,6 +57,14 @@ describe('shortenBySentences', () => {
     expect(out).not.toMatch(/\bY\.\B/); expect(out).not.toMatch(/\bZ\.\B/)
   })
 
+  it('mit { take: false } kürzt nur die Zusammenfassung — der Take behält alle Sätze (Take-Reform 2026-10-19)', () => {
+    // Befund: die Kompensation nahm 3–4-Satz-Takes die letzten zwei Sätze und damit den Prüfstein.
+    const out = shortenBySentences(S('A. B. C. D.', 'X. Y. Z.'), 2, { take: false })
+    expect(out).toContain('A. B.')
+    expect(out).not.toMatch(/\bC\.\B/); expect(out).not.toMatch(/\bD\.\B/)
+    expect(out).toContain('Synthszr Take: X. Y. Z.')
+  })
+
   it('behält bei count=2 mindestens einen echten Satz + die Attribution', () => {
     const summary = 'Erster Satz. Zweiter Satz. {Anthropic} → [Quelle](https://example.com)'
     const out = shortenBySentences(S(summary, 'X. Y. Z.'), 2)

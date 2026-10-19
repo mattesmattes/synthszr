@@ -89,8 +89,14 @@ export function capSummarySentences(section: string, maxSentences: number): stri
   return `${withHeading(heading, capBody(body, maxSentences))}\n\n${marker}${parts.take}`
 }
 
-/** Entfernt je die letzten `count` Sätze aus Zusammenfassung UND Take (Default 1). */
-export function shortenBySentences(section: string, count = 1): string {
+/**
+ * Entfernt die letzten `count` Sätze aus der Zusammenfassung und — nur mit
+ * `take: true` (Default, historisches Verhalten) — auch aus dem Take.
+ * Seit der Take-Reform (2026-10-19) ruft die Pipeline mit `take: false`: der
+ * Take hat ein eigenes Wortbudget (take-cap.ts, take-pass.ts), und die
+ * Kürzung nahm 3–4-Satz-Takes die letzten zwei Sätze samt Prüfstein.
+ */
+export function shortenBySentences(section: string, count = 1, opts: { take?: boolean } = {}): string {
   // Bei einer NORMALEN Section hat joinCompanyTagToSummary die {Company}-Tag-/
   // Quellen-Zeile bereits an den letzten Satz der Zusammenfassung angehängt
   // ("…letzter echter Satz. {Anthropic} {OpenAI} → [Quelle](https://…)").
@@ -120,7 +126,7 @@ export function shortenBySentences(section: string, count = 1): string {
   const marker = parts.prefix.match(TAKE_MARKER_RE)![0]
   const { heading, body } = splitHeading(parts.prefix.replace(TAKE_MARKER_RE, ''))
   const summary = drop(splitSentences(body))
-  const take = drop(splitSentences(parts.take))
+  const take = opts.take === false ? parts.take.trim() : drop(splitSentences(parts.take))
 
   return `${withHeading(heading, summary)}\n\n${marker} ${take}`
 }
