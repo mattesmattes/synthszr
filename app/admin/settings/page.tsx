@@ -143,7 +143,8 @@ const DEFAULT_SCHEDULE: ScheduleConfig = {
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
-const MINUTES = [0, 15, 30, 45]
+// 5-Minuten-Schritte: die Prod-Konfiguration nutzt z. B. 04:10, und ein Wert ausserhalb der Liste zeigte ein leeres Feld.
+const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5)
 
 // --- Helpers ---
 
@@ -703,24 +704,28 @@ export default function SettingsPage() {
                     description="Wann sollen Newsletter und WebCrawl-Artikel abgerufen werden?"
                     config={schedule.newsletterFetch}
                     onChange={(config) => setSchedule({ ...schedule, newsletterFetch: config })}
+                  timezone={schedule.timezone ?? DEFAULT_TIMEZONE}
                   />
                   <ScheduleRow
                     label="WebCrawl Abruf"
                     description="Wann sollen WebCrawl-Artikel aus Gmail abgerufen werden?"
                     config={schedule.webcrawlFetch}
                     onChange={(config) => setSchedule({ ...schedule, webcrawlFetch: config })}
+                  timezone={schedule.timezone ?? DEFAULT_TIMEZONE}
                   />
                   <ScheduleRow
                     label="News & Synthese Erstellung"
                     description="Wann soll der Digest generiert werden?"
                     config={schedule.dailyAnalysis}
                     onChange={(config) => setSchedule({ ...schedule, dailyAnalysis: config })}
+                  timezone={schedule.timezone ?? DEFAULT_TIMEZONE}
                   />
                   <ScheduleRow
                     label={<span className="flex items-center gap-2"><Sparkles className="h-4 w-4" /> AI Artikel erstellen</span>}
                     description="Wann soll aus dem Digest ein Blogpost mit Bildern generiert werden?"
                     config={schedule.postGeneration}
                     onChange={(config) => setSchedule({ ...schedule, postGeneration: config })}
+                    timezone={schedule.timezone ?? DEFAULT_TIMEZONE}
                     maxItemsField={{ label: 'Anzahl News-Artikel', min: 1, max: 40 }}
                   />
                   <ScheduleRow
@@ -728,6 +733,7 @@ export default function SettingsPage() {
                     description="Wann soll der Newsletter an Subscriber versendet werden?"
                     config={schedule.newsletterSend}
                     onChange={(config) => setSchedule({ ...schedule, newsletterSend: config })}
+                  timezone={schedule.timezone ?? DEFAULT_TIMEZONE}
                   />
 
                   {/* Save Button */}
@@ -779,7 +785,7 @@ export default function SettingsPage() {
                   </div>
 
                   <p className="text-xs text-muted-foreground mt-4">
-                    Hinweis: Zeiten in MEZ/MESZ (automatische Umrechnung in UTC). Der Scheduler läuft alle 15 Minuten und startet Jobs innerhalb eines 10-Minuten-Fensters nach der geplanten Zeit.
+                    Hinweis: Alle Zeiten gelten in der oben gewählten Zeitzone (Sommerzeit automatisch). Der Scheduler läuft alle 15 Minuten und startet jede Aufgabe beim ersten Tick nach der geplanten Zeit, einmal pro Tag.
                   </p>
                 </>
               )}
@@ -997,7 +1003,10 @@ const FALLBACK_TIMEZONES = [
 
 function timezoneGroups(): Array<{ region: string; zones: string[] }> {
   const supported = (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf
-  const zones = typeof supported === 'function' ? supported.call(Intl, 'timeZone') : FALLBACK_TIMEZONES
+  const all = typeof supported === 'function' ? supported.call(Intl, 'timeZone') : FALLBACK_TIMEZONES
+  // Etc/GMT±N raus: das POSIX-Vorzeichen ist invertiert (Etc/GMT-9 = UTC+9) und lädt zu Fehlgriffen ein;
+  // Städte-Zonen tragen zudem die Sommerzeit. UTC bleibt als einzige Offset-Zone.
+  const zones = [...all.filter((z) => !z.startsWith('Etc/')), ...(all.includes('UTC') ? [] : ['UTC'])]
   const groups = new Map<string, string[]>()
   for (const zone of zones) {
     const region = zone.includes('/') ? zone.split('/')[0] : 'Sonstige'
@@ -1065,12 +1074,15 @@ function ScheduleRow({
   config,
   onChange,
   maxItemsField,
+  timezone,
 }: {
   label: React.ReactNode
   description: string
   config: { enabled: boolean; hour: number; minute: number; maxItems?: number }
   onChange: (config: { enabled: boolean; hour: number; minute: number; maxItems?: number }) => void
   maxItemsField?: { label: string; min: number; max: number }
+  /** Zeitplan-Zone, in der die Uhrzeit gilt — steht hinter dem Feld statt eines festen „MEZ“. */
+  timezone: string
 }) {
   return (
     <div className="space-y-3 pb-4 border-b">
@@ -1117,7 +1129,7 @@ function ScheduleRow({
               ))}
             </SelectContent>
           </Select>
-          <span className="text-sm text-muted-foreground">Uhr (MEZ)</span>
+          <span className="text-sm text-muted-foreground">Uhr ({timezone})</span>
         </div>
       )}
       {config.enabled && maxItemsField && (
