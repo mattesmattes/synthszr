@@ -141,6 +141,38 @@ The news queue system manages article selection for Ghostwriter blog post genera
   verzerrt (Positionsbias). Ein fairer künftiger Test ist online: Modell-
   Vorschläge in das Panel mischen und die Annahmequote messen.
 
+### Synthszr Takes — Reform in vier Stufen (2026-10-19)
+Befund aus 183 veröffentlichten Takes: p50 drei Sätze à 24 Wörter, 16 % der
+Sätze über 30 Wörter, 81 % Doppelpunkt-Pointe, 39 % Prognosen, Schlusssatz nur
+zu 22 % mit Zahl; der Betreiber übernimmt 96 % der behaltenen Takes wörtlich und
+streicht sonst den letzten Satz. Umgesetzt (alle in `lib/claude/`):
+1. **Form** (`take-cap.ts`): Prompt verlangt 50–75 Wörter in drei bis vier
+   Sätzen, keinen Satz über 25 Wörter, einen unter acht, höchstens einen
+   Doppelpunkt; `capTake` kürzt satzweise auf `TAKE_MAX_WORDS` 80 /
+   `TAKE_MAX_SENTENCES` 4.
+2. **Skelett** (`ghostwriter-pipeline.ts`): Mechanismus → Konsequenz (benannter
+   Akteur, Größenordnung, Zeitraum) → Prüfstein; Prognosen nur mit Datum oder
+   Messgröße; Blickwinkel im Plan aus sieben Typen (`TAKE_ANGLE_TYPES`,
+   `TAKE_ANGLE_RULES`), Auftakt „Der/Die/Das eigentliche …“ verboten.
+3. **Vorbilder** (`lib/posts/take-exemplars.ts`): drei eigene veröffentlichte
+   Takes aus den sechs thematisch nächsten Posts (gleicher
+   `match_generated_posts`-Aufruf wie der historische Kontext), bewertet nach
+   Nähe, Leser-Zustimmung (`take_feedback`, Anker = `queueItemId` der H2 bzw.
+   `idx:N`) und Zielform; Block „SO SCHREIBT MATTES SEINE TAKES“.
+4. **Eigener Take-Durchgang** (`take-pass.ts`, `applyTakePass`): zweiter
+   Aufruf (Use Case `ghostwriter_take`, Thinking medium) aus Zusammenfassung,
+   Blickwinkel, Vorbildern und Quellenauszug; `validateTake` prüft Wortbudget,
+   Satzlängen, Doppelpunkte, Zahlen gegen Zusammenfassung/Quelle, Prognosen
+   ohne Prüfstein, verbotene Auftakte und „Wer“-Schluss; bei Verstoß genau ein
+   Korrekturlauf mit den konkreten Problemen, danach die Fassung mit weniger
+   Problemen; scheitert der Aufruf, bleibt der Take des Abschnitts-Aufrufs.
+   Läuft vor Lektorat, `capTake` und „Wer“-Rewrite (Sicherheitsnetz).
+**Messen:** `pnpm takes:measure -- --posts 20` bzw. `--since <Datum>`
+(`scripts/measure-takes.ts`, lesend): Wörter, Wörter je Satz, kurze Sätze,
+Doppelpunkte, Zahl im Take und Schlusssatz, Prognosen, Überleben des letzten
+Entwurfssatzes, Leser-Zustimmung. Kosten: ein zusätzlicher Opus-Aufruf je
+Abschnitt (≈ 0,05 USD), Ghostwriter-Abschnitt davor Ø 0,13 USD.
+
 ### Artikel-Job im Hintergrund (2026-10-19)
 „AI Artikel erstellen“ (`app/admin/create-article/page.tsx`) legt nur noch den
 Job an (`POST /api/admin/article-job`) und pollt den Status; der Tab darf
