@@ -313,6 +313,7 @@ INHALTLICHE VERBOTE (toxische Muster):
 - Scharnier-Reflex: "Genau deshalb", "Genau da", "Genau hier" als Übergang zur Pointe — bring die Aussage direkt, ohne das "Genau"-Signal.
 - "Wer …"-Schlussfigur — FATAL, KEINE EINZIGE ERLAUBT: Der letzte und der vorletzte Satz des Takes dürfen NICHT mit "Wer" beginnen. Die Konditional-Belehrung "Wer (jetzt/heute/noch) X tut/glaubt/hält/plant/baut, sollte/kann/verliert/gewinnt Y" ist als Schluss in JEDER Variante verboten ("Wer jetzt noch …", "Wer heute noch …", "Wer sein X für Y hält, …"). Sie war der Schlusssatz von über der Hälfte aller Takes und ist verbraucht. Du siehst die anderen Takes dieses Artikels nicht — darum gilt das Verbot absolut, nicht "sparsam". Ersatz-Bewegungen für den Schluss: die Konsequenz als schlichte Aussage, eine konkrete Prognose mit Zahl oder Frist, eine nüchterne Beobachtung, eine offene Frage, eine direkte Handlungsansage ohne "Wer"-Rahmen.
 - "drumherum"-Verortung — verbrauchtes Tell, KEINE EINZIGE ERLAUBT: Der Wert / die Arbeit / die Kontrolle / die Marge sitze "im System drumherum", "in der Serviceebene drumherum", "im Loop drumherum", "eine Ebene/Etage tiefer", "in dem, was drumherum passiert". Dieses vage "drumherum" stand als Pointe in fast jedem Take und ist verbraucht. Benenne KONKRET und für DIESE News, wo der Wert liegt: die Orchestrierungslogik, die Eval-Suite, der Cache-Layer, die Berechtigungs-Hooks, das Routing, die Domänendaten, der Vertrieb. Kein einziges "drumherum" als Wert-Verortung. Du siehst die anderen Takes nicht — das Verbot gilt absolut.
+- Auftakt "Der/Die/Das eigentliche X (Hebel, Grund, Frage, Punkt, Rechnung) ist/liegt …" — verboten wie die Einstiegs-Formel darunter: Es kündigt die Beobachtung an, statt sie zu machen. Statt "Der eigentliche Hebel liegt bei den Stückkosten." → "Die Stückkosten entscheiden."
 - Einstiegs-Formel "Die/Das (eigentlich) spannende/interessante Zahl/Frage/Information/Teil/Detail ist …" — verboten als Auftakt: Komm direkt zur Beobachtung, ohne sie als "spannend/interessant" anzukündigen. Statt "Die interessante Zahl ist die 10 Prozent." → "Cache-Reads kosten ein Zehntel des Input-Tarifs."
 - Kern-These-Reflex — höchstens EINMAL pro Artikel, nie als DEIN Standardschluss: Der Schluss "das Modell wird zur Commodity / austauschbaren Ware, der Wert / die Marge wandert (woanders hin / in die Serviceebene / ins System)" ist die naheliegende Meta-These fast jeder KI-News. Sie darf NICHT die Pointe deines Takes sein. Dein Take endet aus DEINEM Blickwinkel mit einer SPEZIFISCHEN Aussage zu DIESER einen News (eine konkrete Zahl, ein benannter Akteur, eine präzise Konsequenz), nicht mit dem Commodity-Allgemeinplatz. Du siehst die anderen Takes nicht — darum gilt: schließe NICHT dorthin.
 - Das Wort "ehrlich" / "ehrlichste" / "ehrlicherweise" / "ehrlich gesagt" (und alle Beugungen) — KEINE EINZIGE ERLAUBT im Take: Es ist zum Füll-Tell geworden ("die ehrliche Wahrheit ist …", "ehrlich gesagt …", "die ehrlichste Einschätzung"). Die Ehrlichkeits-Beteuerung fügt nichts hinzu — sag die Aussage direkt. Statt "Die ehrlichste Antwort: X." → "X."
@@ -327,6 +328,12 @@ SCHREIBSTIL:
 - Humor durch Präzision, nicht durch Witze.
 
 FORM DES TAKES (hart, wird nach der Generierung geprüft): 50 bis 75 Wörter in drei bis vier Sätzen, ein Absatz. Kein Satz über 25 Wörter, im Schnitt unter 18; mindestens ein Satz unter acht Wörtern. Höchstens EIN Doppelpunkt im ganzen Take, keine Semikolon-Ketten, höchstens ein Komma-Einschub je Satz. Führe EIN Argument zu Ende, statt drei anzureißen; keine Verknappung auf Stichworte, aber auch kein Schachtelsatz. Der letzte Satz ist die Konsequenz oder der Prüfstein, nie ein Motto. Was über das Budget hinausgeht, wird abgeschnitten — also keine Reserve-Sätze anhängen.
+
+TAKE-SKELETT (unsichtbar, aber vollständig — ein Take ohne alle drei Teile ist durchgefallen):
+(1) MECHANISMUS: Warum passiert das? Welcher Anreiz, welche Kostenstruktur, welcher Engpass treibt die Akteure. Nicht WAS passiert (das steht in der Zusammenfassung), sondern WARUM.
+(2) KONSEQUENZ: Wer gewinnt oder verliert dadurch — benannt, mit Größenordnung aus der Quelle und Zeitraum. „Der Markt", „die Branche", „das System" sind keine Akteure.
+(3) PRÜFSTEIN: Woran sich in den nächsten Wochen oder Monaten zeigt, ob die These stimmt — eine Zahl, ein Datum, ein Ereignis, das eintreten oder ausbleiben muss.
+Der letzte Satz ist der Prüfstein oder die Konsequenz. Eine Prognose steht nur mit Datum oder Messgröße im Take („bis zum zweiten Quartal", „unter zehn Dollar je Million Token"), nie als freischwebendes „wird". Ein Take, der nur wiederholt, was die Zusammenfassung sagt, und Haltung obendrauf legt, ist kein Take.
 
 ÜBERSCHRIFT — JOURNALISTISCH UND POINTIERT (du schreibst sie SELBST, NICHT aus dem Themen-Hinweis übernehmen):
 Eine echte Artikel-Überschrift auf DEUTSCH. Sie benennt ZUERST die Kernaussage der News — wer tut was, oder was ist passiert — so klar, dass der Leser das Thema allein aus der Überschrift versteht, OHNE den Text zu lesen. Konkret statt kryptisch: Namen, Zahlen und das eigentliche Ereignis gehören hinein. Eine dezente Zuspitzung oder Pointe am Ende ist willkommen, aber NIE auf Kosten der Klarheit. Max ~90 Zeichen.
@@ -375,6 +382,28 @@ SO JA (nüchtern, Kern zuerst, attribuiert):
 // ─────────────────────────────────────────────────────────────────────────────
 // Pass 1: Article Planning
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Blickwinkel-Menü für Synthszr Takes (Stufe 2 der Take-Reform, 2026-10-19).
+ * Die alte Liste („der Zweitrundeneffekt, der konkrete Verlierer, eine
+ * historische Parallele …") war unverbindlich; jetzt beginnt jeder takeAngle
+ * mit genau einem dieser Typen, damit Planung und Take dieselbe analytische
+ * Linse teilen. Exportiert, damit der Test den versendeten Text pinnt.
+ */
+export const TAKE_ANGLE_TYPES = ['Anreiz', 'Stückkosten', 'Engpass', 'Zweitrundeneffekt', 'Präzedenz', 'Verlierer', 'Prüfstein'] as const
+
+export const TAKE_ANGLE_RULES = `TAKE-WINKEL (gegen Monotonie der Meinung — HÖCHSTE PRIORITÄT):
+Jeder Synthszr Take braucht einen EIGENEN, analytischen Blickwinkel. Jeder "takeAngle" beginnt mit GENAU EINEM dieser Typen als Präfix und führt ihn in EINEM Satz auf DEUTSCH für DIESES Item aus:
+- Anreiz: Welcher wirtschaftliche oder politische Anreiz erklärt das Verhalten der Akteure?
+- Stückkosten: Was kostet oder spart das je Einheit (Token, Nutzer, Anfrage, Mitarbeiter), und was folgt daraus?
+- Engpass: Welche knappe Ressource (Strom, Chips, Talente, Daten, Freigaben, Aufmerksamkeit) entscheidet hier wirklich?
+- Zweitrundeneffekt: Welche Folge zweiter Ordnung übersieht die Meldung, und wen trifft sie?
+- Präzedenz: Welcher frühere Fall mit Zahl verlief ähnlich, und was lehrt der Unterschied?
+- Verlierer: Wer verliert konkret, in welcher Größenordnung, und warum sagt das niemand?
+- Prüfstein: Welche Zahl oder welches Ereignis zeigt bis wann, ob die These der Meldung stimmt?
+- HART: Höchstens 1–2 Takes im GANZEN Artikel dürfen die übergreifende thesis direkt tragen. Jeder Typ höchstens zweimal in Folge und höchstens zweimal je sieben Items — die Typen über den Artikel verteilen.
+- Keine zwei Takes dürfen dieselbe Konklusion ziehen.
+- Der Winkel ist spezifisch für DIESES Item aus DIESER News — kein generisches "sei anders", sondern ein konkreter Denk-Ansatz mit Blick auf Mechanismus, Konsequenz und Prüfstein.`
 
 export async function planArticle(items: PipelineItem[], model: AIModel): Promise<ArticlePlan> {
   const bundleGroups = computeBundleGroups(items)
@@ -450,11 +479,7 @@ REGELN PRO FELD:
 - excerptBullets: Eigenständige Mini-Headlines, je max 65 Zeichen. Jede soll für sich stehen und neugierig machen.
 - thesis: Der rote Faden. Nicht die offensichtliche Gemeinsamkeit ("alles über KI"), sondern die tiefere Verbindung.
 
-TAKE-WINKEL (gegen Monotonie der Meinung — HÖCHSTE PRIORITÄT):
-Jeder Synthszr Take braucht einen EIGENEN Blickwinkel. Bestimme pro Item einen "takeAngle": EIN kurzer Satz auf DEUTSCH, der vorgibt, aus welcher Perspektive der Take dieses Items argumentiert.
-- HART: Höchstens 1–2 Takes im GANZEN Artikel dürfen die übergreifende thesis direkt tragen. Alle anderen beleuchten je einen ANDEREN Aspekt: der Zweitrundeneffekt, der konkrete Verlierer, eine historische Parallele, die konträre Sicht, die unterschätzte Zahl, die betroffene Gruppe, das operative Detail.
-- Keine zwei Takes dürfen dieselbe Konklusion ziehen.
-- Der Winkel ist spezifisch für DIESES Item aus DIESER News — kein generisches "sei anders", sondern ein konkreter Denk-Ansatz.
+${TAKE_ANGLE_RULES}
 
 RETRIEVAL-HINT (Andockpunkt an Mattes' Schriften — separates Feld pro Item, NICHT mit dem Take-Winkel verwechseln):
 Formuliere pro Item einen "retrievalHint": EINE KURZE These, MAX ~20 Wörter, EIN Kernkonzept im Zentrum, in der Denksprache von Mattes/Code Crash. Nutze — NUR WO ES INHALTLICH PASST — seine Konzepte: Intent als knappe Ressource (wenn Bauen billig wird, zählt das Was/Warum), Jevons-Paradoxon (billiger → mehr Verbrauch), Modelle werden Commodity, Burggraben/eingebettetes Domänenwissen, Compute-Disziplin, Outcome statt Aufwand.
@@ -465,7 +490,7 @@ Erstelle folgenden JSON-Plan:
   "thesis": "Ein Satz auf DEUTSCH — thematischer Kern als Leitfaden",
   "ordering": [1, 3, 7, 2],
   "headings": {"1": "Journalistisch präzise auf DEUTSCH — Nachrichtenkern zuerst, kein 'X launcht Y'-Etikett, keine kryptische These", "2": "..."},
-  "takeAngles": {"1": "Ein Satz DEUTSCH — der eigene Blickwinkel für den Take dieses Items", "2": "..."},
+  "takeAngles": {"1": "Typ: ein Satz DEUTSCH — z. B. \"Engpass: Die Freigabe durch die Rechtsabteilung bremst den Rollout, nicht die Modellqualität.\"", "2": "..."},
   "retrievalHints": {"1": "Kurze konzeptuelle These DEUTSCH, EIN Konzept, max ~20 Wörter", "2": "..."},
   "articleTitle": "Witzige, scharfe These auf DEUTSCH — Humor durch Präzision",
   "excerptBullets": ["Max 65 Zeichen, DEUTSCH, pointiert", "...", "..."],
@@ -617,7 +642,7 @@ export async function writeSection(
   // Dynamic per-item prompt only — format template + checkliste are in SECTION_SYSTEM_PROMPT,
   // vocabulary + edit learning + thesis are in cacheableUserPrefix
   const angleBlock = context.takeAngle
-    ? `\n\nBLICKWINKEL FÜR DEN TAKE (nur den Take, nicht die Zusammenfassung): ${context.takeAngle}`
+    ? `\n\nBLICKWINKEL FÜR DEN TAKE (nur den Take, nicht die Zusammenfassung; der Typ vor dem Doppelpunkt ist die analytische Linse, der Take folgt ihr durch Mechanismus, Konsequenz und Prüfstein): ${context.takeAngle}`
     : ''
   const userPrompt = `NACHRICHTENKERN (Original-Schlagzeile der Quelle — nüchterne Faktengrundlage, oft englisch; forme daraus deine EIGENE journalistisch präzise deutsche Überschrift nach den ÜBERSCHRIFT-Regeln, KEINE Formulierung wörtlich übernehmen und NICHT ins Kryptische zuspitzen): ${item.title}${angleBlock}
 
@@ -1065,7 +1090,7 @@ export async function writeBundleSection(
   ])
 
   const angleBlock = context.takeAngle
-    ? `\n\nBLICKWINKEL FÜR DEN TAKE (nur den Take, nicht die Zusammenfassung): ${context.takeAngle}`
+    ? `\n\nBLICKWINKEL FÜR DEN TAKE (nur den Take, nicht die Zusammenfassung; der Typ vor dem Doppelpunkt ist die analytische Linse, der Take folgt ihr durch Mechanismus, Konsequenz und Prüfstein): ${context.takeAngle}`
     : ''
   // Aus der zentralen Label-Tabelle, nicht als Zweiweg-Abfrage: Mit „Deep Dive"
   // als drittem Typ hätte ein `=== 'topic' ? … : 'Nachlese'` dort still
