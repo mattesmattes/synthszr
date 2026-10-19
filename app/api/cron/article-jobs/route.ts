@@ -23,6 +23,17 @@ export const maxDuration = 800
  * fehlgeschlagen. Der Scheduler ruft advanceArticleJob weiterhin ebenfalls auf;
  * doppelte Ticks sind ungefaehrlich, weil der Job-Service per Lease arbeitet.
  */
+/**
+ * Zeitbudget für den Start einer WEITEREN Phase im selben Aufruf (2026-10-19):
+ * seit der Browser den Job nicht mehr treibt, hängt der Cron Phasen aneinander.
+ * 240 s + längste Phase (Schreib-Batch 210 s, Planung mehrere Minuten) bleibt
+ * unter maxDuration 800.
+ */
+const LOOP_BUDGET_MS = 240_000
+
+/** Ergebnisse, nach denen es im selben Aufruf nichts mehr zu tun gibt. */
+const STOP_RESULTS = new Set(['no_job', 'claimed_elsewhere', 'tick_error', 'lexicon_done', 'done', 'error', 'unknown_phase'])
+
 export async function GET(request: NextRequest) {
   const authResult = verifyCronAuth(request)
   if (!authResult.authorized) {
@@ -30,9 +41,18 @@ export async function GET(request: NextRequest) {
   }
   try {
     const { advanceArticleJob } = await import('@/lib/article-jobs/service')
-    const result = await advanceArticleJob()
-    if (result !== 'no_job') console.log('[cron/article-jobs]', result)
-    return NextResponse.json({ ok: true, result })
+    const startedAt = Date.now()
+    const results: string[] = []
+    // Phasen aneinanderhängen, solange Budget bleibt — jede Phase gibt den Lease
+    // frei, der nächste Durchlauf claimt denselben Job erneut.
+    do {
+      const result = await advanceArticleJob()
+      results.push(result)
+      if (STOP_RESULTS.has(result) || result.startsWith('error')) break
+    } while (Date.now() - startedAt < LOOP_BUDGET_MS)
+    const result = results[results.length - 1]
+    if (result !== 'no_job') console.log('[cron/article-jobs]', results.join(' → '))
+    return NextResponse.json({ ok: true, result, results })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unbekannt'
     console.error('[cron/article-jobs]', error)

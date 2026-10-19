@@ -1,27 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
-import { createAdminClient } from '@/lib/supabase/admin'
-import { fetchStockSynthszr } from '@/lib/stock-synthszr/fetch-synthesis'
-import type { StockSynthszrResult } from '@/lib/stock-synthszr/types'
+import { ensureStockSynthszr } from '@/lib/stock-synthszr/warm'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
-import { namespacesForCompany } from '@/lib/rankings/vendor-canonical'
-import { STOCK_SYNTHSZR_CACHE_MS } from '@/lib/config/constants'
 
 // Allow longer timeout for AI generation
 export const maxDuration = 120
 
 // Strict rate limiter for expensive AI operations (5 requests per minute per IP)
 const strictLimiter = rateLimiters.strict()
-
-interface CacheRow {
-  id: string
-  company: string
-  currency: string
-  data: StockSynthszrResult
-  model: string | null
-  created_at: string
-  expires_at: string
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,88 +41,8 @@ export async function POST(request: NextRequest) {
     const currency = typeof payload?.currency === 'string' ? payload.currency : 'EUR'
     const price = typeof payload?.price === 'number' ? payload.price : null
 
-    const supabase = createAdminClient()
-
-    // Check database cache unless force refresh
-    if (!force) {
-      const { data: cached } = await supabase
-        .from('stock_synthszr_cache')
-        .select('*')
-        .ilike('company', company)
-        .eq('currency', currency)
-        .gt('expires_at', new Date().toISOString())
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single<CacheRow>()
-
-      if (cached) {
-        console.log(`[stock-synthszr] Cache hit for ${company}`)
-        const result = {
-          ...cached.data,
-          created_at: cached.created_at,
-        }
-        return NextResponse.json({ ok: true, data: result, cached: true })
-      }
-    }
-
-    console.log(`[stock-synthszr] Generating synthesis for ${company}...`)
-
-    const result = await fetchStockSynthszr({
-      company,
-      currency,
-      price,
-      recencyDays: 90,
-    })
-
-    // Store in database cache
-    const now = new Date()
-    const expiresAt = new Date(now.getTime() + STOCK_SYNTHSZR_CACHE_MS)
-
-    const { error: insertError } = await supabase
-      .from('stock_synthszr_cache')
-      .upsert(
-        {
-          company: company.toLowerCase(),
-          currency,
-          data: result,
-          model: result.model,
-          created_at: now.toISOString(),
-          expires_at: expiresAt.toISOString(),
-        },
-        {
-          onConflict: 'company,currency',
-          ignoreDuplicates: false,
-        }
-      )
-
-    if (insertError) {
-      console.warn('[stock-synthszr] Cache insert failed:', insertError.message)
-    } else {
-      console.log(`[stock-synthszr] Cached result for ${company}`)
-    }
-
-    // Frisch generiert → die Produktseiten dieser Firma revalidieren, damit die neue
-    // Analyse sofort erscheint (statt erst nach dem 5-min-ISR-Fenster). Nur im
-    // Nicht-Cache-Hit-Pfad (Cache-Hits kehren oben früh zurück).
-    try {
-      const namespaces = namespacesForCompany(company.toLowerCase())
-      const { data: prods } = await supabase
-        .from('products')
-        .select('slug')
-        .in('vendor_namespace', namespaces)
-        .eq('visibility_status', 'visible')
-      for (const p of prods ?? []) {
-        revalidatePath(`/de/rankings/${p.slug}`)
-        revalidatePath(`/en/rankings/${p.slug}`)
-      }
-    } catch (e) {
-      console.warn('[stock-synthszr] revalidate failed:', e instanceof Error ? e.message : e)
-    }
-
-    // Add created_at to result
-    result.created_at = new Date().toISOString()
-
-    return NextResponse.json({ ok: true, data: result })
+    const { data, cached } = await ensureStockSynthszr({ company, currency, price, force })
+    return NextResponse.json(cached ? { ok: true, data, cached: true } : { ok: true, data })
   } catch (error) {
     console.error('[stock-synthszr] failed', error)
     const message = error instanceof Error ? error.message : 'Unbekannter Fehler'

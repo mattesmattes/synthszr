@@ -21,6 +21,9 @@
  * cron context with no session.
  */
 import { createAdminClient } from '@/lib/supabase/admin'
+import { generateCoverImagesForPost } from '@/lib/images/cover-image'
+import { ensureStockSynthszr } from '@/lib/stock-synthszr/warm'
+import { collectTiptapText, extractCompanyTags } from '@/lib/synthszr/company-tags'
 import { type AIModel } from '@/lib/claude/ghostwriter'
 import {
   planArticle,
@@ -421,9 +424,15 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
   }
 
   const startedAt = Date.now()
-  // last_advanced_at = lease stamp: marks the job as actively driven so the cron
-  // (getNextOpenJob) won't grab it from under a polling browser.
-  await supabase
+  // Claim per Compare-and-Set (2026-10-19): der Lease (last_advanced_at) wird nur
+  // gesetzt, wenn gerade keiner läuft — null oder älter als LEASE_STALE_MS.
+  // Seit der Server den Job allein treibt (Minuten-Cron UND 15-Minuten-
+  // Scheduler rufen advanceArticleJob), könnten zwei Treiber denselben Job
+  // gleichzeitig vorantreiben; ein verlorener Claim ist kein Fehler. Am Ende
+  // jeder erfolgreichen Phase wird der Lease wieder freigegeben (null), damit
+  // der nächste Tick sofort weitermacht statt sechs Minuten zu warten.
+  const staleBefore = new Date(startedAt - LEASE_STALE_MS).toISOString()
+  const { data: claimed } = await supabase
     .from('article_jobs')
     .update({
       status: 'processing',
@@ -432,6 +441,10 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
       last_advanced_at: new Date().toISOString(),
     })
     .eq('id', job.id)
+    .in('status', ['pending', 'processing'])
+    .or(`last_advanced_at.is.null,last_advanced_at.lt.${staleBefore}`)
+    .select('id')
+  if (!claimed || (Array.isArray(claimed) && claimed.length === 0)) return 'claimed_elsewhere'
 
   try {
     if (job.phase === 'planning') {
@@ -439,7 +452,7 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
       const plan = await planArticle(job.selected_items, planningModel)
       await supabase
         .from('article_jobs')
-        .update({ plan, phase: 'writing', cursor: 0 })
+        .update({ plan, phase: 'writing', cursor: 0, last_advanced_at: null })
         .eq('id', job.id)
       return 'planned'
     }
@@ -487,6 +500,7 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
           written_sections: written,
           cursor: res.nextCursor,
           phase: res.done ? 'finalizing' : 'writing',
+          last_advanced_at: null,
         })
         .eq('id', job.id)
       return res.done ? 'writing_done' : 'writing_progress'
@@ -514,7 +528,7 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
       // pending_glossary_terms zu hängen; deshalb kann sie nicht vorher laufen.
       await supabase
         .from('article_jobs')
-        .update({ phase: 'lexicon', generated_post_id: postId })
+        .update({ phase: 'lexicon', generated_post_id: postId, last_advanced_at: null })
         .eq('id', job.id)
       return 'finalized'
     }
@@ -575,9 +589,13 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
         // nicht blockieren. Der Editor zeigt dann einfach keine Kandidaten.
         console.error('[ArticleJobs] lexicon phase failed:', err)
       }
+      // Assets (2026-10-19): Cover-Bild und Ratings-Vorwärmung stieß bisher der
+      // Browser nach dem Abschluss an; seit der Job im Hintergrund fertig wird,
+      // passiert es hier — best-effort wie die Begriffssuche.
+      await runAssets(supabase, job)
       await supabase
         .from('article_jobs')
-        .update({ status: 'done', phase: null, completed_at: new Date().toISOString() })
+        .update({ status: 'done', phase: null, completed_at: new Date().toISOString(), last_advanced_at: null })
         .eq('id', job.id)
       return 'lexicon_done'
     }
@@ -594,3 +612,85 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
     return 'tick_error'
   }
 }
+
+/**
+ * Nacharbeiten nach dem fertigen Entwurf (Schritt „Assets“ der lexicon-Phase):
+ * Ratings aller {Company}-Tags vorwärmen (stock_synthszr_cache, damit die
+ * Vote-Badges beim ersten Öffnen stehen) und das Cover aus dem Inhalt des
+ * ersten Items erzeugen — dieselben zwei Aufrufe, die die Seite „AI Artikel
+ * erstellen“ bis 2026-10-19 aus dem Browser abfeuerte. Jeder Teil fängt seine
+ * Fehler selbst: der Artikel ist fertig, ein fehlendes Bild blockiert ihn nicht.
+ * Premarket-Firmen werden nicht vorgewärmt — ihre Daten holt das Badge beim
+ * Anzeigen von glitch.green, der frühere Aufruf wärmte nur einen Cache.
+ */
+async function runAssets(supabase: ReturnType<typeof createAdminClient>, job: ArticleJob): Promise<void> {
+  const postId = job.generated_post_id
+  if (!postId) return
+
+  try {
+    const { data: post } = await supabase.from('generated_posts').select('content').eq('id', postId).maybeSingle()
+    const raw = (post as { content?: unknown } | null)?.content
+    const text = collectTiptapText(typeof raw === 'string' ? JSON.parse(raw) : raw)
+    const { public: companies } = extractCompanyTags(text)
+    if (companies.length > 0) {
+      const results = await Promise.allSettled(companies.map((company) => ensureStockSynthszr({ company })))
+      const failed = results.filter((r) => r.status === 'rejected').length
+      console.log(`[ArticleJobs] assets: Ratings für ${companies.length} Firmen vorgewärmt${failed ? `, ${failed} fehlgeschlagen` : ''}`)
+    }
+  } catch (err) {
+    console.error('[ArticleJobs] assets: Ratings fehlgeschlagen (non-fatal):', err)
+  }
+
+  try {
+    const first = job.selected_items?.[0] as { content?: string | null; title?: string | null } | undefined
+    const newsText = String(first?.content || first?.title || '').trim().slice(0, 2000)
+    if (newsText.length >= 10) {
+      const r = await generateCoverImagesForPost({ postId, newsText })
+      if (!r.ok) console.error('[ArticleJobs] assets: Cover fehlgeschlagen (non-fatal):', r.error)
+    }
+  } catch (err) {
+    console.error('[ArticleJobs] assets: Cover fehlgeschlagen (non-fatal):', err)
+  }
+}
+
+export interface LatestManualJob {
+  jobId: string
+  createdAt: string | null
+  status: string
+  phase: string | null
+  cursor: number
+  total: number
+  generatedPostId: string | null
+  error: string | null
+}
+
+/**
+ * Jüngster manueller Job der letzten Stunden — damit die Seite „AI Artikel
+ * erstellen“ nach dem Wiederöffnen (iOS, Tab war im Hintergrund) den laufenden
+ * oder gerade fertigen Job wieder anzeigt statt einer leeren Maske.
+ */
+export async function getLatestManualJob(maxAgeMs: number = 6 * 60 * 60 * 1000): Promise<LatestManualJob | null> {
+  const supabase = createAdminClient()
+  const since = new Date(Date.now() - maxAgeMs).toISOString()
+  const { data } = await supabase
+    .from('article_jobs')
+    .select('*')
+    .eq('source', 'manual')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (!data) return null
+  const job = data as ArticleJob & { created_at?: string; error_message?: string | null }
+  return {
+    jobId: job.id,
+    createdAt: job.created_at ?? null,
+    status: job.status,
+    phase: job.phase,
+    cursor: job.cursor ?? 0,
+    total: countWriteUnits(job),
+    generatedPostId: job.generated_post_id ?? null,
+    error: job.status === 'error' ? (job.error_message ?? 'unknown') : null,
+  }
+}
+

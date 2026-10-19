@@ -51,6 +51,9 @@ vi.mock('@/lib/glossary/mentions', () => ({
 }))
 vi.mock('@/lib/glossary/generate', () => ({ identifyCandidates: mocks.identifyCandidates }))
 vi.mock('@/lib/glossary/candidates', () => ({ buildCandidateList: mocks.buildCandidateList }))
+// Assets-Schritt (2026-10-19) in der lexicon-Phase: Cover und Ratings sind hier nicht Thema, nur die Verdrahtung.
+vi.mock('@/lib/images/cover-image', () => ({ generateCoverImagesForPost: vi.fn(async () => ({ ok: true, image: null })) }))
+vi.mock('@/lib/stock-synthszr/warm', () => ({ ensureStockSynthszr: vi.fn(async () => ({ data: {}, cached: true })) }))
 
 const state = vi.hoisted(() => ({
   job: null as Record<string, unknown> | null,
@@ -75,6 +78,8 @@ function makeChain(table: string) {
   const chain: Record<string, unknown> = {}
   chain.select = vi.fn((c?: string) => { cols = c; return chain })
   chain.eq = vi.fn(() => chain)
+  chain.in = vi.fn(() => chain)   // Claim (2026-10-19): .in('status', …).or(lease)
+  chain.or = vi.fn(() => chain)
   chain.order = vi.fn(() => chain)
   chain.limit = vi.fn(() => chain)
   chain.update = vi.fn((payload: Record<string, unknown>) => {
@@ -169,7 +174,7 @@ describe('advanceArticleJob — Übergang finalizing → lexicon', () => {
 
     expect(result).toBe('finalized')
     const phaseUpdate = state.updates.find((u) => u.table === 'article_jobs' && 'phase' in u.payload)
-    expect(phaseUpdate?.payload).toEqual({ phase: 'lexicon', generated_post_id: state.insertedPostId })
+    expect(phaseUpdate?.payload).toEqual({ phase: 'lexicon', generated_post_id: state.insertedPostId, last_advanced_at: null })
     // Kein status:'done' in diesem Schritt — die lexicon-Phase schließt den Job ab.
     expect(state.updates.some((u) => u.table === 'article_jobs' && u.payload.status === 'done')).toBe(false)
   })

@@ -5,6 +5,7 @@ import {
   createManualArticleJob,
   advanceArticleJob,
   getArticleJobStatus,
+  getLatestManualJob,
 } from '@/lib/article-jobs/service'
 
 // Each call advances the job by exactly ONE phase; writeSectionsBatch caps itself
@@ -13,7 +14,8 @@ import {
 // reihenweise in den 300s-Timeout — der Job zaehlte dann nur `attempts` hoch und
 // fing von vorne an, jeder Fehlversuch voll bezahlt. Fluid Compute laesst auf
 // Pro bis 800s zu.
-// The browser drives the job by polling ?advance until status === 'done'.
+// Seit 2026-10-19 treibt der Server den Job (Minuten-Cron); ?advance=1 bleibt
+// als manueller Anstoss erhalten und geht durch denselben Claim wie der Cron.
 export const maxDuration = 800
 
 /**
@@ -24,6 +26,12 @@ export const maxDuration = 800
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+
+  // ?latest=1 → juengster manueller Job (2026-10-19): die Seite nimmt nach dem
+  // Wiederoeffnen die Anzeige eines laufenden oder gerade fertigen Jobs wieder auf.
+  if (request.nextUrl.searchParams.get('latest') !== null) {
+    return NextResponse.json({ job: await getLatestManualJob() })
+  }
 
   const jobId = request.nextUrl.searchParams.get('jobId')
   if (!jobId) return NextResponse.json({ error: 'jobId fehlt' }, { status: 400 })

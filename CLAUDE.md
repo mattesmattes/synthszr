@@ -141,6 +141,23 @@ The news queue system manages article selection for Ghostwriter blog post genera
   verzerrt (Positionsbias). Ein fairer künftiger Test ist online: Modell-
   Vorschläge in das Panel mischen und die Annahmequote messen.
 
+### Artikel-Job im Hintergrund (2026-10-19)
+„AI Artikel erstellen“ (`app/admin/create-article/page.tsx`) legt nur noch den
+Job an (`POST /api/admin/article-job`) und pollt den Status; der Tab darf
+geschlossen oder (iOS) in den Hintergrund gelegt werden, beim Wiederöffnen
+holt `GET ?latest=1` den laufenden oder gerade fertigen Job zurück. Getrieben
+wird der Job vom Minuten-Cron `/api/cron/article-jobs`, der Phasen innerhalb
+eines Aufrufs aneinanderhängt (`LOOP_BUDGET_MS` 240 s, `maxDuration` 800), und
+als Zweitlinie vom 15-Minuten-Scheduler. `advanceArticleJob` claimt per
+Compare-and-Set (`last_advanced_at` null oder älter als `LEASE_STALE_MS`) und
+gibt den Lease am Ende jeder Phase frei; `claimed_elsewhere` ist kein Fehler.
+Nacharbeiten laufen im Job (Schritt „Assets“ der lexicon-Phase, best-effort):
+Cover-Bilder über `lib/images/cover-image.ts` und Ratings-Vorwärmung über
+`lib/stock-synthszr/warm.ts` für die `{Company}`-Tags
+(`lib/synthszr/company-tags.ts`); dieselben Funktionen nutzen
+`/api/generate-image` und `/api/stock-synthszr`. Der nächtliche Auto-Job
+bekommt dadurch ebenfalls ein Cover. Premarket-Firmen werden nicht vorgewärmt.
+
 ### Curation Phase 0 — Messgrundlage (2026-10-06)
 Vorarbeit für das Agenten-Team „Morgenkonferenz" (Spec
 `docs/superpowers/specs/2026-10-05-news-curation-team-design.md`). Kein

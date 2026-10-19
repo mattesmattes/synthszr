@@ -47,7 +47,7 @@ import { parseArticleContent, generateSlug, type ArticleMetadata } from '@/lib/u
 import { embedQueueItemIds } from '@/lib/utils/embed-queue-ids'
 import { runEnrichOnTiptap } from '@/lib/enrich/run-stream'
 import { applySectionResult } from '@/lib/enrich/sections'
-import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies'
+import { extractCompanyTags } from '@/lib/synthszr/company-tags'
 import { ensureInitialEditHistory } from '@/lib/edit-learning/history'
 import { sanitizeTiptapUrls } from '@/lib/utils/url-verifier'
 
@@ -132,6 +132,50 @@ export default function CreateArticlePage() {
   const [generating, setGenerating] = useState(false)
   const [pipelineStatus, setPipelineStatus] = useState<string | null>(null)
   const [pipelineProgress, setPipelineProgress] = useState<{ current: number; total: number } | null>(null)
+  // Juengst fertig gewordener Job (Resume nach Wiederoeffnen der Seite)
+  const [recentDone, setRecentDone] = useState<{ postId: string; minutesAgo: number } | null>(null)
+
+  type JobStatus = { status?: string; phase?: string | null; cursor?: number; total?: number; generatedPostId?: string | null; error?: string | null }
+  const describeJob = (st: JobStatus) => {
+    const total = st.total || 0
+    switch (st.phase) {
+      case 'planning': return `Plane Artikel-Struktur${total ? ` für ${total} News` : ''}…`
+      case 'writing': {
+        const cur = Math.min(st.cursor ?? 0, total || (st.cursor ?? 0))
+        return `Schreibe & lektoriere Abschnitt ${cur}${total ? ` von ${total}` : ''}`
+      }
+      case 'finalizing': return 'Prüfe Metaphern & stelle Artikel fertig…'
+      case 'lexicon': return 'Lexikon, Cover & Ratings…'
+      default: return 'Generiere Artikel…'
+    }
+  }
+  const applyJobStatus = (st: JobStatus, startedAt: number) => {
+    const sec = Math.round((Date.now() - startedAt) / 1000)
+    setPipelineStatus(`${describeJob(st)} · ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`)
+    const total = st.total || 0
+    setPipelineProgress(st.phase === 'writing' && total > 0 ? { current: Math.min(st.cursor ?? 0, total), total } : null)
+  }
+  /** Pollt den Job-Status, bis er done oder error ist; liefert die Post-ID. Treibt nichts an — das tut der Cron. */
+  async function followJob(jobId: string, startedAt: number): Promise<string> {
+    for (;;) {
+      try {
+        const s = await fetch(`/api/admin/article-job?jobId=${jobId}`, { credentials: 'include' })
+        if (s.ok) {
+          const st: JobStatus = await s.json()
+          applyJobStatus(st, startedAt)
+          if (st.status === 'error') throw new Error(st.error || 'Job fehlgeschlagen')
+          if (st.status === 'done') {
+            if (!st.generatedPostId) throw new Error('Kein Entwurf erzeugt')
+            return st.generatedPostId
+          }
+        }
+      } catch (err) {
+        // Netzwackler (Tab kam gerade aus dem Hintergrund) weiterpollen; echte Job-Fehler durchreichen
+        if (err instanceof Error && /Job fehlgeschlagen|Kein Entwurf erzeugt/.test(err.message)) throw err
+      }
+      await new Promise((r) => setTimeout(r, 3000))
+    }
+  }
   const [articleContent, setArticleContent] = useState('')
   const [copied, setCopied] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -189,6 +233,34 @@ export default function CreateArticlePage() {
       setMetadata(parsedContent.metadata)
     }
   }, [parsedContent])
+
+  // Resume (2026-10-19): laeuft noch ein manueller Job, Anzeige wieder aufnehmen;
+  // ist einer in den letzten 30 Minuten fertig geworden, Link zum Entwurf zeigen.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const r = await fetch('/api/admin/article-job?latest=1', { credentials: 'include' })
+        if (!r.ok) return
+        const { job } = await r.json() as { job: (JobStatus & { jobId: string; createdAt: string | null }) | null }
+        if (!job || cancelled) return
+        const startedAt = job.createdAt ? Date.parse(job.createdAt) : Date.now()
+        if (job.status === 'pending' || job.status === 'processing') {
+          setGenerating(true)
+          applyJobStatus(job, startedAt)
+          const postId = await followJob(job.jobId, startedAt)
+          if (!cancelled) router.push(`/admin/generated-articles/edit/${postId}`)
+        } else if (job.status === 'done' && job.generatedPostId && Date.now() - startedAt < 30 * 60 * 1000) {
+          setRecentDone({ postId: job.generatedPostId, minutesAgo: Math.round((Date.now() - startedAt) / 60_000) })
+        }
+      } catch (err) {
+        console.error('[Create Article] Resume fehlgeschlagen:', err)
+        if (!cancelled) { setGenerating(false); setPipelineStatus(null); setPipelineProgress(null) }
+      }
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     loadData()
@@ -321,112 +393,13 @@ export default function CreateArticlePage() {
         const err = await createRes.json().catch(() => ({}))
         throw new Error(err.error || 'Job konnte nicht angelegt werden')
       }
-      const { jobId, itemCount } = await createRes.json()
-
-      const startMs = Date.now()
-      const fmtElapsed = () => {
-        const s = Math.round((Date.now() - startMs) / 1000)
-        return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-      }
-      type JobStatus = { status?: string; phase?: string | null; cursor?: number; total?: number; generatedPostId?: string | null; error?: string | null }
-      const describe = (st: JobStatus) => {
-        const total = st.total || itemCount || 0
-        switch (st.phase) {
-          case 'planning': return `Plane Artikel-Struktur${total ? ` für ${total} News` : ''}…`
-          case 'writing': {
-            const cur = Math.min(st.cursor ?? 0, total || (st.cursor ?? 0))
-            return `Schreibe & lektoriere Abschnitt ${cur}${total ? ` von ${total}` : ''}`
-          }
-          case 'finalizing': return 'Prüfe Metaphern & stelle Artikel fertig…'
-          default: return 'Generiere Artikel…'
-        }
-      }
-      const applyStatus = (st: JobStatus) => {
-        setPipelineStatus(`${describe(st)} · ${fmtElapsed()}`)
-        const total = st.total || 0
-        if (st.phase === 'writing' && total > 0) {
-          setPipelineProgress({ current: Math.min(st.cursor ?? 0, total), total })
-        } else {
-          setPipelineProgress(null)
-        }
-      }
-
-      let postId: string | null = null
-      while (true) {
-        // Run one advance (a full phase — can take minutes) while polling a light
-        // status endpoint in parallel, so the UI shows live section progress and
-        // an elapsed timer instead of freezing for the whole phase.
-        let advanceDone = false
-        const advancePromise = fetch('/api/admin/article-job?advance=1', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ jobId }),
-        }).finally(() => { advanceDone = true })
-
-        void (async () => {
-          while (!advanceDone) {
-            await new Promise(r => setTimeout(r, 2500))
-            if (advanceDone) break
-            try {
-              const s = await fetch(`/api/admin/article-job?jobId=${jobId}`, { credentials: 'include' })
-              if (s.ok) applyStatus(await s.json())
-            } catch { /* transient poll error — keep last status */ }
-          }
-        })()
-
-        const advRes = await advancePromise
-        if (!advRes.ok) {
-          const err = await advRes.json().catch(() => ({}))
-          throw new Error(err.error || 'Generierung fehlgeschlagen')
-        }
-        const st: JobStatus = await advRes.json()
-        applyStatus(st)
-
-        if (st.status === 'error') throw new Error(st.error || 'Job fehlgeschlagen')
-        if (st.status === 'done') { postId = st.generatedPostId ?? null; break }
-
-        await new Promise(resolve => setTimeout(resolve, 1200))
-      }
-
-      if (!postId) throw new Error('Kein Entwurf erzeugt')
-
-      // Post-processing mirrors saveAsDraft's fire-and-forget side effects. These
-      // run client-side (with the session cookie) to avoid the cron 401-subrequest
-      // problem; embedQueueItemIds already ran server-side inside the job.
-      setPipelineStatus('Bilder & Ratings werden angestoßen…')
-      try {
-        const collectText = (node: { text?: string; content?: unknown[] }): string => {
-          if (!node) return ''
-          const self = node.text ?? ''
-          const kids = Array.isArray(node.content)
-            ? node.content.map(c => collectText(c as { text?: string; content?: unknown[] })).join(' ')
-            : ''
-          return `${self} ${kids}`
-        }
-        const postRes = await fetch(
-          `/api/admin/generated-posts?id=${postId}&select=${encodeURIComponent('content, pending_queue_item_ids')}`,
-          { credentials: 'include' }
-        )
-        const post = postRes.ok ? await postRes.json() : null
-        if (post?.content) {
-          triggerSynthszrRatings(collectText(JSON.parse(post.content)))
-        }
-        const qids: string[] = post?.pending_queue_item_ids ?? []
-        if (qids.length > 0) {
-          const qi = await fetchQueueItemsByIds<{ content: string | null; title: string }>(
-            qids,
-            'content, title',
-            1
-          )
-          const newsContent = qi?.[0]?.content || qi?.[0]?.title
-          if (newsContent) triggerImageGeneration(postId, newsContent)
-        }
-      } catch (postErr) {
-        console.error('[Create Article] Post-processing trigger failed (non-fatal):', postErr)
-      }
-
-      // Draft is persisted server-side — open it in the editor.
+      const { jobId } = await createRes.json()
+      // Hintergrund-Generierung (2026-10-19): der Server treibt den Job (Minuten-
+      // Cron), die Seite pollt nur den Status. Tab schliessen oder (iOS) in den
+      // Hintergrund legen ist unschaedlich; Cover und Ratings erzeugt der Job
+      // selbst (Schritt „Assets“). Beim Wiederoeffnen nimmt der Resume-Effekt
+      // die Anzeige wieder auf.
+      const postId = await followJob(jobId, Date.now())
       router.push(`/admin/generated-articles/edit/${postId}`)
     } catch (error) {
       console.error('Generation error:', error)
@@ -565,44 +538,6 @@ export default function CreateArticlePage() {
   // Extract {Company} tags from plain text (markdown or similar)
   // NOTE: Must be called with raw markdown text, NOT JSON.stringify(tiptapContent)
   // because the JSON regex would match outer JSON braces instead of {Company} patterns
-  function extractCompanyTags(content: string): { public: string[]; premarket: string[] } {
-    const publicCompanies: string[] = []
-    const premarketCompanies: string[] = []
-
-    // Match {Company} patterns in the content
-    const tagRegex = /\{([^}]+)\}/g
-    let match
-
-    while ((match = tagRegex.exec(content)) !== null) {
-      const companyName = match[1].trim()
-
-      // Check if it's a known public company (case-insensitive)
-      let foundPublic = false
-      for (const [displayName, apiName] of Object.entries(KNOWN_COMPANIES)) {
-        if (displayName.toLowerCase() === companyName.toLowerCase()) {
-          if (!publicCompanies.includes(apiName)) {
-            publicCompanies.push(apiName)
-          }
-          foundPublic = true
-          break
-        }
-      }
-
-      // Check if it's a known premarket company (case-insensitive)
-      if (!foundPublic) {
-        for (const [displayName, apiName] of Object.entries(KNOWN_PREMARKET_COMPANIES)) {
-          if (displayName.toLowerCase() === companyName.toLowerCase()) {
-            if (!premarketCompanies.includes(apiName)) {
-              premarketCompanies.push(apiName)
-            }
-            break
-          }
-        }
-      }
-    }
-
-    return { public: publicCompanies, premarket: premarketCompanies }
-  }
 
   // Trigger Synthszr rating generation for companies mentioned in the article
   // content: raw markdown text (NOT TipTap JSON) — regex only works on plain text
@@ -857,6 +792,17 @@ export default function CreateArticlePage() {
               </>
             )}
           </Button>
+
+          {generating && (
+            <p className="text-xs text-muted-foreground">
+              Läuft auf dem Server weiter — du kannst den Tab schließen oder das Handy sperren. Der Entwurf erscheint danach unter Blog Posts.
+            </p>
+          )}
+          {!generating && recentDone && (
+            <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => router.push(`/admin/generated-articles/edit/${recentDone.postId}`)}>
+              Letzter Entwurf ist fertig (vor {recentDone.minutesAgo} min) — öffnen
+            </Button>
+          )}
 
           {/* Pipeline progress bar */}
           {generating && pipelineProgress && (
