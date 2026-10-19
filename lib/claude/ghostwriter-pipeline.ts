@@ -609,6 +609,8 @@ export async function writeSection(
     .join('\n\n')
   let mattesBlock = ''
   let historyBlock = ''
+  let exemplarBlock = ''
+  const exemplarQuery = [heading, context.takeAngle, item.title].filter(Boolean).join(' ')
   // Voice grounding (Mattes corpus) and historical callbacks (past Synthszr
   // posts) run in parallel — both are non-fatal and must not serialize latency.
   await Promise.all([
@@ -628,8 +630,16 @@ export async function writeSection(
     (async () => {
       try {
         const { findRelevantPastPosts, formatPastPostsForPrompt } = await import('@/lib/posts/historical-retrieval')
-        const past = await findRelevantPastPosts(retrievalQuery, { limit: 3 })
-        historyBlock = formatPastPostsForPrompt(past)
+        // limit 6 statt 3 (Stufe 3 der Take-Reform): dieselben Kandidaten liefern
+        // die Vorbild-Takes — kein zweites Embedding je Abschnitt.
+        const past = await findRelevantPastPosts(retrievalQuery, { limit: 6 })
+        historyBlock = formatPastPostsForPrompt(past.slice(0, 3))
+        try {
+          const { findExemplarTakes, formatExemplarTakesForPrompt } = await import('@/lib/posts/take-exemplars')
+          exemplarBlock = formatExemplarTakesForPrompt(await findExemplarTakes(past, exemplarQuery))
+        } catch (err) {
+          console.warn('[Pipeline] Exemplar retrieval failed (continuing):', err)
+        }
         if (past.length > 0) {
           console.log(`[Pipeline] Retrieved ${past.length} past posts for "${heading.slice(0, 40)}…"`)
         }
@@ -655,7 +665,7 @@ COMPANY-TAGS:${tagSourcePart ? `
 QUELLFORMAT: → ${tagSourcePart}` : `
 KEINE QUELLE — nur Company-Tags, kein Pfeil.`}
 PUBLIC: ${publicCompanyList}
-PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${historyBlock ? `\n\n${historyBlock}` : ''}`
+PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${historyBlock ? `\n\n${historyBlock}` : ''}${exemplarBlock ? `\n\n${exemplarBlock}` : ''}`
 
   const text = await callModelNonStreaming(userPrompt, SECTION_SYSTEM_PROMPT, model, {
     cacheableUserPrefix: context.cacheableUserPrefix,
@@ -1067,6 +1077,8 @@ export async function writeBundleSection(
     .join('\n\n')
   let mattesBlock = ''
   let historyBlock = ''
+  let exemplarBlock = ''
+  const exemplarQuery = [heading, context.takeAngle, primary.title].filter(Boolean).join(' ')
   await Promise.all([
     (async () => {
       if (!repoParams || !mattesQuery) return
@@ -1081,8 +1093,16 @@ export async function writeBundleSection(
     (async () => {
       try {
         const { findRelevantPastPosts, formatPastPostsForPrompt } = await import('@/lib/posts/historical-retrieval')
-        const past = await findRelevantPastPosts(retrievalQuery, { limit: 3 })
-        historyBlock = formatPastPostsForPrompt(past)
+        // limit 6 statt 3 (Stufe 3 der Take-Reform): dieselben Kandidaten liefern
+        // die Vorbild-Takes — kein zweites Embedding je Abschnitt.
+        const past = await findRelevantPastPosts(retrievalQuery, { limit: 6 })
+        historyBlock = formatPastPostsForPrompt(past.slice(0, 3))
+        try {
+          const { findExemplarTakes, formatExemplarTakesForPrompt } = await import('@/lib/posts/take-exemplars')
+          exemplarBlock = formatExemplarTakesForPrompt(await findExemplarTakes(past, exemplarQuery))
+        } catch (err) {
+          console.warn('[Pipeline] Exemplar retrieval failed (continuing):', err)
+        }
       } catch (err) {
         console.warn('[Pipeline] History retrieval failed (bundle, continuing):', err)
       }
@@ -1108,7 +1128,7 @@ ${sourceBlocks.join('\n\n')}
 
 COMPANY-TAGS (nur {Company}-Tags, KEINE Quellen-Pfeil-Zeile — Quellen werden separat ergänzt):
 PUBLIC: ${publicCompanyList}
-PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${historyBlock ? `\n\n${historyBlock}` : ''}`
+PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${historyBlock ? `\n\n${historyBlock}` : ''}${exemplarBlock ? `\n\n${exemplarBlock}` : ''}`
 
   const text = await callModelNonStreaming(userPrompt, buildBundleSystemPrompt(bundleType), model, {
     cacheableUserPrefix: context.cacheableUserPrefix,
