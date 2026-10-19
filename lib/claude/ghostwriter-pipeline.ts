@@ -15,6 +15,7 @@ import { KNOWN_COMPANIES, KNOWN_PREMARKET_COMPANIES } from '@/lib/data/companies
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { joinCompanyTagToSummary } from '@/lib/claude/section-format'
 import { capTake } from '@/lib/claude/take-cap'
+import { replaceTake, summaryForTakePass, writeTake } from '@/lib/claude/take-pass'
 import { sanitizeLexTags } from '@/lib/glossary/lex-tags'
 import { enforceHeadingLength, sanitizeHeading } from '@/lib/claude/heading-length'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -697,6 +698,11 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   // Lexikon-Tags bereinigen: kaputte raus, auf die Obergrenze begrenzt, und die
   // fachlich stärksten behalten. Der Prompt allein hält die Grenze nicht — an
   // einem echten Post wurden 24 statt 5 Tags gezählt.
+  // Stufe 4 der Take-Reform (2026-10-19): der Take entsteht in einem eigenen
+  // Durchgang aus der fertigen Zusammenfassung; Cap und "Wer"-Rewrite unten
+  // bleiben als Sicherheitsnetz.
+  trimmed = await applyTakePass(trimmed, { heading, sourceText: item.content || item.title, takeAngle: context.takeAngle, mattesBlock, exemplarBlock })
+
   trimmed = sanitizeLexTags(capTake(joinCompanyTagToSummary(trimmed)))
 
   // "Wer …"-Schlussfigur deterministisch durchsetzen: Das FATAL-Verbot im
@@ -709,6 +715,45 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   // Einzelabschnitt = genau ein Item (Spec 2026-10-05 „Heading-Marker": jede
   // H2 trägt die IDs ihrer Quellen, nicht nur Bündel).
   return ensureQueueIdMarker(trimmed, [item.id])
+}
+
+/**
+ * Take-Durchgang (Stufe 4): schreibt den Take des Abschnitts aus der fertigen
+ * Zusammenfassung neu — eigener Aufruf mit Blickwinkel, Vorbildern und
+ * Quellenauszug, deterministisch geprüft, einmal korrigiert (lib/claude/
+ * take-pass.ts). Non-fatal: scheitert der Aufruf, bleibt der Take des
+ * Abschnitts-Aufrufs stehen. Modell über den Use Case ghostwriter_take.
+ */
+async function applyTakePass(
+  section: string,
+  input: { heading: string; sourceText: string; takeAngle?: string; mattesBlock: string; exemplarBlock: string },
+): Promise<string> {
+  const summary = summaryForTakePass(section)
+  if (!summary) return section
+  try {
+    const model = await getModelForUseCase('ghostwriter_take') as AIModel
+    const result = await writeTake(
+      {
+        heading: input.heading,
+        summary,
+        sourceExcerpt: stripLoneSurrogates(input.sourceText).slice(0, 3000),
+        takeAngle: input.takeAngle,
+        exemplarsBlock: input.exemplarBlock || undefined,
+        mattesBlock: input.mattesBlock || undefined,
+      },
+      {
+        call: (user, system) => callModelNonStreaming(user, system, model, { thinking: true, effort: 'medium', maxTokens: 6000, useCase: 'ghostwriter_take' }),
+      },
+    )
+    if (!result.take) return section
+    if (result.problems.length > 0) {
+      console.warn(`[TakePass] Take mit Restproblemen übernommen (${result.attempts} Versuche): ${result.problems.join(' · ')}`)
+    }
+    return replaceTake(section, result.take)
+  } catch (err) {
+    console.warn('[TakePass] übersprungen:', err instanceof Error ? err.message : err)
+    return section
+  }
 }
 
 // Formt den Schluss eines Takes um, dessen letzter/vorletzter Satz mit der
@@ -1153,6 +1198,11 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   const capped = capSummarySentences(rest, 25)
   const sourceBlock = buildBundleSourceBlock(tags, primary, secondary)
   let withSources = insertBeforeTake(capped, sourceBlock)
+
+  // Stufe 4 der Take-Reform: eigener Take-Durchgang (wie writeSection).
+  withSources = await applyTakePass(withSources, {
+    heading, sourceText: items.map((it) => it.content || it.title).join('\n\n'), takeAngle: context.takeAngle, mattesBlock, exemplarBlock,
+  })
 
   // "Wer …"-Schlussfigur deterministisch durchsetzen (wie writeSection).
   withSources = await enforceTakeEnding(withSources, (take) => rewriteWerEnding(take))
