@@ -262,9 +262,11 @@ const navGroups: NavGroup[] = [
 
 interface AdminNavProps {
   onNavigate?: () => void
+  /** Icon-Modus der eingeklappten Desktop-Leiste: nur Icons mit Tooltip, Gruppen als Trennlinien. */
+  collapsed?: boolean
 }
 
-export function AdminNav({ onNavigate }: AdminNavProps) {
+export function AdminNav({ onNavigate, collapsed = false }: AdminNavProps) {
   const pathname = usePathname()
 
   // Zahl der Kommentare in der Freigabe-Queue → rot blinkendes „Eure Takes"-Icon.
@@ -285,12 +287,16 @@ export function AdminNav({ onNavigate }: AdminNavProps) {
   }, [pathname])
 
   return (
-    <div className="space-y-6">
-      {navGroups.map((group) => (
+    <div className={collapsed ? 'space-y-2' : 'space-y-6'}>
+      {navGroups.map((group, groupIndex) => (
         <div key={group.label}>
-          <h3 className="mb-2 px-2 font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {group.label}
-          </h3>
+          {collapsed ? (
+            groupIndex > 0 && <div className="mx-1 mb-2 border-t border-border" aria-hidden="true" />
+          ) : (
+            <h3 className="mb-2 px-2 font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {group.label}
+            </h3>
+          )}
           <ul className="space-y-1">
             {group.items.map((item) => {
               const isExternal = item.external === true
@@ -311,8 +317,10 @@ export function AdminNav({ onNavigate }: AdminNavProps) {
                     target={isExternal ? '_blank' : undefined}
                     rel={isExternal ? 'noopener noreferrer' : undefined}
                     onClick={onNavigate}
+                    title={collapsed ? item.label : undefined}
                     className={cn(
                       'flex items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors',
+                      collapsed && 'justify-center px-0',
                       isActive
                         ? 'bg-primary/10 text-primary'
                         : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
@@ -327,13 +335,13 @@ export function AdminNav({ onNavigate }: AdminNavProps) {
                     >
                       <item.icon className="h-4 w-4" />
                     </span>
-                    {item.label}
-                    {alertsPending && (
+                    {!collapsed && item.label}
+                    {alertsPending && !collapsed && (
                       <span className="ml-auto animate-pulse rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
                         {pendingComments}
                       </span>
                     )}
-                    {isExternal && (
+                    {isExternal && !collapsed && (
                       <span className="ml-auto text-xs text-muted-foreground">↗</span>
                     )}
                   </Link>

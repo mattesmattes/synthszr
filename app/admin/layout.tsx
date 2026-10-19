@@ -1,6 +1,6 @@
 import { getSession } from '@/lib/auth/session'
 import { redirect } from 'next/navigation'
-import { AdminSidebar } from '@/components/admin/admin-sidebar'
+import { AdminShell } from '@/components/admin/admin-shell'
 
 export default async function AdminLayout({
   children
@@ -15,12 +15,8 @@ export default async function AdminLayout({
 
   return (
     <div className="flex min-h-screen bg-background" style={{ fontFamily: 'var(--font-sf-pro)' }}>
-      <AdminSidebar />
-
-      {/* Main Content — pt-14 on mobile for fixed header, ml-64 on desktop for sidebar */}
-      <main className="flex-1 pt-14 md:pt-0 md:ml-64">
-        {children}
-      </main>
+      {/* Seitenleiste + Inhalt: die Shell hält den Ein-/Ausklappzustand (Client), das Layout bleibt Server für die Auth-Prüfung */}
+      <AdminShell>{children}</AdminShell>
     </div>
   )
 }

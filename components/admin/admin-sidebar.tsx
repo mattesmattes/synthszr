@@ -3,12 +3,18 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Menu, X } from 'lucide-react'
+import { ChevronsLeft, ChevronsRight, Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AdminNav } from './admin-nav'
 import { LogoutButton } from './logout-button'
 
-export function AdminSidebar() {
+interface AdminSidebarProps {
+  /** Desktop: nur Icons (4 rem) statt voller Leiste (16 rem); der mobile Drawer bleibt immer voll. */
+  collapsed?: boolean
+  onToggle?: () => void
+}
+
+export function AdminSidebar({ collapsed = false, onToggle }: AdminSidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const pathname = usePathname()
 
@@ -17,35 +23,60 @@ export function AdminSidebar() {
     setMobileOpen(false)
   }, [pathname])
 
-  const sidebarInner = (
+  const toggleButton = (isCollapsed: boolean) => (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+      aria-label={isCollapsed ? 'Navigation ausklappen' : 'Navigation einklappen'}
+      title={isCollapsed ? 'Navigation ausklappen' : 'Navigation einklappen'}
+    >
+      {isCollapsed ? <ChevronsRight className="h-5 w-5" /> : <ChevronsLeft className="h-5 w-5" />}
+    </button>
+  )
+
+  // isCollapsed: Icon-Modus (nur Desktop); showToggle: der Umschalter gehört nur in die Desktop-Leiste.
+  const sidebarInner = (isCollapsed: boolean, showToggle: boolean) => (
     <div className="flex h-full flex-col">
-      <div className="border-b border-border p-4">
-        <Link href="/admin" className="flex items-center gap-2">
-          <span className="font-mono text-lg font-bold">Synthszr</span>
-          <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-xs text-primary">
-            Admin
-          </span>
-        </Link>
-      </div>
-      <nav className="flex-1 overflow-y-auto p-4">
-        <AdminNav onNavigate={() => setMobileOpen(false)} />
-      </nav>
-      <div className="border-t border-border p-4">
-        <div className="flex items-center justify-between">
-          <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
-            Zur Website
+      {isCollapsed ? (
+        <div className="flex justify-center border-b border-border p-2">{toggleButton(true)}</div>
+      ) : (
+        <div className="flex items-center justify-between border-b border-border p-4">
+          <Link href="/admin" className="flex items-center gap-2">
+            <span className="font-mono text-lg font-bold">Synthszr</span>
+            <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-xs text-primary">
+              Admin
+            </span>
           </Link>
-          <LogoutButton />
+          {showToggle && toggleButton(false)}
         </div>
-      </div>
+      )}
+      <nav className={cn('flex-1 overflow-y-auto', isCollapsed ? 'p-2' : 'p-4')}>
+        <AdminNav onNavigate={() => setMobileOpen(false)} collapsed={isCollapsed} />
+      </nav>
+      {!isCollapsed && (
+        <div className="border-t border-border p-4">
+          <div className="flex items-center justify-between">
+            <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
+              Zur Website
+            </Link>
+            <LogoutButton />
+          </div>
+        </div>
+      )}
     </div>
   )
 
   return (
     <>
-      {/* Desktop sidebar — always visible on md+ */}
-      <aside className="hidden md:flex md:fixed md:left-0 md:top-0 md:z-40 md:h-screen md:w-64 md:flex-col md:border-r md:border-border md:bg-card">
-        {sidebarInner}
+      {/* Desktop sidebar — always visible on md+, collapsible to an icon rail */}
+      <aside
+        className={cn(
+          'hidden md:flex md:fixed md:left-0 md:top-0 md:z-40 md:h-screen md:flex-col md:border-r md:border-border md:bg-card transition-[width] duration-300',
+          collapsed ? 'md:w-16' : 'md:w-64'
+        )}
+      >
+        {sidebarInner(collapsed, true)}
       </aside>
 
       {/* Mobile top header */}
@@ -82,7 +113,7 @@ export function AdminSidebar() {
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
-        {sidebarInner}
+        {sidebarInner(false, false)}
       </aside>
     </>
   )
