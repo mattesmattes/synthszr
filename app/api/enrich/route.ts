@@ -23,7 +23,7 @@ export const runtime = 'nodejs'
 // Projekt an anderer Stelle bereits nutzt (article-job-Route, 800s).
 export const maxDuration = 800
 
-// Bewusst ABWEICHEND von TAKE_MAX_SENTENCES (5, lib/claude/take-cap.ts) — das
+// Bewusst ABWEICHEND von TAKE_MAX_SENTENCES (4, lib/claude/take-cap.ts) — das
 // ist der Zielwert bei der Erst-Generierung, dieser hier gilt NUR fuer den
 // Enrich-Durchlauf (Betreiber-Korrektur 2026-08-31/09-01). Als benannte
 // Konstante statt Magic Number in der Prompt-Vorlage, damit eine spaetere
@@ -71,7 +71,7 @@ const SOFT_TIME_BUDGET_MS = 650_000
  *    Mattes-Schreibe-Skill (keine Gedankenstriche, keine "Nicht X, sondern
  *    Y"-Konstruktionen, keine toten KI-Uebergaenge).
  * Alle drei sind Code-Konstanten, nicht Teil des editierbaren DB-Prompts —
- * der globale TAKE_MAX_SENTENCES-Cap (5) fuer die normale Ghostwriter-
+ * der globale TAKE_MAX_SENTENCES-Cap (4) fuer die normale Ghostwriter-
  * Generierung bleibt unangetastet, das hier gilt nur innerhalb von Enrich.
  *
  * WICHTIG fuer buildSectionMessage: Der Regelblock ist ABSICHTLICH NICHT

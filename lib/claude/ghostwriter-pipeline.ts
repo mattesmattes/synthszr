@@ -326,7 +326,7 @@ SCHREIBSTIL:
 - Einschübe in Klammern für beiläufige Kommentare (so wie hier).
 - Humor durch Präzision, nicht durch Witze.
 
-LÄNGE & TIEFE: Schreibe ausführlich und konkret, nicht telegrammartig. Führe ein Argument zu Ende, statt drei nur anzureißen. Keine Verknappung auf Stichworte oder Halbsätze — der Take ist ein durchdachter Absatz, kein Tweet. GENAU 5 vollständige Sätze, freier Fluss — nicht sechs, nicht sieben. Ein sechster Satz wird nach der Generierung abgeschnitten, also führe dein Argument INNERHALB von fünf Sätzen zu Ende. Der letzte Satz zeigt eine prägnante Haltung, die für sich allein stehen kann.
+FORM DES TAKES (hart, wird nach der Generierung geprüft): 50 bis 75 Wörter in drei bis vier Sätzen, ein Absatz. Kein Satz über 25 Wörter, im Schnitt unter 18; mindestens ein Satz unter acht Wörtern. Höchstens EIN Doppelpunkt im ganzen Take, keine Semikolon-Ketten, höchstens ein Komma-Einschub je Satz. Führe EIN Argument zu Ende, statt drei anzureißen; keine Verknappung auf Stichworte, aber auch kein Schachtelsatz. Der letzte Satz ist die Konsequenz oder der Prüfstein, nie ein Motto. Was über das Budget hinausgeht, wird abgeschnitten — also keine Reserve-Sätze anhängen.
 
 ÜBERSCHRIFT — JOURNALISTISCH UND POINTIERT (du schreibst sie SELBST, NICHT aus dem Themen-Hinweis übernehmen):
 Eine echte Artikel-Überschrift auf DEUTSCH. Sie benennt ZUERST die Kernaussage der News — wer tut was, oder was ist passiert — so klar, dass der Leser das Thema allein aus der Überschrift versteht, OHNE den Text zu lesen. Konkret statt kryptisch: Namen, Zahlen und das eigentliche Ereignis gehören hinein. Eine dezente Zuspitzung oder Pointe am Ende ist willkommen, aber NIE auf Kosten der Klarheit. Max ~90 Zeichen.
@@ -370,7 +370,7 @@ SO JA (nüchtern, Kern zuerst, attribuiert):
    BEISPIEL: {OpenAI} {Anthropic} → [Techmeme](https://techmeme.com)
    Max 3 Company-Tags. Falls KEINE Quelle: nur Tags, kein Pfeil/Quellenname.
    WICHTIG: Quelle NUR in dieser Zeile.
-4. SYNTHSZR TAKE: "Synthszr Take:" + GENAU 5 Sätze freier Fluss mit klarer Haltung. Wenn im User-Prompt ein BLICKWINKEL vorgegeben ist, führe den Take aus GENAU dieser Perspektive und wiederhole nicht die offensichtliche, naheliegende Kern-These der News.`
+4. SYNTHSZR TAKE: "Synthszr Take:" + 50 bis 75 Wörter in drei bis vier Sätzen (FORM DES TAKES oben) mit klarer Haltung. Wenn im User-Prompt ein BLICKWINKEL vorgegeben ist, führe den Take aus GENAU dieser Perspektive und wiederhole nicht die offensichtliche, naheliegende Kern-These der News.`
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pass 1: Article Planning
@@ -719,15 +719,15 @@ BÜNDEL-MODUS (überschreibt die EIN-Thema-Regel oben):
 - Dieser Abschnitt ist ein ausführlicher Leitartikel, der MEHRERE Quellen zusammenfasst. Anders als bei einer Einzelmeldung führst du hier ALLE Quellen redundanzfrei zusammen: decke JEDEN unterschiedlichen Aspekt ab, wiederhole Redundantes NICHT.
 - Die Zusammenfassung darf ausführlicher sein (bis zu ~${maxSentences} Sätze), bleibt aber ein NÜCHTERNER Bericht ohne Wertung. Jede Wertung gehört in den Synthszr Take.
 - Gliedere diese längere Zusammenfassung in MEHRERE Absätze, getrennt durch eine Leerzeile: pro thematischem Block bzw. Aspekt/Quelle ein eigener Absatz (Richtwert 3-6 Sätze je Absatz). KEIN einziger Textblock über viele Sätze — der Leitartikel muss durch Absätze gegliedert und lesbar sein. Nur die Zusammenfassung wird so gegliedert; der Synthszr Take bleibt EIN Absatz.
-- DER SYNTHSZR TAKE IST GENAU SO LANG WIE IN JEDEM ANDEREN ABSCHNITT: 5 Sätze, ein Absatz, nicht mehr. Er wächst NICHT mit der Zahl der Quellen und NICHT mit der Länge der Zusammenfassung darüber.
-- Das ist die häufigste Abweichung in diesem Modus: Weil die Zusammenfassung hier bis zu ${maxSentences} Sätze hat, wirkt ein Take von fünf Sätzen daneben knapp — er ist es nicht, er ist richtig. Widerstehe dem Sog, den Take mitwachsen zu lassen. Ein sechster Satz ist bereits zu viel und wird abgeschnitten.
+- DER SYNTHSZR TAKE HAT DIESELBE FORM WIE IN JEDEM ANDEREN ABSCHNITT: 50 bis 75 Wörter, drei bis vier Sätze, ein Absatz. Er wächst NICHT mit der Zahl der Quellen und NICHT mit der Länge der Zusammenfassung darüber.
+- Das ist die häufigste Abweichung in diesem Modus: Weil die Zusammenfassung hier bis zu ${maxSentences} Sätze hat, wirkt ein Take von 60 Wörtern daneben knapp — er ist es nicht, er ist richtig. Widerstehe dem Sog, den Take mitwachsen zu lassen. Was über das Wortbudget hinausgeht, wird abgeschnitten.
 - Genau EIN Take mit EINEM Blickwinkel, nicht mehrere aneinandergereihte Takes zu den einzelnen Quellen. Mehr Quellen heißt nicht mehr Meinung, sondern dieselbe Haltung auf breiterer Grundlage.
 - Company-Tags wie gewohnt (max 3 relevanteste über alle Quellen), ABER gib KEINE Quellen-Pfeil-Zeile aus (kein "→ [Quelle](URL)"): die Quellenangaben (Haupt- und Nebenquellen) werden deterministisch nach der Generierung ergänzt.
 - NENNE DIE PUBLIKATIONEN NICHT IM FLIESSTEXT. Keine Wendungen wie "wie TechCrunch berichtet", "laut Reuters", "einem Bericht der Financial Times zufolge". Der Abschnitt fasst mehrere Quellen zusammen; würde jede beim Namen genannt, zerfiele der Text in eine Aufzählung von Presseschauen. Die Quellenangaben stehen ohnehin vollständig unter dem Abschnitt.
 - Schreibe stattdessen die SACHE: nicht "TechCrunch berichtet, dass Amazon Twitch-Streams zum Training nutzt", sondern "Amazon nutzt Twitch-Streams zum Training". Wo sich Quellen widersprechen oder eine etwas exklusiv meldet, genügt eine unpersönliche Zuschreibung ("nach Angaben von Insidern", "in einem Fall wird von … berichtet").`
 }
 
-function buildBundleSystemPrompt(bundleType: BundleType): string {
+export function buildBundleSystemPrompt(bundleType: BundleType): string {
   return SECTION_SYSTEM_PROMPT + buildBundleSystemAddendum(bundleType)
 }
 
@@ -1112,7 +1112,7 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   // "Wer …"-Schlussfigur deterministisch durchsetzen (wie writeSection).
   withSources = await enforceTakeEnding(withSources, (take) => rewriteWerEnding(take))
 
-  // Take hart auf fünf Sätze — NACH dem Umschreiben der Schlussfigur, sonst
+  // Take hart auf das Wortbudget — NACH dem Umschreiben der Schlussfigur, sonst
   // arbeitete diese an einem Satz, der gleich wegfällt. Gerade hier nötig: Über
   // dem Take stehen bis zu 25 Sätze Zusammenfassung, und das Modell lässt ihn
   // danebenstehend mitwachsen, trotz ausdrücklicher Anweisung im Prompt.

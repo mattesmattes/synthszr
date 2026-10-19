@@ -1,7 +1,13 @@
 /**
- * Der Synthszr Take wird hart auf fünf Sätze gekürzt.
+ * Der Synthszr Take wird hart auf das Wortbudget gekürzt — in ganzen Sätzen.
  *
  * BETREIBER-VORGABE 2026-08-14: „Cutte den Take hart auf 5 Sätze, keine 7."
+ * STUFE 1 DER TAKE-REFORM 2026-10-19: Befund aus 183 veröffentlichten Takes —
+ * p50 drei Sätze à 24 Wörter, 16 % der Sätze über 30 Wörter. Eine Satzzahl
+ * begrenzt keine Länge, sie verlängert die Sätze. Deshalb jetzt ein Wortbudget
+ * (TAKE_MAX_WORDS) als harte Decke über dem Prompt-Ziel von 50–75 Wörtern,
+ * dazu höchstens vier Sätze. Geschnitten wird weiterhin nur an Satzgrenzen,
+ * und mindestens ein Satz bleibt immer stehen.
  *
  * Die Prompt-Vorgabe allein reichte nicht. Im Bündel-Modus steht über dem Take
  * eine Zusammenfassung von bis zu 25 Sätzen, und daneben wirkt ein kurzer Take
@@ -15,7 +21,15 @@
  */
 
 /** Wie viele Sätze ein Take höchstens hat. */
-export const TAKE_MAX_SENTENCES = 5
+export const TAKE_MAX_SENTENCES = 4
+
+/** Harte Wortdecke (Prompt-Ziel 50–75); darüber fallen ganze Sätze von hinten weg. */
+export const TAKE_MAX_WORDS = 80
+
+/** Wörter eines Textes — Leerraum-Tokens, wie der Prompt sie zählt. */
+export function countWords(text: string): number {
+  return text.trim() ? text.trim().split(/\s+/).length : 0
+}
 
 /**
  * Abkürzungen, nach deren Punkt KEIN Satz endet.
@@ -82,7 +96,8 @@ export function splitSentences(text: string): string[] {
 const TAKE_MARKER = /(^|\n)(\*\*)?Synthszr Take:(\*\*)?\s*/i
 
 /**
- * Kürzt den Take eines Abschnitts auf {@link TAKE_MAX_SENTENCES} Sätze.
+ * Kürzt den Take eines Abschnitts auf {@link TAKE_MAX_SENTENCES} Sätze und
+ * {@link TAKE_MAX_WORDS} Wörter — von hinten, satzweise, mindestens ein Satz bleibt.
  *
  * NUR den Take: Die Zusammenfassung darüber darf im Bündel bis zu 25 Sätze
  * haben und ist von der Grenze ausdrücklich nicht betroffen. Was nach dem Take
@@ -100,7 +115,11 @@ export function capTake(section: string): string {
   const danach = ende === -1 ? '' : restlicher.slice(ende)
 
   const saetze = splitSentences(takeText)
-  if (saetze.length <= TAKE_MAX_SENTENCES) return section
+  const behalten = [...saetze]
+  while (behalten.length > 1 && (behalten.length > TAKE_MAX_SENTENCES || countWords(behalten.join(' ')) > TAKE_MAX_WORDS)) {
+    behalten.pop()
+  }
+  if (behalten.length === saetze.length) return section
 
-  return section.slice(0, beginn) + saetze.slice(0, TAKE_MAX_SENTENCES).join(' ') + danach
+  return section.slice(0, beginn) + behalten.join(' ') + danach
 }
