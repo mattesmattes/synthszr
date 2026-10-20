@@ -152,12 +152,13 @@ streicht sonst den letzten Satz. Umgesetzt (alle in `lib/claude/`):
    `TAKE_MAX_WORDS` 80. Die anfänglichen Vorgaben (drei bis vier Sätze, Satz
    unter acht Wörtern, Satzlängen, ein Doppelpunkt) erzeugten Stakkato nach
    Schablone und sind gestrichen.
-2. **Skelett** (`ghostwriter-pipeline.ts`): Mechanismus → Konsequenz (benannter
-   Akteur, Größenordnung, Zeitraum) → Prüfstein; Prognosen nur mit Datum oder
-   Messgröße; Blickwinkel im Plan aus sieben Typen (`TAKE_ANGLE_TYPES`,
-   `TAKE_ANGLE_RULES`), Auftakt „Der/Die/Das eigentliche …“ verboten. Die
-   Skelett-Wörter „Mechanismus“, „Konsequenz“, „Prüfstein“ dürfen nicht im
-   Text stehen (am ersten Tag stand „Prüfstein ist …“ in 12 von 22 Takes).
+2. **Blickwinkel** (`ghostwriter-pipeline.ts`): Blickwinkel im Plan aus sieben
+   Typen (`TAKE_ANGLE_TYPES`, `TAKE_ANGLE_RULES`), Auftakt „Der/Die/Das
+   eigentliche …“ verboten. Das ursprüngliche Skelett (Mechanismus →
+   Konsequenz → Prüfstein, Prognosen nur mit Datum oder Messgröße,
+   Skelett-Wörter nicht im Text) hat der Betreiber am 2026-10-20 aus beiden
+   Prompts gestrichen, ebenso den Satz „QUELLMATERIAL-SICHERHEIT“ im
+   Take-Prompt.
 3. **Vorbilder** (`lib/posts/take-exemplars.ts`): drei eigene veröffentlichte
    Takes aus den sechs thematisch nächsten Posts (gleicher
    `match_generated_posts`-Aufruf wie der historische Kontext), bewertet nach
@@ -168,9 +169,11 @@ streicht sonst den letzten Satz. Umgesetzt (alle in `lib/claude/`):
    Blickwinkel, Vorbildern und Quellenauszug. Der System-Prompt trägt die
    Stimme aus dem Skill `~/.claude/skills/mattes-schreibe/SKILL.md`, gespiegelt
    in `lib/claude/mattes-voice.ts` (Skill ist Quelle der Wahrheit, Änderungen
-   dort nachziehen). `validateTake` prüft Wortbudget, Skelett-Wörter, Zahlen
-   gegen Zusammenfassung/Quelle, Prognosen ohne Prüfstein, verbotene Auftakte,
-   Gedankenstriche und „Wer“-Schluss (keine Satzstruktur); bei Verstoß genau ein
+   dort nachziehen; auf Betreiber-Wunsch vom 2026-10-20 NICHT übernommen:
+   Verkürzungen, Satzlänge variieren, Konkret sein, Unsicherheit markieren,
+   Referenztexte, Schnell-Check). `validateTake` prüft Wortbudget, Zahlen
+   gegen Zusammenfassung/Quelle, verbotene Auftakte, Gedankenstriche und
+   „Wer“-Schluss (keine Satzstruktur, kein Skelett); bei Verstoß genau ein
    Korrekturlauf mit den konkreten Problemen, danach die Fassung mit weniger
    Problemen; scheitert der Aufruf, bleibt der Take des Abschnitts-Aufrufs.
    Läuft vor Lektorat, `capTake` und „Wer“-Rewrite (Sicherheitsnetz).

@@ -330,12 +330,6 @@ SCHREIBSTIL:
 
 FORM DES TAKES (hart, wird nach der Generierung geprüft): 50 bis 75 Wörter, ein Absatz. Satzbau, Satzzahl und Rhythmus sind frei (Betreiber-Vorgabe): schreib, wie der SCHREIBSTIL unten es verlangt, und nicht in jedem Take nach demselben Muster. Führe EIN Argument zu Ende, statt drei anzureißen; keine Verknappung auf Stichworte, aber auch kein Schachtelsatz. Der letzte Satz ist die Konsequenz oder der Prüfstein, nie ein Motto. Was über das Budget hinausgeht, wird abgeschnitten — also keine Reserve-Sätze anhängen.
 
-TAKE-SKELETT (unsichtbar, aber vollständig — ein Take ohne alle drei Teile ist durchgefallen):
-(1) MECHANISMUS: Warum passiert das? Welcher Anreiz, welche Kostenstruktur, welcher Engpass treibt die Akteure. Nicht WAS passiert (das steht in der Zusammenfassung), sondern WARUM.
-(2) KONSEQUENZ: Wer gewinnt oder verliert dadurch — benannt, mit Größenordnung aus der Quelle und Zeitraum. „Der Markt", „die Branche", „das System" sind keine Akteure.
-(3) PRÜFSTEIN: Woran sich in den nächsten Wochen oder Monaten zeigt, ob die These stimmt — eine Zahl, ein Datum, ein Ereignis, das eintreten oder ausbleiben muss.
-Der letzte Satz ist der Prüfstein oder die Konsequenz. Die Wörter „Mechanismus", „Konsequenz", „Prüfstein" stehen nicht im Text, sie sind Bauplan, kein Vokabular: Der Prüfstein steht als konkrete Beobachtung („Bis Jahresende zeigt sich, ob …"), nie als Etikett. Eine Prognose steht nur mit Datum oder Messgröße im Take („bis zum zweiten Quartal", „unter zehn Dollar je Million Token"), nie als freischwebendes „wird". Ein Take, der nur wiederholt, was die Zusammenfassung sagt, und Haltung obendrauf legt, ist kein Take.
-
 ÜBERSCHRIFT — JOURNALISTISCH UND POINTIERT (du schreibst sie SELBST, NICHT aus dem Themen-Hinweis übernehmen):
 Eine echte Artikel-Überschrift auf DEUTSCH. Sie benennt ZUERST die Kernaussage der News — wer tut was, oder was ist passiert — so klar, dass der Leser das Thema allein aus der Überschrift versteht, OHNE den Text zu lesen. Konkret statt kryptisch: Namen, Zahlen und das eigentliche Ereignis gehören hinein. Eine dezente Zuspitzung oder Pointe am Ende ist willkommen, aber NIE auf Kosten der Klarheit. Max ~90 Zeichen.
 SO KLINGT ES RICHTIG (Technik, nicht wörtlich übernehmen — informativ, dann evtl. Pointe):
@@ -653,7 +647,7 @@ export async function writeSection(
   // Dynamic per-item prompt only — format template + checkliste are in SECTION_SYSTEM_PROMPT,
   // vocabulary + edit learning + thesis are in cacheableUserPrefix
   const angleBlock = context.takeAngle
-    ? `\n\nBLICKWINKEL FÜR DEN TAKE (nur den Take, nicht die Zusammenfassung; der Typ vor dem Doppelpunkt ist die analytische Linse, der Take folgt ihr durch Mechanismus, Konsequenz und Prüfstein): ${context.takeAngle}`
+    ? `\n\nBLICKWINKEL FÜR DEN TAKE (nur den Take, nicht die Zusammenfassung; der Typ vor dem Doppelpunkt ist die analytische Linse): ${context.takeAngle}`
     : ''
   const userPrompt = `NACHRICHTENKERN (Original-Schlagzeile der Quelle — nüchterne Faktengrundlage, oft englisch; forme daraus deine EIGENE journalistisch präzise deutsche Überschrift nach den ÜBERSCHRIFT-Regeln, KEINE Formulierung wörtlich übernehmen und NICHT ins Kryptische zuspitzen): ${item.title}${angleBlock}
 
@@ -1155,7 +1149,7 @@ export async function writeBundleSection(
   ])
 
   const angleBlock = context.takeAngle
-    ? `\n\nBLICKWINKEL FÜR DEN TAKE (nur den Take, nicht die Zusammenfassung; der Typ vor dem Doppelpunkt ist die analytische Linse, der Take folgt ihr durch Mechanismus, Konsequenz und Prüfstein): ${context.takeAngle}`
+    ? `\n\nBLICKWINKEL FÜR DEN TAKE (nur den Take, nicht die Zusammenfassung; der Typ vor dem Doppelpunkt ist die analytische Linse): ${context.takeAngle}`
     : ''
   // Aus der zentralen Label-Tabelle, nicht als Zweiweg-Abfrage: Mit „Deep Dive"
   // als drittem Typ hätte ein `=== 'topic' ? … : 'Nachlese'` dort still

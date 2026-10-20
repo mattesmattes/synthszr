@@ -3,8 +3,9 @@
  * deterministischer Prüfung. Der Abschnitts-Aufruf schreibt Überschrift und
  * Zusammenfassung; der Take entsteht in einem zweiten Aufruf aus der fertigen
  * Zusammenfassung, dem Blickwinkel und den Vorbildern, wird geprüft
- * (Wortbudget, Satzlängen, belegte Zahlen, Prognose nur mit Prüfstein,
- * verbotene Auftakte) und bei Verstoß genau einmal gezielt umgeschrieben.
+ * (Wortbudget, belegte Zahlen, verbotene Auftakte; Skelett- und Prognose-Regel
+ * am 2026-10-20 auf Betreiber-Wunsch gestrichen) und bei Verstoß genau einmal
+ * gezielt umgeschrieben.
  */
 import { describe, expect, it, vi } from 'vitest'
 import { TAKE_SYSTEM_PROMPT, buildTakeUserPrompt, validateTake, replaceTake, writeTake, summaryForTakePass } from '@/lib/claude/take-pass'
@@ -28,9 +29,9 @@ describe('validateTake', () => {
     expect(validateTake(`${lang(1)} ${lang(2)} ${lang(3)}`, FACTS).problems.filter((x) => /Sätze|lange|Doppelpunkt|Satz über/.test(x))).toEqual([])
   })
 
-  it('meldet Skelett-Woerter im Text — „Prüfstein" ist Bauplan, kein Vokabular', () => {
+  it('kennt kein Skelett mehr: „Prüfstein" als Wort ist kein Fehler (Betreiber 2026-10-20)', () => {
     const r = validateTake('Nvidia zahlt 12,9 Milliarden Dollar für Distribution. AMD verliert zuerst, wahrscheinlich schon im ersten Quartal. Prüfstein ist der Anteil fremder Checkpoints: Fällt er unter 41 Prozent, hat sich der Kauf gelohnt.', FACTS)
-    expect(r.problems.join(' ')).toMatch(/Skelett-Wort/)
+    expect(r.problems.join(' ')).not.toMatch(/Skelett-Wort/)
   })
 
   it('meldet nur das Wortbudget, keine Satzzahl', () => {
@@ -47,9 +48,9 @@ describe('validateTake', () => {
     expect(r.problems.join(' ')).toMatch(/Zahl ohne Beleg: 30/)
   })
 
-  it('meldet Prognosen ohne Datum oder Messgroesse', () => {
+  it('prueft Prognosen nicht mehr (Prüfstein-Regel mit dem Skelett gestrichen, 2026-10-20)', () => {
     const r = validateTake('Nvidia kauft Distribution für 12,9 Milliarden Dollar. Das wird den Markt verändern. Kurz gesagt. Alle werden folgen.', FACTS)
-    expect(r.problems.join(' ')).toMatch(/Prognose ohne Prüfstein/)
+    expect(r.problems.join(' ')).not.toMatch(/Prognose/)
   })
 
   it('meldet verbotene Auftakte und die Wer-Schlussfigur', () => {
@@ -80,22 +81,22 @@ describe('buildTakeUserPrompt / TAKE_SYSTEM_PROMPT', () => {
     for (const needle of ['H', 'Zusammenfassung S.', 'Quelle Q.', 'Engpass: X', 'SO SCHREIBT MATTES', 'MATTES-KONTEXT']) expect(u).toContain(needle)
   })
 
-  it('System-Prompt traegt Form, Skelett und Verbote und verlangt nur den Absatz', () => {
+  it('System-Prompt traegt Form und Verbote, aber kein Skelett und keine Quellmaterial-Sicherheit (Betreiber 2026-10-20)', () => {
     expect(TAKE_SYSTEM_PROMPT).toMatch(/50 bis 75 Wörter/)
-    expect(TAKE_SYSTEM_PROMPT).toMatch(/MECHANISMUS/)
-    expect(TAKE_SYSTEM_PROMPT).toMatch(/PRÜFSTEIN/)
+    expect(TAKE_SYSTEM_PROMPT).not.toMatch(/SKELETT|MECHANISMUS|PRÜFSTEIN|QUELLMATERIAL-SICHERHEIT/)
     expect(TAKE_SYSTEM_PROMPT).toMatch(/Das ist kein X, sondern Y/)
     expect(TAKE_SYSTEM_PROMPT).toMatch(/ohne "Synthszr Take:"/)
   })
 
   it('System-Prompt traegt die Stimme aus dem Skill mattes-schreibe und keine Stakkato-Vorgaben (2026-10-20)', () => {
     expect(TAKE_SYSTEM_PROMPT).toContain(MATTES_VOICE_RULES)
-    for (const needle of ['Natürliche Verkürzungen', 'Satzlänge variieren', 'Nie drei lange Sätze hintereinander', 'Humor durch Präzision', 'Einschübe in Klammern', 'Unsicherheit klar markieren']) {
+    for (const needle of ['Humor durch Präzision', 'Einschübe in Klammern', 'Der große Fehler (FATAL)']) {
       expect(TAKE_SYSTEM_PROMPT).toContain(needle)
     }
+    // Vom Betreiber am 2026-10-20 aus dem Take-Prompt gestrichen:
+    expect(TAKE_SYSTEM_PROMPT).not.toMatch(/Natürliche Verkürzungen|Satzlänge variieren|Nie drei lange Sätze|Konkret sein, nicht abstrakt|Cotti Coffee|Unsicherheit klar markieren|So klingt es richtig|So nicht:|Schnell-Check/)
     expect(TAKE_SYSTEM_PROMPT).not.toMatch(/unter acht Wörtern|Kein Satz über|drei bis vier Sätzen|Höchstens EIN Doppelpunkt/)
     expect(TAKE_SYSTEM_PROMPT).toMatch(/Satzbau, Satzzahl und Rhythmus sind frei/)
-    expect(TAKE_SYSTEM_PROMPT).toMatch(/„Mechanismus", „Konsequenz", „Prüfstein"[^.]*nicht im Text/)
   })
 })
 
