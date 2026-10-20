@@ -8,33 +8,42 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import { TAKE_SYSTEM_PROMPT, buildTakeUserPrompt, validateTake, replaceTake, writeTake, summaryForTakePass } from '@/lib/claude/take-pass'
+import { MATTES_VOICE_RULES } from '@/lib/claude/mattes-voice'
 
 const FACTS = 'Nvidia kauft Hugging Face für 12,9 Milliarden Dollar. Die Plattform hat 41 Prozent Download-Anteil bei offenen Modellen. Der Abschluss ist für das erste Quartal geplant.'
-const GOOD = 'Nvidia zahlt 12,9 Milliarden Dollar für Distribution, nicht für Modelle. Wer Gewichte verteilt, bestimmt die Standardlaufzeit, und die liegt künftig auf CUDA. AMD und die Cloud-Kataloge verlieren zuerst. Der Prüfstein kommt im ersten Quartal: Fällt der Anteil fremder Checkpoints unter 41 Prozent, ist der Kauf aufgegangen.'
+const GOOD = 'Nvidia zahlt 12,9 Milliarden Dollar für Distribution, nicht für Modelle. Wer Gewichte verteilt, bestimmt die Standardlaufzeit, und die liegt künftig auf CUDA. AMD und die Cloud-Kataloge verlieren zuerst. Im ersten Quartal zeigt sich, ob es aufgeht: Fällt der Anteil fremder Checkpoints unter 41 Prozent, hat Nvidia die Distribution gekauft.'
+
+const FLOWING = 'Nvidia zahlt 12,9 Milliarden Dollar für Distribution, nicht für Modelle. Wer Gewichte verteilt, bestimmt die Standardlaufzeit, und die liegt künftig auf CUDA. Verlierer sind AMD und die Cloud-Anbieter mit eigenen Modell-Katalogen, wahrscheinlich schon im ersten Quartal. Ob der Kauf aufgeht, zeigt sich am Anteil fremder Checkpoints: fällt er unter 41 Prozent, hat Nvidia die Distribution gekauft.'
 
 describe('validateTake', () => {
   it('nimmt einen Take in Zielform an', () => {
     expect(validateTake(GOOD, FACTS)).toEqual({ ok: true, problems: [] })
   })
 
-  it('meldet Wortbudget und Satzzahl', () => {
+  it('macht keine Vorgaben zum Satzbau (Betreiber 2026-10-20): fliessend, sechs kurze oder drei lange Saetze sind gleich gueltig', () => {
+    expect(validateTake(FLOWING, FACTS)).toEqual({ ok: true, problems: [] })
+    const kurz = 'Nvidia kauft Distribution. 12,9 Milliarden Dollar dafür. AMD verliert zuerst. Die Cloud-Kataloge auch. Im ersten Quartal zeigt sich mehr. Fällt der Anteil fremder Checkpoints unter 41 Prozent, hat es sich gelohnt, wahrscheinlich sogar schnell.'
+    expect(validateTake(kurz, FACTS)).toEqual({ ok: true, problems: [] })
+    const lang = (n: number) => `Satz ${n} führt eine Beobachtung über die Distribution von Modellgewichten ausführlich aus, nennt 41 Prozent und bleibt dabei im Budget: so geht das.`
+    expect(validateTake(`${lang(1)} ${lang(2)} ${lang(3)}`, FACTS).problems.filter((x) => /Sätze|lange|Doppelpunkt|Satz über/.test(x))).toEqual([])
+  })
+
+  it('meldet Skelett-Woerter im Text — „Prüfstein" ist Bauplan, kein Vokabular', () => {
+    const r = validateTake('Nvidia zahlt 12,9 Milliarden Dollar für Distribution. AMD verliert zuerst, wahrscheinlich schon im ersten Quartal. Prüfstein ist der Anteil fremder Checkpoints: Fällt er unter 41 Prozent, hat sich der Kauf gelohnt.', FACTS)
+    expect(r.problems.join(' ')).toMatch(/Skelett-Wort/)
+  })
+
+  it('meldet nur das Wortbudget, keine Satzzahl', () => {
     const lang = Array.from({ length: 6 }, (_, i) => `Satz ${i + 1} mit einigen weiteren Worten und zusätzlichen Füllungen und der Zahl 41 Prozent darin, wirklich.`).join(' ')
     const r = validateTake(lang, FACTS)
     expect(r.ok).toBe(false)
-    expect(r.problems.join(' ')).toMatch(/Wörter/)
-    expect(r.problems.join(' ')).toMatch(/Sätze/)
-  })
-
-  it('meldet Schachtelsaetze, fehlenden kurzen Satz und zu viele Doppelpunkte', () => {
-    const t = 'Nvidia zahlt 12,9 Milliarden Dollar, und das ist eine Summe, die zeigt, wie sehr der Konzern die Distribution offener Modelle inzwischen als strategischen Engpass begreift: Distribution: das ist der Hebel. Der zweite Satz ist ebenfalls lang genug, um die Grenze von fünfundzwanzig Wörtern deutlich zu reißen, weil er einfach nicht aufhören will. Dritter Satz mit 41 Prozent und mehreren Wörtern dazu.'
-    const r = validateTake(t, FACTS)
-    expect(r.problems.join(' ')).toMatch(/über 25 Wörter/)
-    expect(r.problems.join(' ')).toMatch(/unter 8 Wörtern/)
-    expect(r.problems.join(' ')).toMatch(/Doppelpunkt/)
+    expect(r.problems.join(' ')).toMatch(/zu lang: \d+ Wörter/)
+    expect(r.problems.join(' ')).not.toMatch(/Sätze/)
+    expect(validateTake('Zu kurz mit 41 Prozent.', FACTS).problems.join(' ')).toMatch(/zu kurz/)
   })
 
   it('meldet Zahlen ohne Beleg in Zusammenfassung oder Quelle', () => {
-    const r = validateTake('Nvidia zahlt 30 Milliarden Dollar. Das ist zu viel. Der Prüfstein kommt im ersten Quartal mit 41 Prozent.', FACTS)
+    const r = validateTake('Nvidia zahlt 30 Milliarden Dollar. Das ist zu viel. Der Anteil fremder Checkpoints entscheidet im ersten Quartal mit 41 Prozent.', FACTS)
     expect(r.problems.join(' ')).toMatch(/Zahl ohne Beleg: 30/)
   })
 
@@ -77,6 +86,16 @@ describe('buildTakeUserPrompt / TAKE_SYSTEM_PROMPT', () => {
     expect(TAKE_SYSTEM_PROMPT).toMatch(/PRÜFSTEIN/)
     expect(TAKE_SYSTEM_PROMPT).toMatch(/Das ist kein X, sondern Y/)
     expect(TAKE_SYSTEM_PROMPT).toMatch(/ohne "Synthszr Take:"/)
+  })
+
+  it('System-Prompt traegt die Stimme aus dem Skill mattes-schreibe und keine Stakkato-Vorgaben (2026-10-20)', () => {
+    expect(TAKE_SYSTEM_PROMPT).toContain(MATTES_VOICE_RULES)
+    for (const needle of ['Natürliche Verkürzungen', 'Satzlänge variieren', 'Nie drei lange Sätze hintereinander', 'Humor durch Präzision', 'Einschübe in Klammern', 'Unsicherheit klar markieren']) {
+      expect(TAKE_SYSTEM_PROMPT).toContain(needle)
+    }
+    expect(TAKE_SYSTEM_PROMPT).not.toMatch(/unter acht Wörtern|Kein Satz über|drei bis vier Sätzen|Höchstens EIN Doppelpunkt/)
+    expect(TAKE_SYSTEM_PROMPT).toMatch(/Satzbau, Satzzahl und Rhythmus sind frei/)
+    expect(TAKE_SYSTEM_PROMPT).toMatch(/„Mechanismus", „Konsequenz", „Prüfstein"[^.]*nicht im Text/)
   })
 })
 

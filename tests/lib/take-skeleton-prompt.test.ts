@@ -19,6 +19,10 @@ describe('SECTION_SYSTEM_PROMPT — analytisches Skelett', () => {
     expect(SECTION_SYSTEM_PROMPT).toMatch(/Prognose[^.]*nur mit[^.]*(Datum|Messgröße)/)
   })
 
+  it('haelt die Skelett-Woerter aus dem Text heraus', () => {
+    expect(SECTION_SYSTEM_PROMPT).toMatch(/„Mechanismus", „Konsequenz", „Prüfstein"[^.]*nicht im Text/)
+  })
+
   it('verbietet den Auftakt „Der/Die/Das eigentliche …"', () => {
     expect(SECTION_SYSTEM_PROMPT).toMatch(/Der\/Die\/Das eigentliche/)
   })

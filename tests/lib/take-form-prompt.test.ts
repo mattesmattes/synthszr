@@ -9,15 +9,10 @@ import { describe, expect, it } from 'vitest'
 import { SECTION_SYSTEM_PROMPT, buildBundleSystemPrompt } from '@/lib/claude/ghostwriter-pipeline'
 
 describe('SECTION_SYSTEM_PROMPT — Form des Takes', () => {
-  it('verlangt 50 bis 75 Woerter in drei bis vier Saetzen', () => {
+  it('verlangt 50 bis 75 Woerter und sonst nichts zur Satzstruktur (Betreiber 2026-10-20)', () => {
     expect(SECTION_SYSTEM_PROMPT).toMatch(/50 bis 75 Wörter/)
-    expect(SECTION_SYSTEM_PROMPT).toMatch(/drei bis vier Sätze/)
-  })
-
-  it('begrenzt Satzlaenge und Doppelpunkte', () => {
-    expect(SECTION_SYSTEM_PROMPT).toMatch(/Kein Satz über 25 Wörter/)
-    expect(SECTION_SYSTEM_PROMPT).toMatch(/mindestens ein Satz unter acht Wörtern/)
-    expect(SECTION_SYSTEM_PROMPT).toMatch(/Höchstens EIN Doppelpunkt/)
+    expect(SECTION_SYSTEM_PROMPT).toMatch(/Satzbau, Satzzahl und Rhythmus sind frei/)
+    expect(SECTION_SYSTEM_PROMPT).not.toMatch(/drei bis vier Sätze|Kein Satz über|unter acht Wörtern|Höchstens EIN Doppelpunkt|Nie drei lange Sätze/)
   })
 
   it('verlangt die fuenf Saetze nirgends mehr', () => {
@@ -30,6 +25,7 @@ describe('Buendel-Prompt — Take-Form', () => {
   it('haelt den Take auch im Buendel auf dem Wortbudget und nennt keine fuenf Saetze', () => {
     const p = buildBundleSystemPrompt('topic')
     expect(p).toMatch(/50 bis 75 Wörter/)
+    expect(p).not.toMatch(/drei bis vier Sätze/)
     expect(p).not.toMatch(/(^|[^0-9])5 Sätze/)   // „25 Sätze" der Zusammenfassung bleibt erlaubt
     expect(p).not.toMatch(/fünf Sätzen/)
   })

@@ -12,7 +12,7 @@
  * grammatisch aussieht.
  */
 import { describe, expect, it } from 'vitest'
-import { splitSentences, capTake, TAKE_MAX_SENTENCES, TAKE_MAX_WORDS } from '@/lib/claude/take-cap'
+import { splitSentences, capTake, TAKE_MAX_WORDS } from '@/lib/claude/take-cap'
 
 describe('splitSentences', () => {
   it('trennt gewoehnliche Saetze', () => {
@@ -47,12 +47,9 @@ describe('capTake', () => {
   const take = (n: number) =>
     'Synthszr Take: ' + Array.from({ length: n }, (_, i) => `Satz Nummer ${i + 1} steht hier.`).join(' ')
 
-  it('kuerzt auf vier Saetze (Stufe 1, 2026-10-19: Wortbudget statt fuenf Saetze)', () => {
-    expect(TAKE_MAX_SENTENCES).toBe(4)
-    const out = capTake(take(8))
-    expect(splitSentences(out.replace(/^Synthszr Take:\s*/, ''))).toHaveLength(4)
-    expect(out).toContain('Satz Nummer 4')
-    expect(out).not.toContain('Satz Nummer 5')
+  it('kuerzt NICHT nach Satzzahl — acht kurze Saetze im Wortbudget bleiben (Betreiber 2026-10-20: keine Satzstrukturvorgaben)', () => {
+    const acht = take(8) // 8 × 5 = 40 Woerter
+    expect(capTake(acht)).toBe(acht)
   })
 
   it('kuerzt auf das Wortbudget, immer in ganzen Saetzen', () => {

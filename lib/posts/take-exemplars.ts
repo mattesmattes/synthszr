@@ -121,7 +121,7 @@ export function formatExemplarTakesForPrompt(takes: ExemplarCandidate[]): string
   return [
     'SO SCHREIBT MATTES SEINE TAKES (veröffentlichte Beispiele zu verwandten Themen — übernimm Haltung, Dichte und Satzbau, NICHT die Formulierungen, Zahlen oder Pointen; dein Take handelt von DIESER News):',
     ...lines,
-    'Die Beispiele zeigen die Zielform: ein Mechanismus, eine benannte Konsequenz, ein Prüfstein, kurze Sätze. Längere Beispiele sind älter — halte dich an das Wortbudget.',
+    'Die Beispiele zeigen die Zielform: ein Grund, eine benannte Folge, ein Punkt, an dem sich die These prüfen lässt, und ein wechselnder Satzrhythmus. Längere Beispiele sind älter, halte dich an das Wortbudget.',
   ].join('\n\n')
 }
 

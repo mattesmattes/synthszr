@@ -147,13 +147,18 @@ Sätze über 30 Wörter, 81 % Doppelpunkt-Pointe, 39 % Prognosen, Schlusssatz nu
 zu 22 % mit Zahl; der Betreiber übernimmt 96 % der behaltenen Takes wörtlich und
 streicht sonst den letzten Satz. Umgesetzt (alle in `lib/claude/`):
 1. **Form** (`take-cap.ts`): Prompt verlangt 50–75 Wörter in drei bis vier
-   Sätzen, keinen Satz über 25 Wörter, einen unter acht, höchstens einen
+   Sätzen, keinen Satz über 30 Wörter, wechselnden Satzrhythmus („nie drei
+   lange hintereinander“, kein Schablonen-Rhythmus), höchstens einen
    Doppelpunkt; `capTake` kürzt satzweise auf `TAKE_MAX_WORDS` 80 /
-   `TAKE_MAX_SENTENCES` 4.
+   `TAKE_MAX_SENTENCES` 4. Die anfängliche Pflicht „ein Satz unter acht
+   Wörtern“ erzeugte Stakkato nach Schablone (Betreiber-Befund 2026-10-20)
+   und ist gestrichen.
 2. **Skelett** (`ghostwriter-pipeline.ts`): Mechanismus → Konsequenz (benannter
    Akteur, Größenordnung, Zeitraum) → Prüfstein; Prognosen nur mit Datum oder
    Messgröße; Blickwinkel im Plan aus sieben Typen (`TAKE_ANGLE_TYPES`,
-   `TAKE_ANGLE_RULES`), Auftakt „Der/Die/Das eigentliche …“ verboten.
+   `TAKE_ANGLE_RULES`), Auftakt „Der/Die/Das eigentliche …“ verboten. Die
+   Skelett-Wörter „Mechanismus“, „Konsequenz“, „Prüfstein“ dürfen nicht im
+   Text stehen (am ersten Tag stand „Prüfstein ist …“ in 12 von 22 Takes).
 3. **Vorbilder** (`lib/posts/take-exemplars.ts`): drei eigene veröffentlichte
    Takes aus den sechs thematisch nächsten Posts (gleicher
    `match_generated_posts`-Aufruf wie der historische Kontext), bewertet nach
@@ -161,9 +166,13 @@ streicht sonst den letzten Satz. Umgesetzt (alle in `lib/claude/`):
    `idx:N`) und Zielform; Block „SO SCHREIBT MATTES SEINE TAKES“.
 4. **Eigener Take-Durchgang** (`take-pass.ts`, `applyTakePass`): zweiter
    Aufruf (Use Case `ghostwriter_take`, Thinking medium) aus Zusammenfassung,
-   Blickwinkel, Vorbildern und Quellenauszug; `validateTake` prüft Wortbudget,
-   Satzlängen, Doppelpunkte, Zahlen gegen Zusammenfassung/Quelle, Prognosen
-   ohne Prüfstein, verbotene Auftakte und „Wer“-Schluss; bei Verstoß genau ein
+   Blickwinkel, Vorbildern und Quellenauszug. Der System-Prompt trägt die
+   Stimme aus dem Skill `~/.claude/skills/mattes-schreibe/SKILL.md`, gespiegelt
+   in `lib/claude/mattes-voice.ts` (Skill ist Quelle der Wahrheit, Änderungen
+   dort nachziehen). `validateTake` prüft Wortbudget, Satzlängen (≤ 30, nie
+   drei lange in Folge), Doppelpunkte, Skelett-Wörter, Zahlen gegen
+   Zusammenfassung/Quelle, Prognosen ohne Prüfstein, verbotene Auftakte und
+   „Wer“-Schluss; bei Verstoß genau ein
    Korrekturlauf mit den konkreten Problemen, danach die Fassung mit weniger
    Problemen; scheitert der Aufruf, bleibt der Take des Abschnitts-Aufrufs.
    Läuft vor Lektorat, `capTake` und „Wer“-Rewrite (Sicherheitsnetz).
