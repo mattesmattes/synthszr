@@ -328,7 +328,7 @@ SCHREIBSTIL:
 - Einschübe in Klammern für beiläufige Kommentare (so wie hier).
 - Humor durch Präzision, nicht durch Witze.
 
-FORM DES TAKES (hart, wird nach der Generierung geprüft): 50 bis 75 Wörter in drei bis vier Sätzen, ein Absatz. Kein Satz über 30 Wörter; Satzlänge variieren: kurze, harte Sätze, dann längere, die eine Beobachtung ausführen. Nie drei lange Sätze hintereinander, und nicht in jedem Take dasselbe Muster. Höchstens EIN Doppelpunkt im ganzen Take, keine Semikolon-Ketten. Führe EIN Argument zu Ende, statt drei anzureißen; keine Verknappung auf Stichworte, aber auch kein Schachtelsatz. Der letzte Satz ist die Konsequenz oder der Prüfstein, nie ein Motto. Was über das Budget hinausgeht, wird abgeschnitten — also keine Reserve-Sätze anhängen.
+FORM DES TAKES (hart, wird nach der Generierung geprüft): 50 bis 75 Wörter, ein Absatz. Satzbau, Satzzahl und Rhythmus sind frei (Betreiber-Vorgabe): schreib, wie der SCHREIBSTIL unten es verlangt, und nicht in jedem Take nach demselben Muster. Führe EIN Argument zu Ende, statt drei anzureißen; keine Verknappung auf Stichworte, aber auch kein Schachtelsatz. Der letzte Satz ist die Konsequenz oder der Prüfstein, nie ein Motto. Was über das Budget hinausgeht, wird abgeschnitten — also keine Reserve-Sätze anhängen.
 
 TAKE-SKELETT (unsichtbar, aber vollständig — ein Take ohne alle drei Teile ist durchgefallen):
 (1) MECHANISMUS: Warum passiert das? Welcher Anreiz, welche Kostenstruktur, welcher Engpass treibt die Akteure. Nicht WAS passiert (das steht in der Zusammenfassung), sondern WARUM.
@@ -378,7 +378,7 @@ SO JA (nüchtern, Kern zuerst, attribuiert):
    BEISPIEL: {OpenAI} {Anthropic} → [Techmeme](https://techmeme.com)
    Max 3 Company-Tags. Falls KEINE Quelle: nur Tags, kein Pfeil/Quellenname.
    WICHTIG: Quelle NUR in dieser Zeile.
-4. SYNTHSZR TAKE: "Synthszr Take:" + 50 bis 75 Wörter in drei bis vier Sätzen (FORM DES TAKES oben) mit klarer Haltung. Wenn im User-Prompt ein BLICKWINKEL vorgegeben ist, führe den Take aus GENAU dieser Perspektive und wiederhole nicht die offensichtliche, naheliegende Kern-These der News.`
+4. SYNTHSZR TAKE: "Synthszr Take:" + 50 bis 75 Wörter (FORM DES TAKES oben) mit klarer Haltung. Wenn im User-Prompt ein BLICKWINKEL vorgegeben ist, führe den Take aus GENAU dieser Perspektive und wiederhole nicht die offensichtliche, naheliegende Kern-These der News.`
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pass 1: Article Planning
@@ -799,7 +799,7 @@ BÜNDEL-MODUS (überschreibt die EIN-Thema-Regel oben):
 - Dieser Abschnitt ist ein ausführlicher Leitartikel, der MEHRERE Quellen zusammenfasst. Anders als bei einer Einzelmeldung führst du hier ALLE Quellen redundanzfrei zusammen: decke JEDEN unterschiedlichen Aspekt ab, wiederhole Redundantes NICHT.
 - Die Zusammenfassung darf ausführlicher sein (bis zu ~${maxSentences} Sätze), bleibt aber ein NÜCHTERNER Bericht ohne Wertung. Jede Wertung gehört in den Synthszr Take.
 - Gliedere diese längere Zusammenfassung in MEHRERE Absätze, getrennt durch eine Leerzeile: pro thematischem Block bzw. Aspekt/Quelle ein eigener Absatz (Richtwert 3-6 Sätze je Absatz). KEIN einziger Textblock über viele Sätze — der Leitartikel muss durch Absätze gegliedert und lesbar sein. Nur die Zusammenfassung wird so gegliedert; der Synthszr Take bleibt EIN Absatz.
-- DER SYNTHSZR TAKE HAT DIESELBE FORM WIE IN JEDEM ANDEREN ABSCHNITT: 50 bis 75 Wörter, drei bis vier Sätze, ein Absatz. Er wächst NICHT mit der Zahl der Quellen und NICHT mit der Länge der Zusammenfassung darüber.
+- DER SYNTHSZR TAKE HAT DIESELBE FORM WIE IN JEDEM ANDEREN ABSCHNITT: 50 bis 75 Wörter, ein Absatz. Er wächst NICHT mit der Zahl der Quellen und NICHT mit der Länge der Zusammenfassung darüber.
 - Das ist die häufigste Abweichung in diesem Modus: Weil die Zusammenfassung hier bis zu ${maxSentences} Sätze hat, wirkt ein Take von 60 Wörtern daneben knapp — er ist es nicht, er ist richtig. Widerstehe dem Sog, den Take mitwachsen zu lassen. Was über das Wortbudget hinausgeht, wird abgeschnitten.
 - Genau EIN Take mit EINEM Blickwinkel, nicht mehrere aneinandergereihte Takes zu den einzelnen Quellen. Mehr Quellen heißt nicht mehr Meinung, sondern dieselbe Haltung auf breiterer Grundlage.
 - Company-Tags wie gewohnt (max 3 relevanteste über alle Quellen), ABER gib KEINE Quellen-Pfeil-Zeile aus (kein "→ [Quelle](URL)"): die Quellenangaben (Haupt- und Nebenquellen) werden deterministisch nach der Generierung ergänzt.

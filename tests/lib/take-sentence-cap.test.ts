@@ -93,18 +93,19 @@ describe('capTake', () => {
       '',
       Array.from({ length: 12 }, (_, i) => `Bericht ${i + 1}.`).join(' '),
       '',
-      take(8),
+      take(20), // 100 Woerter → Wortbudget 80 → 16 Saetze bleiben
     ].join('\n')
     const out = capTake(abschnitt)
     expect(out).toContain('Bericht 12.')
-    expect(out).not.toContain('Satz Nummer 6')
+    expect(out).toContain('Satz Nummer 16')
+    expect(out).not.toContain('Satz Nummer 17')
   })
 
   it('behaelt Markup hinter dem Take', () => {
-    const mitTags = take(7) + '\n\n{Nvidia}'
+    const mitTags = take(20) + '\n\n{Nvidia}'
     const out = capTake(mitTags)
     expect(out).toContain('{Nvidia}')
-    expect(out).not.toContain('Satz Nummer 6')
+    expect(out).not.toContain('Satz Nummer 17')
   })
 
   it('kommt mit fehlerhaftem Eingang klar', () => {

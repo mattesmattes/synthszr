@@ -5,8 +5,9 @@
  * STUFE 1 DER TAKE-REFORM 2026-10-19: Befund aus 183 veröffentlichten Takes —
  * p50 drei Sätze à 24 Wörter, 16 % der Sätze über 30 Wörter. Eine Satzzahl
  * begrenzt keine Länge, sie verlängert die Sätze. Deshalb jetzt ein Wortbudget
- * (TAKE_MAX_WORDS) als harte Decke über dem Prompt-Ziel von 50–75 Wörtern,
- * dazu höchstens vier Sätze. Geschnitten wird weiterhin nur an Satzgrenzen,
+ * (TAKE_MAX_WORDS) als harte Decke über dem Prompt-Ziel von 50–75 Wörtern.
+ * Keine Satzzahl mehr (Betreiber 2026-10-20: keine Satzstrukturvorgaben, um
+ * Abwechslung zu ermöglichen). Geschnitten wird weiterhin nur an Satzgrenzen,
  * und mindestens ein Satz bleibt immer stehen.
  *
  * Die Prompt-Vorgabe allein reichte nicht. Im Bündel-Modus steht über dem Take
@@ -19,9 +20,6 @@
  * naiv an „. " schneidet, kappt nach einem halben Satz — und das fällt
  * niemandem auf, weil das Ergebnis grammatisch aussieht.
  */
-
-/** Wie viele Sätze ein Take höchstens hat. */
-export const TAKE_MAX_SENTENCES = 4
 
 /** Harte Wortdecke (Prompt-Ziel 50–75); darüber fallen ganze Sätze von hinten weg. */
 export const TAKE_MAX_WORDS = 80
@@ -96,8 +94,8 @@ export function splitSentences(text: string): string[] {
 const TAKE_MARKER = /(^|\n)(\*\*)?Synthszr Take:(\*\*)?\s*/i
 
 /**
- * Kürzt den Take eines Abschnitts auf {@link TAKE_MAX_SENTENCES} Sätze und
- * {@link TAKE_MAX_WORDS} Wörter — von hinten, satzweise, mindestens ein Satz bleibt.
+ * Kürzt den Take eines Abschnitts auf {@link TAKE_MAX_WORDS} Wörter — von
+ * hinten, satzweise, mindestens ein Satz bleibt.
  *
  * NUR den Take: Die Zusammenfassung darüber darf im Bündel bis zu 25 Sätze
  * haben und ist von der Grenze ausdrücklich nicht betroffen. Was nach dem Take
@@ -116,7 +114,7 @@ export function capTake(section: string): string {
 
   const saetze = splitSentences(takeText)
   const behalten = [...saetze]
-  while (behalten.length > 1 && (behalten.length > TAKE_MAX_SENTENCES || countWords(behalten.join(' ')) > TAKE_MAX_WORDS)) {
+  while (behalten.length > 1 && countWords(behalten.join(' ')) > TAKE_MAX_WORDS) {
     behalten.pop()
   }
   if (behalten.length === saetze.length) return section

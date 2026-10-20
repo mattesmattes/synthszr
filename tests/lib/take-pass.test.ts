@@ -22,7 +22,7 @@ describe('validateTake', () => {
 
   it('macht keine Vorgaben zum Satzbau (Betreiber 2026-10-20): fliessend, sechs kurze oder drei lange Saetze sind gleich gueltig', () => {
     expect(validateTake(FLOWING, FACTS)).toEqual({ ok: true, problems: [] })
-    const kurz = 'Nvidia kauft Distribution. 12,9 Milliarden Dollar dafür. AMD verliert zuerst. Die Cloud-Kataloge auch. Im ersten Quartal zeigt sich mehr. Fällt der Anteil fremder Checkpoints unter 41 Prozent, hat es sich gelohnt, wahrscheinlich sogar schnell.'
+    const kurz = 'Nvidia kauft Distribution. 12,9 Milliarden Dollar dafür. AMD verliert zuerst. Die Cloud-Kataloge mit eigenen Modellen auch. Im ersten Quartal zeigt sich mehr. Fällt der Anteil fremder Checkpoints unter 41 Prozent, hat es sich gelohnt, wahrscheinlich sogar schneller als die Käufer selbst erwarten, und genau das ist der Punkt.'
     expect(validateTake(kurz, FACTS)).toEqual({ ok: true, problems: [] })
     const lang = (n: number) => `Satz ${n} führt eine Beobachtung über die Distribution von Modellgewichten ausführlich aus, nennt 41 Prozent und bleibt dabei im Budget: so geht das.`
     expect(validateTake(`${lang(1)} ${lang(2)} ${lang(3)}`, FACTS).problems.filter((x) => /Sätze|lange|Doppelpunkt|Satz über/.test(x))).toEqual([])
