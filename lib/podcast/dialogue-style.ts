@@ -60,3 +60,15 @@ HOST: [skeptical, slower] Hm.
 GUEST: [confident, steady] Das ist keine Wohltätigkeit. Das ist... stell dir vor, Nvidia kauft sein eigenes nächstes Quartal vor.
 HOST: [probing, unconvinced] Und wenn einer dieser Mieter pleitegeht?
 GUEST: [quick, flat] Dann kommen die Chips nach Hause. Plus Rechnung.`
+
+/**
+ * Regeln für die Vorlage einer Sprache: für das englische Skript der in
+ * Admin → Audio gespeicherte Text (Setting podcast_dialogue_rules_en), sonst
+ * der Code-Default. Die deutsche Vorlage bleibt beim Default, die UI führt
+ * nur Englisch (Betreiber 2026-10-21).
+ */
+export function resolveDialogueRules(lang: 'de' | 'en', override: string | null | undefined): string {
+  if (lang === 'de') return DIALOGUE_STYLE_RULES_DE
+  const text = override?.trim()
+  return text ? override!.trim() : DIALOGUE_STYLE_RULES_EN
+}

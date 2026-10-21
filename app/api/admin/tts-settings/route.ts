@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { getTTSSettings, generatePreviewAudio, TTSVoice, TTSModel } from '@/lib/tts/openai-tts'
+import { DIALOGUE_STYLE_RULES_EN } from '@/lib/podcast/dialogue-style'
 
 /**
  * GET /api/admin/tts-settings
@@ -15,7 +16,8 @@ export async function GET() {
 
   try {
     const settings = await getTTSSettings()
-    return NextResponse.json(settings)
+    // Der Default kommt aus dem Code, damit die Admin-Seite nie eine veraltete Kopie hält.
+    return NextResponse.json({ ...settings, podcast_dialogue_rules_default_en: DIALOGUE_STYLE_RULES_EN })
   } catch (error) {
     console.error('[TTS Settings] Fetch error:', error)
     return NextResponse.json(
@@ -43,7 +45,7 @@ interface UpdateSettingsRequest {
   podcast_guest_voice_en?: string
   podcast_duration_minutes?: number
   // Podcast script prompt
-  podcast_script_prompt?: string
+  podcast_dialogue_rules_en?: string | null
   // Mixing settings (JSON string)
   mixing_settings?: string
 }
@@ -144,9 +146,10 @@ export async function PUT(request: NextRequest) {
       updates.push({ key: 'podcast_duration_minutes', value: duration })
     }
 
-    // Podcast script prompt (can be any string)
-    if (body.podcast_script_prompt !== undefined) {
-      updates.push({ key: 'podcast_script_prompt', value: body.podcast_script_prompt })
+    // Dialogregeln (EN): leerer Text oder null = zurück auf den Code-Default
+    if (body.podcast_dialogue_rules_en !== undefined) {
+      const text = typeof body.podcast_dialogue_rules_en === 'string' ? body.podcast_dialogue_rules_en.trim() : ''
+      updates.push({ key: 'podcast_dialogue_rules_en', value: text || null })
     }
 
     // Mixing settings (stored as JSON string)
@@ -175,7 +178,8 @@ export async function PUT(request: NextRequest) {
 
     // Return updated settings
     const settings = await getTTSSettings()
-    return NextResponse.json(settings)
+    // Der Default kommt aus dem Code, damit die Admin-Seite nie eine veraltete Kopie hält.
+    return NextResponse.json({ ...settings, podcast_dialogue_rules_default_en: DIALOGUE_STYLE_RULES_EN })
   } catch (error) {
     console.error('[TTS Settings] Update error:', error)
     return NextResponse.json(

@@ -32,7 +32,7 @@ import { getPersonalityState, buildPersonalityBrief, stripMomentsSection } from 
 import { isWeekWrapup, wrapupPromptSection } from '@/lib/podcast/wrapup-mode'
 import { retrieveMemory, buildMemoryBrief, shouldAnnounceMemoryAwakening } from '@/lib/podcast/memory'
 import { ensureIntermezzoMarker } from '@/lib/podcast/intermezzo'
-import { DIALOGUE_STYLE_RULES_DE, DIALOGUE_STYLE_RULES_EN } from '@/lib/podcast/dialogue-style'
+import { resolveDialogueRules } from '@/lib/podcast/dialogue-style'
 import Anthropic from '@anthropic-ai/sdk'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { withUsageLogging } from '@/lib/ai/usage-log'
@@ -138,7 +138,7 @@ Erzeuge stattdessen ein ECHTES Gespräch mit Reibung, Chaos und menschlichen Mom
 
     **NICHT optional:** Das Skript MUSS exakt einen \`[INTERMEZZO]\`-Marker enthalten. Fehlt er, ist der Auftrag nicht erfüllt.
 
-${DIALOGUE_STYLE_RULES_DE}
+{dialogueRules}
 
 **SELF-CHECK vor Abgabe — das Skript MUSS enthalten:**
 □ Exakt 3 Missverständnisse mit Korrektur
@@ -271,7 +271,7 @@ Produce a REAL conversation with friction, messiness, and human moments.
 8. **Fact hygiene:** No invented details. When uncertain: "I'd need to double-check that."
 9. **Forbidden expressions in self-reflection:** When HOST or GUEST reflect on their AI nature, NEVER use the phrase "pattern matching".
 
-${DIALOGUE_STYLE_RULES_EN}
+{dialogueRules}
 
 **SELF-CHECK before output — the script MUST contain:**
 □ Exactly 3 misunderstandings with correction
@@ -501,6 +501,9 @@ export async function POST(request: NextRequest) {
       .replaceAll('{content}', postContent)
       .replaceAll('{weekday}', weekday)
       .replaceAll('{date}', date)
+      // Dialogregeln zur Laufzeit: Admin-Override (nur EN) oder Code-Default.
+      // Funktions-Ersetzung, damit „$" im Regeltext nicht als Muster gilt.
+      .replaceAll('{dialogueRules}', () => resolveDialogueRules(ttsLang, settings.podcast_dialogue_rules_en))
 
     // EINSTIEG UND SCHLUSS DIESER FOLGE (Betreiber-Vorgabe 2026-08-15).
     //

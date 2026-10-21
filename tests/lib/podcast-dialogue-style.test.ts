@@ -10,9 +10,12 @@
  */
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { DIALOGUE_STYLE_RULES_DE, DIALOGUE_STYLE_RULES_EN } from '@/lib/podcast/dialogue-style'
+import { DIALOGUE_STYLE_RULES_DE, DIALOGUE_STYLE_RULES_EN, resolveDialogueRules } from '@/lib/podcast/dialogue-style'
 
 const ROUTE = readFileSync('app/api/podcast/generate-script/route.ts', 'utf-8')
+const ADMIN_PAGE = readFileSync('app/admin/audio/page.tsx', 'utf-8')
+const SETTINGS_API = readFileSync('app/api/admin/tts-settings/route.ts', 'utf-8')
+const SETTINGS_LOADER = readFileSync('lib/tts/openai-tts.ts', 'utf-8')
 
 describe('DIALOGUE_STYLE_RULES', () => {
   it.each([
@@ -41,10 +44,24 @@ describe('DIALOGUE_STYLE_RULES', () => {
   })
 })
 
+describe('resolveDialogueRules — Override aus Admin → Audio oder Code-Default (Betreiber 2026-10-21)', () => {
+  it('nimmt fuer das englische Skript den gespeicherten Text, sonst den Default', () => {
+    expect(resolveDialogueRules('en', 'Eigene Regeln')).toBe('Eigene Regeln')
+    expect(resolveDialogueRules('en', null)).toBe(DIALOGUE_STYLE_RULES_EN)
+    expect(resolveDialogueRules('en', '   \n')).toBe(DIALOGUE_STYLE_RULES_EN)
+  })
+
+  it('laesst die deutsche Vorlage beim Code-Default (UI nur englisch)', () => {
+    expect(resolveDialogueRules('de', 'Eigene Regeln')).toBe(DIALOGUE_STYLE_RULES_DE)
+  })
+})
+
 describe('generate-script Route — eingebaute Prompts', () => {
-  it('bindet die Regeln in beide Vorlagen ein', () => {
-    expect(ROUTE).toContain('${DIALOGUE_STYLE_RULES_EN}')
-    expect(ROUTE).toContain('${DIALOGUE_STYLE_RULES_DE}')
+  it('setzt die Regeln zur Laufzeit ein, nicht beim Modulstart', () => {
+    expect(ROUTE.match(/\{dialogueRules\}/g)).toHaveLength(3) // zwei Vorlagen + eine Ersetzung
+    expect(ROUTE).toMatch(/resolveDialogueRules\(ttsLang, settings\.podcast_dialogue_rules_en\)/)
+    expect(ROUTE).not.toContain('${DIALOGUE_STYLE_RULES_EN}')
+    expect(ROUTE).not.toContain('${DIALOGUE_STYLE_RULES_DE}')
   })
 
   it('traegt keine Quoten mehr fuer Overlapping, Falschstarts und Studio-Momente', () => {
@@ -64,5 +81,22 @@ describe('generate-script Route — eingebaute Prompts', () => {
     expect(ROUTE).toMatch(/\[ARTICLE N\]/)
     expect(ROUTE).toMatch(/Exactly 3 misunderstandings/)
     expect(ROUTE).toMatch(/Exakt 2 echte Meinungsverschiedenheiten/)
+  })
+})
+
+
+describe('Admin → Audio — Regel-Feld statt totem Volltext-Prompt', () => {
+  it('kennt das alte Setting podcast_script_prompt nirgends mehr', () => {
+    for (const [name, src] of [['Admin-Seite', ADMIN_PAGE], ['Settings-API', SETTINGS_API], ['Settings-Loader', SETTINGS_LOADER]] as const) {
+      expect(src, name).not.toMatch(/podcast_script_prompt|PODCAST_SCRIPT_PROMPT/)
+    }
+  })
+
+  it('fuehrt das neue Setting durch Loader, API und Seite', () => {
+    expect(SETTINGS_LOADER).toMatch(/podcast_dialogue_rules_en/)
+    expect(SETTINGS_API).toMatch(/podcast_dialogue_rules_en/)
+    expect(SETTINGS_API).toMatch(/podcast_dialogue_rules_default_en/) // der Default kommt aus dem Code, nie aus einer Kopie in der UI
+    expect(ADMIN_PAGE).toMatch(/podcast_dialogue_rules_default_en/)
+    expect(ADMIN_PAGE).toMatch(/podcast_dialogue_rules_en/)
   })
 })

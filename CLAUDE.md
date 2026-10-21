@@ -586,11 +586,14 @@ weiterarbeitet. `shadow_enabled = false` stoppt nur neue Kickoffs.
   Sprechanweisung am Zeilenanfang (vorher zählte sie als Wörter, kurze
   Reaktionen wurden nie erkannt) und wertet `...`, `…` und `—` am Zeilenende
   als Trail-off.
-- **Totes Setting:** `podcast_script_prompt` (Admin → Audio, Prompt-Textfeld)
-  erreicht den Generator nicht, kein Aufrufer schickt `customPrompt`. Die dort
-  am 16.08. gespeicherten „Style rules“ waren nie wirksam. Nicht als Override
-  verdrahten: Das würde den gesamten eingebauten Prompt ersetzen (Format,
-  Intermezzo, Artikel-Marker).
+- **Editierbar in Admin → Audio** („Dialogregeln (englisches Skript)“):
+  Setting `podcast_dialogue_rules_en`, leer = Code-Default. Die Settings-API
+  liefert den Default als `podcast_dialogue_rules_default_en` aus dem Code,
+  die Seite hält keine Kopie. Die Route setzt zur Laufzeit `{dialogueRules}`
+  per `resolveDialogueRules(ttsLang, override)` ein; die DE-Vorlage bleibt
+  beim Code-Default. Das frühere Volltext-Feld (`podcast_script_prompt`) war
+  tot, kein Aufrufer schickte `customPrompt`; es ist entfernt, der alte Wert
+  vom 16.08. liegt unbenutzt in `settings`.
 - Alle vier Sprachzeilen in `post_podcasts` tragen dasselbe englische Skript
   (Auslöser z. B. Artikel-Editor: „EN only“); die DE-Vorlage greift nur bei
   manueller Generierung mit Sprache de in Admin → Audio.

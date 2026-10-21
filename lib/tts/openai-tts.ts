@@ -32,8 +32,8 @@ export interface TTSSettings {
   podcast_host_voice_en: string
   podcast_guest_voice_en: string
   podcast_duration_minutes: number
-  // Podcast script prompt
-  podcast_script_prompt: string | null
+  // Dialogregeln für das englische Skript (null = Code-Default aus lib/podcast/dialogue-style.ts)
+  podcast_dialogue_rules_en: string | null
   // Mixing settings (JSON blob)
   mixing_settings: MixingSettings | null
 }
@@ -143,7 +143,7 @@ export async function getTTSSettings(): Promise<TTSSettings> {
       'podcast_host_voice_en',
       'podcast_guest_voice_en',
       'podcast_duration_minutes',
-      'podcast_script_prompt',
+      'podcast_dialogue_rules_en',
       'mixing_settings',
     ])
 
@@ -171,8 +171,10 @@ export async function getTTSSettings(): Promise<TTSSettings> {
     podcast_host_voice_en: (settingsMap.podcast_host_voice_en as string) || 'shimmer',
     podcast_guest_voice_en: (settingsMap.podcast_guest_voice_en as string) || 'fable',
     podcast_duration_minutes: (settingsMap.podcast_duration_minutes as number) || 30,
-    // Podcast script prompt (null means use default)
-    podcast_script_prompt: (settingsMap.podcast_script_prompt as string) || null,
+    // Dialogregeln (null = Code-Default)
+    podcast_dialogue_rules_en: typeof settingsMap.podcast_dialogue_rules_en === 'string' && settingsMap.podcast_dialogue_rules_en.trim()
+      ? settingsMap.podcast_dialogue_rules_en
+      : null,
     // Mixing settings (stored as JSON string)
     mixing_settings: settingsMap.mixing_settings
       ? (typeof settingsMap.mixing_settings === 'string'

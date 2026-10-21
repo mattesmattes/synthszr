@@ -43,7 +43,8 @@ interface TTSSettings {
   podcast_host_voice_en: string
   podcast_guest_voice_en: string
   podcast_duration_minutes: number
-  podcast_script_prompt: string | null
+  podcast_dialogue_rules_en: string | null
+  podcast_dialogue_rules_default_en: string
   mixing_settings: MixingSettings | null
 }
 
@@ -186,45 +187,6 @@ HOST: [curious, engaged, slight rise in tone] Interesting. How do you think that
 GUEST: [doubtful, probing tone, unconvinced] Look... the market has been pricing in rate cuts for months now. If those get pushed back, we could see some volatility.
 HOST: [warm, appreciative, winding down] Great insights as always! That's all the time we have for today.
 GUEST: [amused, speaking through laughter, warm] Until next time!`
-
-const PODCAST_SCRIPT_PROMPT = `Du bist ein erfahrener Podcast-Skriptautor. Erstelle ein lebendiges, natürliches Gespräch zwischen einem Host und einem Gast für einen Finance/Tech-Podcast.
-
-**Rollen:**
-- HOST: Moderiert das Gespräch, stellt Fragen, fasst zusammen
-- GUEST: Synthesizer - der AI-Analyst mit pointierten Meinungen
-
-**Output-Format (WICHTIG - exakt dieses Format pro Zeile):**
-HOST: [sprechanweisung] Dialog text...
-GUEST: [sprechanweisung] Dialog text...
-
-**Sprechanweisungen (MÜSSEN auf Englisch sein!):**
-Die Tags werden als instructions-Parameter an OpenAIs gpt-4o-mini-tts geschickt.
-Verwende: Voice Affect (Stimmcharakter), Tone (Tonfall), Pacing (Tempo).
-NICHT: visuelle Gesten oder abstrakte Adjektive.
-Beispiele: [cheerful and warm, slightly faster pacing], [contemplative, measured pacing], [urgent, fast pacing, jumping in], [amused, speaking through laughter], [soft and intimate, conspiratorial whisper], [doubtful, probing tone, unconvinced]
-
-**Stilregeln für natürliche Dialoge:**
-1. Nutze Füllwörter: "Also...", "Hmm...", "Weißt du...", "Naja..."
-2. Unterbrechungen: GUEST kann HOST unterbrechen wenn aufgeregt
-3. Reaktionen: "Genau!", "Interessant!", "Warte mal..."
-4. Pausen mit "..." für Denkpausen
-5. Variiere die Satzlänge - kurze Einwürfe, längere Erklärungen
-6. Der GUEST bringt die "Synthesizer Take" Meinungen aus dem Artikel ein
-7. WICHTIG: Der GUEST wird im Dialog IMMER als "Synthesizer" bezeichnet, NIE als "Synthszr"
-
-**Beispiel:**
-HOST: [cheerful and warm, genuinely happy, slightly faster pacing] Willkommen bei Synthszr Daily! Heute haben wir wieder einiges zu besprechen...
-GUEST: [contemplative, measured pacing, weighing each word] Ja, und ich muss sagen... die Zahlen haben mich wirklich überrascht.
-HOST: [enthusiastic, fast and breathless, excited] Genau da wollte ich anfangen! Was genau—
-GUEST: [urgent, fast pacing, jumping into the conversation] Also, warte mal. Bevor wir da reingehen... [grave and authoritative, deliberate pacing] die Zahlen sind gut, klar. Aber der Markt preist schon Perfektion ein.
-HOST: [inquisitive, fascinated, wanting to know more] Interessant! Kannst du das genauer erklären?
-
-**Ziel-Länge:** {duration} Minuten (ca. {wordCount} Wörter)
-
-**Blog-Artikel Content für diese Episode:**
-{content}
-
-Erstelle jetzt das Podcast-Skript. Beginne direkt mit "HOST:" - keine Einleitung oder Erklärung.`
 
 // ---------------------------------------------------------------------------
 // Personality Map Helpers
@@ -613,7 +575,8 @@ function AudioPage() {
   const [selectedLocale, setSelectedLocale] = useState<PodcastLocale>('en')
   const [scriptGenerating, setScriptGenerating] = useState(false)
   const [smalltalkTopic, setSmalltalkTopic] = useState('')
-  const [customPrompt, setCustomPrompt] = useState(PODCAST_SCRIPT_PROMPT)
+  const [dialogueRules, setDialogueRules] = useState('')
+  const [dialogueRulesDefault, setDialogueRulesDefault] = useState('')
   const [scriptGenerated, setScriptGenerated] = useState(false)
   const [scriptModified, setScriptModified] = useState(false)
 
@@ -939,8 +902,9 @@ function AudioPage() {
         if (data.podcast_duration_minutes) {
           setPodcastDuration(data.podcast_duration_minutes)
         }
-        if (data.podcast_script_prompt) {
-          setCustomPrompt(data.podcast_script_prompt)
+        if (typeof data.podcast_dialogue_rules_default_en === 'string') {
+          setDialogueRulesDefault(data.podcast_dialogue_rules_default_en)
+          setDialogueRules(data.podcast_dialogue_rules_en || data.podcast_dialogue_rules_default_en)
         }
         if (data.mixing_settings) {
           setMixing({ ...DEFAULT_MIXING, ...data.mixing_settings })
@@ -980,7 +944,7 @@ function AudioPage() {
           podcast_host_voice_en: openaiHostVoice,
           podcast_guest_voice_en: openaiGuestVoice,
           podcast_duration_minutes: podcastDuration,
-          podcast_script_prompt: customPrompt !== PODCAST_SCRIPT_PROMPT ? customPrompt : null,
+          podcast_dialogue_rules_en: dialogueRules.trim() && dialogueRules.trim() !== dialogueRulesDefault.trim() ? dialogueRules : null,
         }),
       })
       if (res.ok) {
@@ -1468,48 +1432,45 @@ function AudioPage() {
             </CardContent>
           </Card>
 
-          {/* Script Prompt Editor */}
+          {/* Dialogregeln (EN) — Setting podcast_dialogue_rules_en, leer = Code-Default */}
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Info className="h-5 w-5" />
-                Skript-Prompt Vorlage
+                Dialogregeln (englisches Skript)
               </CardTitle>
               <CardDescription>
-                Bearbeite den Prompt um die Podcast-Generierung anzupassen. Platzhalter: {'{duration}'}, {'{wordCount}'}, {'{content}'}
+                Nur dieser Block ist editierbar und wird zur Laufzeit in den eingebauten Prompt eingesetzt. Format, Sprechanweisungen, Intermezzo, Artikel-Marker und Länge bleiben im Code. Leer gespeichert heißt: Code-Default.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Textarea
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
+                value={dialogueRules}
+                onChange={(e) => setDialogueRules(e.target.value)}
                 className="font-mono text-xs h-[400px]"
               />
-              <div className="mt-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">Sprechanweisungen (gpt-4o-mini-tts):</p>
-                    <p className="text-xs text-muted-foreground">
-                      OpenAI-Format: Voice Affect + Tone + Pacing, z.B. <code className="bg-muted px-1 rounded">[cheerful and warm, faster pacing]</code>, <code className="bg-muted px-1 rounded">[doubtful, probing tone]</code>, <code className="bg-muted px-1 rounded">[amused, speaking through laughter]</code>.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setCustomPrompt(PODCAST_SCRIPT_PROMPT)} disabled={customPrompt === PODCAST_SCRIPT_PROMPT}>
-                      Zurücksetzen
-                    </Button>
-                    <Button size="sm" onClick={saveTTSSettings} disabled={ttsSaving}>
-                      {ttsSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                      Prompt speichern
-                    </Button>
-                  </div>
+              <div className="mt-4 flex items-center justify-between gap-4">
+                <p className="text-xs text-muted-foreground">
+                  {dialogueRules.trim() && dialogueRules.trim() !== dialogueRulesDefault.trim()
+                    ? 'Eigene Fassung aktiv (weicht vom Code-Default ab).'
+                    : 'Code-Default aktiv (lib/podcast/dialogue-style.ts).'}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setDialogueRules(dialogueRulesDefault)} disabled={dialogueRules === dialogueRulesDefault}>
+                    Zurücksetzen
+                  </Button>
+                  <Button size="sm" onClick={saveTTSSettings} disabled={ttsSaving}>
+                    {ttsSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    Regeln speichern
+                  </Button>
                 </div>
-                {ttsSuccess && (
-                  <span className="text-sm text-green-600 flex items-center gap-1">
-                    <CheckCircle className="h-4 w-4" />
-                    Gespeichert
-                  </span>
-                )}
               </div>
+              {ttsSuccess && (
+                <span className="mt-2 text-sm text-green-600 flex items-center gap-1">
+                  <CheckCircle className="h-4 w-4" />
+                  Gespeichert
+                </span>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
