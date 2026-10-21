@@ -9,7 +9,6 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import { TAKE_SYSTEM_PROMPT, buildTakeUserPrompt, validateTake, replaceTake, writeTake, summaryForTakePass } from '@/lib/claude/take-pass'
-import { MATTES_VOICE_RULES } from '@/lib/claude/mattes-voice'
 
 const FACTS = 'Nvidia kauft Hugging Face für 12,9 Milliarden Dollar. Die Plattform hat 41 Prozent Download-Anteil bei offenen Modellen. Der Abschluss ist für das erste Quartal geplant.'
 const GOOD = 'Nvidia zahlt 12,9 Milliarden Dollar für Distribution, nicht für Modelle. Wer Gewichte verteilt, bestimmt die Standardlaufzeit, und die liegt künftig auf CUDA. AMD und die Cloud-Kataloge verlieren zuerst. Im ersten Quartal zeigt sich, ob es aufgeht: Fällt der Anteil fremder Checkpoints unter 41 Prozent, hat Nvidia die Distribution gekauft.'
@@ -41,6 +40,11 @@ describe('validateTake', () => {
     expect(r.problems.join(' ')).toMatch(/zu lang: \d+ Wörter/)
     expect(r.problems.join(' ')).not.toMatch(/Sätze/)
     expect(validateTake('Zu kurz mit 41 Prozent.', FACTS).problems.join(' ')).toMatch(/zu kurz/)
+  })
+
+  it('verlangt keine Zahl mehr: ein Take ohne Ziffer ist kein Fehler (Betreiber 2026-10-21)', () => {
+    const ohneZahl = 'Nvidia kauft Distribution, keine Modelle. Wer Gewichte verteilt, bestimmt die Standardlaufzeit, und die liegt künftig auf CUDA, also verlieren AMD und die Cloud-Kataloge mit eigenen Modellen zuerst. Ob der Kauf aufgeht, zeigt der Anteil fremder Checkpoints im ersten Quartal, nicht der Kaufpreis.'
+    expect(validateTake(ohneZahl, FACTS).problems.filter((p) => /belegte Zahl/.test(p))).toEqual([])
   })
 
   it('meldet Zahlen ohne Beleg in Zusammenfassung oder Quelle', () => {
@@ -81,22 +85,23 @@ describe('buildTakeUserPrompt / TAKE_SYSTEM_PROMPT', () => {
     for (const needle of ['H', 'Zusammenfassung S.', 'Quelle Q.', 'Engpass: X', 'SO SCHREIBT MATTES', 'MATTES-KONTEXT']) expect(u).toContain(needle)
   })
 
-  it('System-Prompt traegt Form und Verbote, aber kein Skelett und keine Quellmaterial-Sicherheit (Betreiber 2026-10-20)', () => {
+  it('System-Prompt ist kompakt: Form, Argument, Lesbarkeit, Verbote (Betreiber 2026-10-21: weniger Regeln, fluessigere Takes)', () => {
+    expect(TAKE_SYSTEM_PROMPT.length).toBeLessThan(2500)
     expect(TAKE_SYSTEM_PROMPT).toMatch(/50 bis 75 Wörter/)
-    expect(TAKE_SYSTEM_PROMPT).not.toMatch(/SKELETT|MECHANISMUS|PRÜFSTEIN|QUELLMATERIAL-SICHERHEIT/)
-    expect(TAKE_SYSTEM_PROMPT).toMatch(/Das ist kein X, sondern Y/)
-    expect(TAKE_SYSTEM_PROMPT).toMatch(/ohne "Synthszr Take:"/)
+    expect(TAKE_SYSTEM_PROMPT).toMatch(/Satzzahl und Rhythmus sind frei/)
+    expect(TAKE_SYSTEM_PROMPT).toMatch(/LESBARKEIT: Ein Gedanke pro Satz/)
+    expect(TAKE_SYSTEM_PROMPT).toMatch(/Beobachtung, Grund, Folge/)
+    expect(TAKE_SYSTEM_PROMPT).toMatch(/Erzähl sie nicht nach/)
+    expect(TAKE_SYSTEM_PROMPT).toMatch(/ein Take ohne Zahl ist in Ordnung/)
+    expect(TAKE_SYSTEM_PROMPT).toMatch(/Das ist nicht X, sondern Y/)
+    expect(TAKE_SYSTEM_PROMPT).toMatch(/ohne „Synthszr Take:"/)
+    expect(TAKE_SYSTEM_PROMPT).not.toMatch(/SKELETT|MECHANISMUS|PRÜFSTEIN|QUELLMATERIAL-SICHERHEIT|VERBOTEN \(jeder Verstoß/)
   })
 
-  it('System-Prompt traegt die Stimme aus dem Skill mattes-schreibe und keine Stakkato-Vorgaben (2026-10-20)', () => {
-    expect(TAKE_SYSTEM_PROMPT).toContain(MATTES_VOICE_RULES)
-    for (const needle of ['Humor durch Präzision', 'Einschübe in Klammern', 'Der große Fehler (FATAL)']) {
-      expect(TAKE_SYSTEM_PROMPT).toContain(needle)
-    }
-    // Vom Betreiber am 2026-10-20 aus dem Take-Prompt gestrichen:
-    expect(TAKE_SYSTEM_PROMPT).not.toMatch(/Natürliche Verkürzungen|Satzlänge variieren|Nie drei lange Sätze|Konkret sein, nicht abstrakt|Cotti Coffee|Unsicherheit klar markieren|So klingt es richtig|So nicht:|Schnell-Check/)
+  it('System-Prompt traegt die Stimme kompakt und ohne Satzstruktur-Schablonen', () => {
+    for (const needle of ['Humor durch Präzision', 'Einschub in Klammern', 'der erste Satz ist der stärkste']) expect(TAKE_SYSTEM_PROMPT).toContain(needle)
+    expect(TAKE_SYSTEM_PROMPT).not.toMatch(/Natürliche Verkürzungen|Satzlänge variieren|Nie drei lange Sätze|Konkret sein, nicht abstrakt|Cotti Coffee|Unsicherheit klar markieren|So klingt es richtig|Schnell-Check/)
     expect(TAKE_SYSTEM_PROMPT).not.toMatch(/unter acht Wörtern|Kein Satz über|drei bis vier Sätzen|Höchstens EIN Doppelpunkt/)
-    expect(TAKE_SYSTEM_PROMPT).toMatch(/Satzbau, Satzzahl und Rhythmus sind frei/)
   })
 })
 

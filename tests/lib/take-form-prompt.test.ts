@@ -11,7 +11,11 @@ import { SECTION_SYSTEM_PROMPT, buildBundleSystemPrompt } from '@/lib/claude/gho
 describe('SECTION_SYSTEM_PROMPT — Form des Takes', () => {
   it('verlangt 50 bis 75 Woerter und sonst nichts zur Satzstruktur (Betreiber 2026-10-20)', () => {
     expect(SECTION_SYSTEM_PROMPT).toMatch(/50 bis 75 Wörter/)
-    expect(SECTION_SYSTEM_PROMPT).toMatch(/Satzbau, Satzzahl und Rhythmus sind frei/)
+    expect(SECTION_SYSTEM_PROMPT).toMatch(/Satzzahl und Rhythmus sind frei/)
+    // Betreiber 2026-10-21: Der Abschnitts-Prompt traegt nur noch einen kompakten Entwurfs-Block;
+    // die ausfuehrlichen Take-Verbote liegen im Take-Durchgang (take-pass.ts) und im Lektorat.
+    expect(SECTION_SYSTEM_PROMPT).toMatch(/SYNTHSZR TAKE \(Entwurf/)
+    expect(SECTION_SYSTEM_PROMPT).not.toMatch(/INHALTLICHE VERBOTE|KONTRAST-KONSTRUKTIONEN|SELF-CHECK VOR ABGABE|SCHREIBSTIL:|FORM DES TAKES|MATTES-MUSTER/)
     expect(SECTION_SYSTEM_PROMPT).not.toMatch(/drei bis vier Sätze|Kein Satz über|unter acht Wörtern|Höchstens EIN Doppelpunkt|Nie drei lange Sätze/)
   })
 

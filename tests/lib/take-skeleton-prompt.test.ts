@@ -17,7 +17,7 @@ describe('SECTION_SYSTEM_PROMPT — Take ohne Skelett (Betreiber 2026-10-20)', (
   })
 
   it('verbietet den Auftakt „Der/Die/Das eigentliche …"', () => {
-    expect(SECTION_SYSTEM_PROMPT).toMatch(/Der\/Die\/Das eigentliche/)
+    expect(SECTION_SYSTEM_PROMPT).toMatch(/Der eigentliche/)
   })
 })
 

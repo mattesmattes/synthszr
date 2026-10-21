@@ -166,14 +166,13 @@ streicht sonst den letzten Satz. Umgesetzt (alle in `lib/claude/`):
    `idx:N`) und Zielform; Block „SO SCHREIBT MATTES SEINE TAKES“.
 4. **Eigener Take-Durchgang** (`take-pass.ts`, `applyTakePass`): zweiter
    Aufruf (Use Case `ghostwriter_take`, Thinking medium) aus Zusammenfassung,
-   Blickwinkel, Vorbildern und Quellenauszug. Der System-Prompt trägt die
-   Stimme aus dem Skill `~/.claude/skills/mattes-schreibe/SKILL.md`, gespiegelt
-   in `lib/claude/mattes-voice.ts` (Skill ist Quelle der Wahrheit, Änderungen
-   dort nachziehen; auf Betreiber-Wunsch vom 2026-10-20 NICHT übernommen:
-   Verkürzungen, Satzlänge variieren, Konkret sein, Unsicherheit markieren,
-   Referenztexte, Schnell-Check). `validateTake` prüft Wortbudget, Zahlen
-   gegen Zusammenfassung/Quelle, verbotene Auftakte, Gedankenstriche und
-   „Wer“-Schluss (keine Satzstruktur, kein Skelett); bei Verstoß genau ein
+   Blickwinkel, Vorbildern und Quellenauszug. Der System-Prompt (≈ 2.100
+   Zeichen) trägt die Stimme in vier Sätzen, ARGUMENT, LESBARKEIT, FORM und
+   eine Verbotszeile (bis 2026-10-21 ein 4.100-Zeichen-Prompt mit
+   Skill-Spiegel `mattes-voice.ts`, inzwischen gelöscht). `validateTake` prüft
+   Wortbudget, unbelegte Zahlen (keine Pflichtzahl mehr), verbotene Auftakte,
+   Gedankenstriche und „Wer“-Schluss (keine Satzstruktur, kein Skelett); bei
+   Verstoß genau ein
    Korrekturlauf mit den konkreten Problemen, danach die Fassung mit weniger
    Problemen; scheitert der Aufruf, bleibt der Take des Abschnitts-Aufrufs.
    Läuft vor Lektorat, `capTake` und „Wer“-Rewrite (Sicherheitsnetz).
@@ -182,6 +181,19 @@ streicht sonst den letzten Satz. Umgesetzt (alle in `lib/claude/`):
    nur noch zwei Sätze der Zusammenfassung gekürzt, der Take bleibt ganz. Bis
    zum 2026-10-19 nahm sie auch dem Take zwei Sätze (fünf → drei; nach der
    Reform drei bis vier → ein bis zwei, Betreiber-Befund am ersten Post).
+5. **Kürzung und Lesbarkeit (2026-10-21):** Befund an cron-211026: Takes
+   nicht zu lang, aber verschachtelt (19–26 Wörter je Satz, Faktenlisten im
+   Relativsatz), drei von sieben erzählten die Zusammenfassung nach. Ursachen:
+   Regel-Ballast, Zahl-Pflicht der Prüfung (trieb zum Nacherzählen) und der
+   Vorbild-Block, der „Dichte und Satzbau“ der alten, verschachtelten Takes
+   zum Muster erklärte. Umgesetzt: Take-Prompt halbiert plus Regel LESBARKEIT
+   (ein Gedanke pro Satz, Beobachtung → Grund → Folge, keine Schachtelsätze);
+   Vorbilder geben nur „Haltung und Ton“ vor; der Abschnitts-Prompt trägt
+   statt des Take-Regelwerks (Mattes-Muster, Interpunktion, Kontrast,
+   Self-Check, Inhaltliche Verbote, Schreibstil, Form) einen kompakten Block
+   „SYNTHSZR TAKE (Entwurf)“, Tells fängt das Lektorat (`PROOFREADING_PROMPT`).
+   A/B an denselben sieben Abschnitten: 15–17 Wörter je Satz, Argument in
+   einer Linie. Satzstruktur-Schablonen bleiben tabu (Betreiber 2026-10-20).
 **Messen:** `pnpm takes:measure -- --posts 20` bzw. `--since <Datum>`
 (`scripts/measure-takes.ts`, lesend): Wörter, Wörter je Satz, kurze Sätze,
 Doppelpunkte, Zahl im Take und Schlusssatz, Prognosen, Überleben des letzten

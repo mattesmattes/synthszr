@@ -69,6 +69,9 @@ describe('formatExemplarTakesForPrompt', () => {
   it('nennt Titel, Datum, Abschnitt, Zustimmung und den Take; verbietet das Abschreiben', () => {
     const block = formatExemplarTakesForPrompt([cand({ agree: 7, disagree: 3 })])
     expect(block).toContain('SO SCHREIBT MATTES SEINE TAKES')
+    // Betreiber 2026-10-21: Vorbilder geben Haltung und Ton vor, nicht Dichte und Satzbau — die alten Takes waren verschachtelt.
+    expect(block).toContain('übernimm Haltung und Ton, NICHT den Satzbau')
+    expect(block).not.toMatch(/Dichte/)
     expect(block).toContain('„Titel"')
     expect(block).toContain('Nvidia kauft Chips')
     expect(block).toContain('70 %')

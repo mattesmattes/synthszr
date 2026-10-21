@@ -119,9 +119,9 @@ export function formatExemplarTakesForPrompt(takes: ExemplarCandidate[]): string
     return `[${i + 1}] „${t.title}" (${fmtDate(t.date)}), Abschnitt „${t.heading}"${zustimmung}:\n${t.take}`
   })
   return [
-    'SO SCHREIBT MATTES SEINE TAKES (veröffentlichte Beispiele zu verwandten Themen — übernimm Haltung, Dichte und Satzbau, NICHT die Formulierungen, Zahlen oder Pointen; dein Take handelt von DIESER News):',
+    'SO SCHREIBT MATTES SEINE TAKES (veröffentlichte Beispiele zu verwandten Themen — übernimm Haltung und Ton, NICHT den Satzbau und NICHT die Formulierungen, Zahlen oder Pointen; dein Take handelt von DIESER News):',
     ...lines,
-    'Die Beispiele zeigen Haltung, Dichte und Tonfall. Längere Beispiele sind älter, halte dich an das Wortbudget.',
+    'Die Beispiele zeigen Haltung und Ton. Wo sie verschachtelt sind, schreib klarer als sie; halte dich an das Wortbudget.',
   ].join('\n\n')
 }
 
