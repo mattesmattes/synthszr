@@ -166,10 +166,12 @@ const SHORT_REACTIONS = new Set([
   'richtig', 'richtig!', 'stimmt', 'stimmt!', 'klar', 'klar!', 'okay', 'ok',
   'echt', 'echt?', 'wirklich', 'wirklich?', 'interessant', 'interessant!',
   'wow', 'krass', 'absolut', 'definitiv', 'natürlich', 'na klar',
+  'hm', 'warte', 'warte mal', 'warte, was', 'was', 'echt jetzt', 'ach so', 'ernsthaft', 'moment', 'naja', 'na ja',
   // English
   'yes', 'yes!', 'no', 'yeah', 'right', 'right!', 'exactly', 'exactly!',
   'sure', 'okay', 'interesting', 'interesting!', 'really', 'really?',
   'wow', 'absolutely', 'definitely', 'of course', 'true', 'true!',
+  'mm-hmm', 'uh-huh', 'nope', 'yep', 'wait', 'wait, what', 'wait what', 'what', 'no way', 'seriously', 'hold on', 'fair', 'fair enough',
 ])
 
 /**
@@ -525,15 +527,19 @@ function trimLeadingSilence(pcm: Float32Array[], silenceMs: number, keepMs: numb
 /**
  * Analyze a segment's text to determine dialogue patterns
  */
-function analyzeText(text: string): {
+export function analyzeText(text: string): {
   wordCount: number
   isShortReaction: boolean
   isInterrupting: boolean
   isQuestion: boolean
   endsWithTrailOff: boolean
 } {
-  // Strip emotion tags for analysis
+  // Strip the voice direction for analysis. The first bracket is the TTS
+  // instruction and free-form since 2026 ("[dry, measured]"); until 2026-10-21
+  // it counted as words, so short reactions were never recognised. Legacy
+  // single-word tags may also sit mid-line.
   const cleanText = text
+    .replace(/^\s*\[[^\]]*\]\s*/, '')
     .replace(/\[(?:cheerfully|thoughtfully|seriously|excitedly|skeptically|laughing|sighing|whispering|interrupting|curiously|dramatically|calmly|enthusiastically)\]\s*/gi, '')
     .trim()
 
@@ -550,8 +556,9 @@ function analyzeText(text: string): {
   // Check if it's a question
   const isQuestion = cleanText.endsWith('?')
 
-  // Check if text trails off (ends with ...)
-  const endsWithTrailOff = cleanText.endsWith('...')
+  // Check if text trails off: three dots, an ellipsis or an em dash at the end
+  // (scripts cut off with "…" or "—" far more often than with "...")
+  const endsWithTrailOff = /(?:\.\.\.|…|—)$/.test(cleanText)
 
   return { wordCount, isShortReaction, isInterrupting, isQuestion, endsWithTrailOff }
 }

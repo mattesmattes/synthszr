@@ -569,6 +569,32 @@ Not-Aus: `update curation_runs set cancel_requested = true where id = …` —
 `advanceRun` schließt den Run beim nächsten Tick als `cancelled` ab, bevor er
 weiterarbeitet. `shadow_enabled = false` stoppt nur neue Kickoffs.
 
+## Recent Changes (2026-10-21)
+
+### Podcast-Dialogregeln
+- Die Regeln für natürlichen Dialog liegen in `lib/podcast/dialogue-style.ts`
+  (`DIALOGUE_STYLE_RULES_EN/DE`) und sind in beide eingebauten Prompts von
+  `app/api/podcast/generate-script` eingebunden. Sie verlangen nur, was die
+  Kette hörbar macht: eine Sprechanweisung am Zeilenanfang (wird zur
+  `instructions` von gpt-4o-mini-tts, weitere Klammern werden gelöscht),
+  Reaktionen als eigene 1–3-Wort-Zeilen, Abbrüche mit `...`, `(overlapping)`
+  für echtes Gleichzeitig-Sprechen. Gestrichen: die Quoten (mind. 8×
+  overlapping, 4 Falschstarts, 3 Studio-Momente) und die Direktiv-Tags
+  `[beat]`, `[short pause]`, `[paper rustle]`, `[sip]`, die `stripDirectiveTags`
+  vor der Synthese löscht, ohne Stille zu erzeugen.
+- Mixer (`lib/audio/crossfade.ts`, `analyzeText`): ignoriert die freie
+  Sprechanweisung am Zeilenanfang (vorher zählte sie als Wörter, kurze
+  Reaktionen wurden nie erkannt) und wertet `...`, `…` und `—` am Zeilenende
+  als Trail-off.
+- **Totes Setting:** `podcast_script_prompt` (Admin → Audio, Prompt-Textfeld)
+  erreicht den Generator nicht, kein Aufrufer schickt `customPrompt`. Die dort
+  am 16.08. gespeicherten „Style rules“ waren nie wirksam. Nicht als Override
+  verdrahten: Das würde den gesamten eingebauten Prompt ersetzen (Format,
+  Intermezzo, Artikel-Marker).
+- Alle vier Sprachzeilen in `post_podcasts` tragen dasselbe englische Skript
+  (Auslöser z. B. Artikel-Editor: „EN only“); die DE-Vorlage greift nur bei
+  manueller Generierung mit Sprache de in Admin → Audio.
+
 ## Recent Changes (2026-01-14)
 
 ### Ghostwriter Queue Fix

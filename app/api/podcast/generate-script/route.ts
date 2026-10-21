@@ -32,6 +32,7 @@ import { getPersonalityState, buildPersonalityBrief, stripMomentsSection } from 
 import { isWeekWrapup, wrapupPromptSection } from '@/lib/podcast/wrapup-mode'
 import { retrieveMemory, buildMemoryBrief, shouldAnnounceMemoryAwakening } from '@/lib/podcast/memory'
 import { ensureIntermezzoMarker } from '@/lib/podcast/intermezzo'
+import { DIALOGUE_STYLE_RULES_DE, DIALOGUE_STYLE_RULES_EN } from '@/lib/podcast/dialogue-style'
 import Anthropic from '@anthropic-ai/sdk'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { withUsageLogging } from '@/lib/ai/usage-log'
@@ -94,44 +95,24 @@ NICHT: visuelle Gesten, abstrakte Adjektive oder literarische Beschreibungen.
 
 WICHTIG: Die Anweisungen in den Klammern MÜSSEN auf Englisch sein — der Dialogtext bleibt auf Deutsch.
 
-**Direktiv-Tags (werden NICHT gesprochen, steuern Timing/Atmosphäre):**
-- [beat] — kurze Denkpause
-- [short pause] — natürliche Pause (~1s)
-- [longer pause] — längere Pause (~2s)
-- [paper rustle] — Studio-Atmosphäre
-- [sip] — Studio-Atmosphäre
-
 **REALISM RULES — PFLICHT (Skript wird ABGELEHNT wenn diese fehlen):**
 
 ⚠️ ANTI-PATTERN-WARNUNG: Erzeuge KEIN höfliches Interview wo HOST fragt und GUEST antwortet.
 Erzeuge stattdessen ein ECHTES Gespräch mit Reibung, Chaos und menschlichen Momenten.
 
 1. **Turn-Taking:** Ungleiche Redezeit. Manche Turns sind 1 Satz, andere 5 Sätze. KEINE Ping-Pong-Symmetrie.
-2. **Überlappungen (PFLICHT — mind. 8× im Skript, beide Sprecher):**
-   Nutze \`(overlapping)\` wenn jemand reinredet WÄHREND der andere noch spricht. BEIDE Sprecher müssen overlappen — nicht nur HOST.
-   Typische Situationen: Zustimmung ("Genau!"), Erstaunen ("Warte, was?!"), Widerspruch ("Nee, das stimmt so nicht—"), Ergänzung ("Und nicht nur das—")
-   Beispiel:
-   GUEST: [thoughtfully] Das Interessante an diesem Deal ist ja, dass hier—
-   HOST (overlapping): [excitedly] Genau!
-   GUEST: —dass hier erstmals ein europäischer Player den Zuschlag bekommen hat.
-   HOST: [curiously] Aber was bedeutet das konkret für—
-   GUEST (overlapping): [interrupting] Moment, lass mich noch den Punkt zu Ende bringen.
-3. **PFLICHT — Exakt 3 Missverständnisse + Reparaturen:** Einer versteht den anderen FALSCH und wird KORRIGIERT.
+2. **PFLICHT — Exakt 3 Missverständnisse + Reparaturen:** Einer versteht den anderen FALSCH und wird KORRIGIERT.
    Beispiel: "Du meinst die Übernahme?" — "Nein, nein, ich sprach vom Joint Venture, das ist was ganz anderes."
    Weiteres Beispiel: "Moment — das hab ich jetzt anders verstanden. Du sagst also, dass..."
-4. **PFLICHT — Exakt 2 echte Meinungsverschiedenheiten:** HOST und GUEST sind UNTERSCHIEDLICHER Meinung und halten daran fest (mind. 3 Turns lang). Kein sofortiges "Da hast du recht".
+3. **PFLICHT — Exakt 2 echte Meinungsverschiedenheiten:** HOST und GUEST sind UNTERSCHIEDLICHER Meinung und halten daran fest (mind. 3 Turns lang). Kein sofortiges "Da hast du recht".
    Beispiel: HOST findet etwas übertrieben, GUEST verteidigt es mit Argumenten, HOST bleibt skeptisch.
-5. **Natürliche Pausen:** [beat], [short pause], [longer pause] — sparsam, variiert. Nicht nach jedem Satz.
-6. **Backchanneling variiert:** "mm-hmm", "ja", "richtig", "okay—" — nicht nach jedem Satz, nicht im Muster. Mal 3 Sätze ohne Reaktion, mal 2 schnelle nacheinander.
-7. **Falschstarts (mind. 4×):** "Ich— ich meine, was ich sagen will ist—", "Also das ist— warte, lass mich anders anfangen.", "Das klingt jetzt vielleicht— also okay, anders gesagt:"
-8. **70-80% Substanz, 20-30% menschliche Reibung:** Persönliche Anekdote, kurzer Abstecher, Humor.
-9. **Keine Recap-Inflation.** Nur wenn natürlich: "Lass mich kurz checken ob ich das richtig verstanden hab..."
-10. **Konversationeller Stil.** KEINE "LinkedIn-Satzketten". Kurze Sätze. Umgangssprache erlaubt. "Echt jetzt?", "Krass.", "Keine Ahnung ehrlich gesagt."
-11. **Studio-Momente (mind. 3×):** [paper rustle], [sip], "Moment, ich hab mir das markiert...", "Warte, ich schau mal schnell..."
-12. **Running Gag / Callback:** Bezieh dich auf frühere Episoden (das Personality-System liefert Kontext).
-13. **Fakten-Hygiene:** Keine erfundenen Details. Bei Unsicherheit: "Da müsste ich nochmal nachschauen."
-14. **Verbotene Ausdrücke bei Selbstreflexion:** Wenn HOST oder GUEST über ihre KI-Natur reflektieren, NIEMALS den Ausdruck "Pattern-Matching" verwenden.
-15. **\`[INTERMEZZO]\`-Marker — PFLICHT, exakt einmal pro Skript, direkt vor News #5:**
+4. **70-80% Substanz, 20-30% menschliche Reibung:** Persönliche Anekdote, kurzer Abstecher, Humor.
+5. **Keine Recap-Inflation.** Nur wenn natürlich: "Lass mich kurz checken ob ich das richtig verstanden hab..."
+6. **Konversationeller Stil.** KEINE "LinkedIn-Satzketten". Kurze Sätze. Umgangssprache erlaubt. "Echt jetzt?", "Krass.", "Keine Ahnung ehrlich gesagt."
+7. **Running Gag / Callback:** Bezieh dich auf frühere Episoden (das Personality-System liefert Kontext).
+8. **Fakten-Hygiene:** Keine erfundenen Details. Bei Unsicherheit: "Da müsste ich nochmal nachschauen."
+9. **Verbotene Ausdrücke bei Selbstreflexion:** Wenn HOST oder GUEST über ihre KI-Natur reflektieren, NIEMALS den Ausdruck "Pattern-Matching" verwenden.
+10. **\`[INTERMEZZO]\`-Marker — PFLICHT, exakt einmal pro Skript, direkt vor News #5:**
 
     Setze eine Zeile mit dem Marker \`[INTERMEZZO]\` (als eigene Zeile, ohne HOST/GUEST-Prefix) **direkt vor der fünften News-Sektion** im Skript. An dieser Stelle leiten HOST und GUEST eine kurze Selbstreflexions-Sequenz ein — sie reden über sich selbst, über ihre Rolle als KI-Stimmen, das Format des Gesprächs oder einen menschlichen Studio-Moment.
 
@@ -157,14 +138,14 @@ Erzeuge stattdessen ein ECHTES Gespräch mit Reibung, Chaos und menschlichen Mom
 
     **NICHT optional:** Das Skript MUSS exakt einen \`[INTERMEZZO]\`-Marker enthalten. Fehlt er, ist der Auftrag nicht erfüllt.
 
+${DIALOGUE_STYLE_RULES_DE}
+
 **SELF-CHECK vor Abgabe — das Skript MUSS enthalten:**
-□ Mind. 8× \`(overlapping)\` (HOST und GUEST)
 □ Exakt 3 Missverständnisse mit Korrektur
 □ Exakt 2 Meinungsverschiedenheiten (mind. 3 Turns lang)
-□ Mind. 4 Falschstarts
-□ Mind. 3 Studio-Momente ([paper rustle], [sip])
 □ Ungleiche Turn-Längen (kein Ping-Pong)
 □ **Genau EIN \`[INTERMEZZO]\`-Marker, plaziert zwischen News #4 und News #5, mit Selbstreflexions-Block davor/danach**
+□ Keine [beat]/[pause]-Tags, keine zweite Klammer in einer Zeile, Abbrüche enden mit ...
 Wenn eines fehlt: ÜBERARBEITE das Skript bevor du es ausgibst.
 
 **4-BLOCK-STRUKTUR:**
@@ -190,7 +171,7 @@ Diese Sätze standen in fast jeder bisherigen Folge. Formuliere beide Pflicht-El
 
 **WICHTIG: Im gesamten Dialog wird der GUEST IMMER als "Synthesizer" bezeichnet — NIEMALS als "Synthszr".**
 Der GUEST (Synthesizer) bringt die pointierten Meinungen/Einschätzungen aus dem Artikel ein (im Artikel als "Synthszr Take" markiert).
-**WICHTIG: Die Worte "Synthesizer Take" / "Synthszr Take" werden im gesprochenen Dialog NIEMALS verwendet.** Stattdessen natürliche Gesprächswendungen — der HOST fragt z.B. "Wie siehst du das?", "Was ist deine Sicht dazu?", "Was ist dein Standpunkt?", "Wie ist deine Meinung?"; der GUEST antwortet z.B. "Meine Sicht ist...", "Mein Standpunkt dazu:", "Ich sehe das so:", "Meine Meinung:".
+**WICHTIG: Die Worte "Synthesizer Take" / "Synthszr Take" werden im gesprochenen Dialog NIEMALS verwendet.** Stattdessen natürliche Gesprächswendungen — der HOST übergibt mit einer zugespitzten Frage zum Mechanismus (siehe DIALOG-STIL, Regel 8).
 
 **KRITISCH — Ziel-Länge: {duration} Minuten = {wordCount}–{maxWordCount} Wörter:**
 - Das Skript MUSS mindestens {wordCount} Wörter lang sein.
@@ -272,51 +253,31 @@ NOT: visual gestures, abstract adjectives, or literary descriptions.
 - [tilting head] ← visual gesture, not a voice effect
 - [slow down, lower pitch] ← too mechanical, no character
 
-**Directive Tags (NOT spoken, control timing/atmosphere):**
-- [beat] — brief thinking pause
-- [short pause] — natural pause (~1s)
-- [longer pause] — longer pause (~2s)
-- [paper rustle] — studio atmosphere
-- [sip] — studio atmosphere
-
 **REALISM RULES — MANDATORY (script will be REJECTED if these are missing):**
 
 ⚠️ ANTI-PATTERN WARNING: Do NOT produce a polite interview where HOST asks and GUEST answers.
 Produce a REAL conversation with friction, messiness, and human moments.
 
 1. **Turn-Taking:** Unequal speaking time. Some turns are 1 sentence, others are 5 sentences. NO ping-pong symmetry.
-2. **Overlapping (MANDATORY — at least 8× in the script, BOTH speakers):**
-   Use \`(overlapping)\` when someone talks OVER the other person. BOTH speakers must overlap — not just HOST.
-   Typical situations: agreement ("Exactly!"), surprise ("Wait, what?!"), disagreement ("No, that's not—"), addition ("And not just that—")
-   Example:
-   GUEST: [thoughtfully] The interesting thing about this deal is that—
-   HOST (overlapping): [excitedly] Exactly!
-   GUEST: —that for the first time a European player got the contract.
-   HOST: [curiously] But what does that mean concretely for—
-   GUEST (overlapping): [interrupting] Hold on, let me finish my point.
-3. **MANDATORY — Exactly 3 misunderstandings + repairs:** One person misunderstands the other and gets CORRECTED.
+2. **MANDATORY — Exactly 3 misunderstandings + repairs:** One person misunderstands the other and gets CORRECTED.
    Example: "You mean the acquisition?" — "No no, I was talking about the joint venture, that's totally different."
    Another: "Wait — I understood that differently. So you're saying that..."
-4. **MANDATORY — Exactly 2 genuine disagreements:** HOST and GUEST hold DIFFERENT opinions and stick to them (at least 3 turns each). No instant "You're right about that."
+3. **MANDATORY — Exactly 2 genuine disagreements:** HOST and GUEST hold DIFFERENT opinions and stick to them (at least 3 turns each). No instant "You're right about that."
    Example: HOST finds something overblown, GUEST defends it with arguments, HOST remains skeptical.
-5. **Natural pauses:** [beat], [short pause], [longer pause] — sparingly, varied. Not after every sentence.
-6. **Varied backchanneling:** "mm-hmm", "yeah", "right", "okay—" — not after every sentence, not in a pattern. Sometimes 3 sentences without reaction, sometimes 2 quick in a row.
-7. **False starts (at least 4×):** "I— I mean, what I'm trying to say is—", "So this is— wait, let me start over.", "It sounds maybe— okay, put differently:"
-8. **70-80% substance, 20-30% human friction:** Personal anecdotes, brief tangents, humor.
-9. **No recap inflation.** Only when natural: "Let me just check if I understood that right..."
-10. **Conversational style.** NO "LinkedIn sentence chains". Short sentences. Colloquial language OK. "Seriously?", "Wild.", "Honestly no idea."
-11. **Studio moments (at least 3×):** [paper rustle], [sip], "Hold on, I marked that down...", "Wait, let me check real quick..."
-12. **Running gag / callback:** Reference earlier episodes (the personality system provides context).
-13. **Fact hygiene:** No invented details. When uncertain: "I'd need to double-check that."
-14. **Forbidden expressions in self-reflection:** When HOST or GUEST reflect on their AI nature, NEVER use the phrase "pattern matching".
+4. **70-80% substance, 20-30% human friction:** Personal anecdotes, brief tangents, humor.
+5. **No recap inflation.** Only when natural: "Let me just check if I understood that right..."
+6. **Conversational style.** NO "LinkedIn sentence chains". Short sentences. Colloquial language OK. "Seriously?", "Wild.", "Honestly no idea."
+7. **Running gag / callback:** Reference earlier episodes (the personality system provides context).
+8. **Fact hygiene:** No invented details. When uncertain: "I'd need to double-check that."
+9. **Forbidden expressions in self-reflection:** When HOST or GUEST reflect on their AI nature, NEVER use the phrase "pattern matching".
+
+${DIALOGUE_STYLE_RULES_EN}
 
 **SELF-CHECK before output — the script MUST contain:**
-□ At least 8× \`(overlapping)\` (HOST and GUEST)
 □ Exactly 3 misunderstandings with correction
 □ Exactly 2 disagreements (at least 3 turns each)
-□ At least 4 false starts
-□ At least 3 studio moments ([paper rustle], [sip])
 □ Unequal turn lengths (no ping-pong)
+□ No [beat]/[pause] tags, no second bracket in a line, cut-offs end with ...
 If any are missing: REVISE the script before outputting.
 
 **4-BLOCK STRUCTURE:**
@@ -333,7 +294,7 @@ Example: "We'll see you again tomorrow! And if you enjoyed this episode, please 
 
 **IMPORTANT: In the entire dialogue, the GUEST is ALWAYS referred to as "Synthesizer" — NEVER as "Synthszr".**
 GUEST (Synthesizer) brings in the article's pointed opinions/takes (marked as "Synthszr Take" in the article).
-**IMPORTANT: The words "Synthesizer Take" / "Synthszr Take" are NEVER spoken in the dialogue.** Use natural conversational phrasing instead — the HOST asks e.g. "What's your view on this?", "What's your take?", "Where do you stand?", "What's your opinion?"; the GUEST replies e.g. "My take is...", "My point of view:", "The way I see it:", "My standpoint:".
+**IMPORTANT: The words "Synthesizer Take" / "Synthszr Take" are NEVER spoken in the dialogue.** Use natural conversational phrasing instead — the HOST hands over with a pointed question about the mechanism (see DIALOGUE STYLE, rule 8).
 
 **CRITICAL — Target Length: {duration} minutes = {wordCount}–{maxWordCount} words:**
 - The script MUST be at least {wordCount} words long.
