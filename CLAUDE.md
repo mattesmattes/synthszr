@@ -194,6 +194,20 @@ streicht sonst den letzten Satz. Umgesetzt (alle in `lib/claude/`):
    „SYNTHSZR TAKE (Entwurf)“, Tells fängt das Lektorat (`PROOFREADING_PROMPT`).
    A/B an denselben sieben Abschnitten: 15–17 Wörter je Satz, Argument in
    einer Linie. Satzstruktur-Schablonen bleiben tabu (Betreiber 2026-10-20).
+6. **Perspektive und Flughöhe (2026-10-22):** Betreiber-Befund am Duet-Take:
+   „nicht aus Analystenperspektive, Flughöhe stimmt nicht“ (Take über
+   Entschuldigungsmails eines Kleinunternehmers). Zwei Ursachen: Seit dem
+   Wegfall des Skeletts definierte kein Satz, für wen und auf welcher Höhe
+   der Take spricht, und der Planer hatte einen operativen Blickwinkel
+   vergeben („jede Mail spart Arbeitszeit, wenn Duet seltener falsch
+   handelt“). Umgesetzt: Abschnitt PERSPEKTIVE im Take-Prompt (Analyst für
+   Entscheider; Markt, Strategie, Geschäftsmodell; kein Einzelnutzer-Alltag,
+   keine ausgedachte Szene; Beispiel belegt, ersetzt nicht; „Detail aus der
+   Nachricht“), Zeile FLUGHÖHE in `TAKE_ANGLE_RULES` plus Stückkosten als
+   Preis-/Margen-/Marktstruktur-Frage, Entwurfs-Block mit
+   „Analysten-Flughöhe“. Dry-Run: Planer vergab für Duet „Marge je
+   Pro-Nutzer unter Druck“ statt „spart Arbeitszeit“, der Take argumentiert
+   über Flatrate gegen anlasslos arbeitenden Agenten und Preistest.
 **Messen:** `pnpm takes:measure -- --posts 20` bzw. `--since <Datum>`
 (`scripts/measure-takes.ts`, lesend): Wörter, Wörter je Satz, kurze Sätze,
 Doppelpunkte, Zahl im Take und Schlusssatz, Prognosen, Überleben des letzten

@@ -86,7 +86,12 @@ describe('buildTakeUserPrompt / TAKE_SYSTEM_PROMPT', () => {
   })
 
   it('System-Prompt ist kompakt: Form, Argument, Lesbarkeit, Verbote (Betreiber 2026-10-21: weniger Regeln, fluessigere Takes)', () => {
-    expect(TAKE_SYSTEM_PROMPT.length).toBeLessThan(2500)
+    expect(TAKE_SYSTEM_PROMPT.length).toBeLessThan(2900)
+    // Betreiber 2026-10-22: „nicht aus Analystenperspektive, Flughöhe stimmt nicht" — die Rolle war nirgends definiert.
+    expect(TAKE_SYSTEM_PROMPT).toMatch(/PERSPEKTIVE: Du schreibst als Analyst/)
+    expect(TAKE_SYSTEM_PROMPT).toMatch(/Flughöhe sind Unternehmen, Geschäftsmodelle und Märkte/)
+    expect(TAKE_SYSTEM_PROMPT).toMatch(/Detail aus der Nachricht/)
+    expect(TAKE_SYSTEM_PROMPT).toMatch(/sie ändert die Flughöhe nicht/)
     expect(TAKE_SYSTEM_PROMPT).toMatch(/50 bis 75 Wörter/)
     expect(TAKE_SYSTEM_PROMPT).toMatch(/Satzzahl und Rhythmus sind frei/)
     expect(TAKE_SYSTEM_PROMPT).toMatch(/LESBARKEIT: Ein Gedanke pro Satz/)

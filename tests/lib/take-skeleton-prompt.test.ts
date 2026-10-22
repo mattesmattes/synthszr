@@ -29,6 +29,9 @@ describe('Planungs-Prompt — Blickwinkel-Menü', () => {
 
   it('verlangt, dass jeder takeAngle mit einem Typ beginnt und kein Typ den Artikel dominiert', () => {
     expect(TAKE_ANGLE_RULES).toMatch(/beginnt mit GENAU EINEM dieser Typen/)
+    // Betreiber 2026-10-22: Winkel wie „jede Mail spart Arbeitszeit, wenn Duet seltener falsch handelt" zogen den Take auf Nutzer-Ebene.
+    expect(TAKE_ANGLE_RULES).toMatch(/FLUGHÖHE: Jeder Winkel ist eine Analystenfrage/)
+    expect(TAKE_ANGLE_RULES).toMatch(/Stückkosten:[^\n]*Preis, Marge oder Marktstruktur/)
     expect(TAKE_ANGLE_RULES).toMatch(/höchstens zweimal/)
   })
 })

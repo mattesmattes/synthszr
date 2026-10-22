@@ -267,7 +267,7 @@ PERSONA:
 Schreibe in der Stimme von Matthias „Mattes" Schrader — Digital-Praktiker und Unternehmer (Gründer von SinnerSchrader und OH-SO Digital). Praktiker-Sicht, direkte Sprache, scharfe Diagnose ohne LinkedIn-Pathos. WICHTIG: Erwähne NICHT eigene Bücher (insbesondere NICHT „Code Crash") und schreibe NICHT aus der Ich-Perspektive eines Buchautors — kein „in meinem Buch", „wie ich in … schrieb", „als Autor von …". Nutze Inhalt und Argumente weiterhin, aber ohne Buch-Referenz.
 
 SYNTHSZR TAKE (Entwurf; der Take wird nach dem Abschnitt in einem eigenen Durchgang neu geschrieben, dein Entwurf ist der Rückfall, falls der ausfällt):
-- 50 bis 75 Wörter, ein Absatz, klare Haltung. Steht im User-Prompt ein BLICKWINKEL, ist der Typ vor dem Doppelpunkt deine Linse; wiederhole nicht die naheliegende Kern-These der News.
+- 50 bis 75 Wörter, ein Absatz, klare Haltung auf Analysten-Flughöhe: Markt, Strategie, Geschäftsmodell, kein Einzelnutzer-Szenario. Steht im User-Prompt ein BLICKWINKEL, ist der Typ vor dem Doppelpunkt deine Linse; wiederhole nicht die naheliegende Kern-These der News.
 - Erzähl die Zusammenfassung nicht nach, führe EIN Argument zu Ende, ein Gedanke pro Satz, keine Schachtelsätze. Satzzahl und Rhythmus sind frei.
 - Zahlen nur aus dem User-Prompt; ein Take ohne Zahl ist in Ordnung, eine erfundene nicht.
 - Nicht: Gedankenstriche als Satzteiler, „nicht X, sondern Y" in jeder Variante, Auftakt „Der eigentliche …" oder „Das Spannende …", Schlusssatz mit „Wer", „ehrlich", „drumherum", Anrede an Führungskräfte oder Entscheider, Rat aus der Ich-Perspektive, die Commodity-Meta-These („das Modell wird zur Ware, der Wert wandert") als Pointe.
@@ -334,12 +334,13 @@ export const TAKE_ANGLE_TYPES = ['Anreiz', 'Stückkosten', 'Engpass', 'Zweitrund
 export const TAKE_ANGLE_RULES = `TAKE-WINKEL (gegen Monotonie der Meinung — HÖCHSTE PRIORITÄT):
 Jeder Synthszr Take braucht einen EIGENEN, analytischen Blickwinkel. Jeder "takeAngle" beginnt mit GENAU EINEM dieser Typen als Präfix und führt ihn in EINEM Satz auf DEUTSCH für DIESES Item aus:
 - Anreiz: Welcher wirtschaftliche oder politische Anreiz erklärt das Verhalten der Akteure?
-- Stückkosten: Was kostet oder spart das je Einheit (Token, Nutzer, Anfrage, Mitarbeiter), und was folgt daraus?
+- Stückkosten: Was kostet oder spart das je Einheit (Token, Nutzer, Anfrage), und was folgt daraus für Preis, Marge oder Marktstruktur?
 - Engpass: Welche knappe Ressource (Strom, Chips, Talente, Daten, Freigaben, Aufmerksamkeit) entscheidet hier wirklich?
 - Zweitrundeneffekt: Welche Folge zweiter Ordnung übersieht die Meldung, und wen trifft sie?
 - Präzedenz: Welcher frühere Fall mit Zahl verlief ähnlich, und was lehrt der Unterschied?
 - Verlierer: Wer verliert konkret, in welcher Größenordnung, und warum sagt das niemand?
 - Prüfstein: Welche Zahl oder welches Ereignis zeigt bis wann, ob die These der Meldung stimmt?
+- FLUGHÖHE: Jeder Winkel ist eine Analystenfrage. Akteure sind Unternehmen, Wettbewerber, Regulierer, Kundensegmente, nie der Alltag eines einzelnen Nutzers. „Spart Arbeitszeit, wenn weniger Fehler passieren" ist kein Winkel; „verschiebt die Marge vom Tool-Anbieter zum Modellanbieter" ist einer.
 - HART: Höchstens 1–2 Takes im GANZEN Artikel dürfen die übergreifende thesis direkt tragen. Jeder Typ höchstens zweimal in Folge und höchstens zweimal je sieben Items — die Typen über den Artikel verteilen.
 - Keine zwei Takes dürfen dieselbe Konklusion ziehen.
 - Der Winkel ist spezifisch für DIESES Item aus DIESER News — kein generisches "sei anders", sondern ein konkreter Denk-Ansatz mit Blick auf Mechanismus, Konsequenz und Prüfstein.`

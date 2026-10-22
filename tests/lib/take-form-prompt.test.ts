@@ -15,6 +15,7 @@ describe('SECTION_SYSTEM_PROMPT — Form des Takes', () => {
     // Betreiber 2026-10-21: Der Abschnitts-Prompt traegt nur noch einen kompakten Entwurfs-Block;
     // die ausfuehrlichen Take-Verbote liegen im Take-Durchgang (take-pass.ts) und im Lektorat.
     expect(SECTION_SYSTEM_PROMPT).toMatch(/SYNTHSZR TAKE \(Entwurf/)
+    expect(SECTION_SYSTEM_PROMPT).toMatch(/Analysten-Flughöhe/)
     expect(SECTION_SYSTEM_PROMPT).not.toMatch(/INHALTLICHE VERBOTE|KONTRAST-KONSTRUKTIONEN|SELF-CHECK VOR ABGABE|SCHREIBSTIL:|FORM DES TAKES|MATTES-MUSTER/)
     expect(SECTION_SYSTEM_PROMPT).not.toMatch(/drei bis vier Sätze|Kein Satz über|unter acht Wörtern|Höchstens EIN Doppelpunkt|Nie drei lange Sätze/)
   })
