@@ -241,6 +241,15 @@ weiterentwickelt hat, und ersetzt dort den gekürzten Take durch ein
   (`lib/email/tiptap-to-html.ts`) und Take-Barometer erkennen den Marker
   `Synthszr Update` wie `Take|Contra`. `take-exemplars.ts` matcht nur
   „Synthszr Take:“, Updates werden also keine Vorbilder.
+- **Zeitraum wählbar (2026-10-24):** Das Panel bietet die letzten zehn Berliner
+  Tage (heute eingeschlossen) als Von/Bis an; Tage und Vorschlag (Montag der
+  laufenden Woche bis heute, sonntags bis Sonnabend) liefert `GET
+  /api/admin/week-wrapup` (`selectableDays`, `defaultRange` in `week.ts`).
+  `POST` nimmt `{ from, to }` (YYYY-MM-DD, beide Tage inklusiv), prüft mit
+  `rangeError` (Format, Reihenfolge, nicht in der Zukunft, höchstens zehn
+  Tage → 400) und baut über `dateRangeWindow`; ohne Angabe bleibt es bei der
+  letzten abgeschlossenen Woche (`lastCompleteWeek`, auch für die
+  Status-Karte). Slug-Stamm ist `ai-week-wrap-up-<from>`.
 - **Trockenlauf:** `pnpm wrapup:research-dry` (`scripts/wrapup-research-dry.ts`,
   optional `-- --asof YYYY-MM-DD`): nur Recherche, kein Entwurf; Ausgabe je
   Thema plus Kosten aus `llm_usage` (Web-Suchen separat, 0,01 USD je Suche).
