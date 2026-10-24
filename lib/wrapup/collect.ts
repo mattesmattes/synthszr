@@ -43,7 +43,7 @@ export interface WrapupTopic {
 
 const WEEKDAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Sonnabend']
 
-function textOf(node: unknown): string {
+export function textOf(node: unknown): string {
   const n = node as { type?: string; text?: string; content?: unknown[] }
   if (!n) return ''
   if (n.type === 'text') return n.text ?? ''

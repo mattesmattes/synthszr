@@ -103,7 +103,7 @@ function isFavoriteModel(id: string): boolean {
 const USE_CASE_GROUPS: Array<{ title: string; useCases: string[] }> = [
   {
     title: 'Content-Erstellung',
-    useCases: ['ghostwriter', 'ghostwriter_take', 'article_planning', 'proofreading', 'enrich', 'wrapup'],
+    useCases: ['ghostwriter', 'ghostwriter_take', 'article_planning', 'proofreading', 'enrich', 'wrapup', 'wrapup_research'],
   },
   {
     title: 'Analyse & Verarbeitung',
