@@ -7,7 +7,8 @@
  * Bericht uebernommen statt neu geschrieben.
  */
 import { describe, expect, it } from 'vitest'
-import { assembleWrapupDoc, buildHeading } from '@/lib/wrapup/assemble'
+import { assembleWrapupDoc, buildHeading, selectParagraphs, sourcesParagraph, UPDATE_SOURCES_LABEL } from '@/lib/wrapup/assemble'
+import type { TopicUpdate } from '@/lib/wrapup/research'
 import type { WrapupTopic } from '@/lib/wrapup/collect'
 
 const sourceParagraph = {
@@ -132,5 +133,108 @@ describe('assembleWrapupDoc', () => {
   it('laesst einen Abschnitt ohne Take lieber leer als mit leerer Vorsilbe', () => {
     const doc = assembleWrapupDoc([topic()], { intro: 'X.', sections: [] })
     expect(JSON.stringify(doc)).not.toContain('Synthszr Take:')
+  })
+})
+
+// --- Synthszr Update (Spec 2026-10-24) -------------------------------------
+// Bei einem Update ersetzt ein „Synthszr Update"-Absatz den Take, darunter die
+// Recherche-Quellen als link-Marks. Bei `major` darf der Bericht gekuerzt
+// werden — aber nur durch WEGLASSEN ganzer Knoten (keepParagraphs), weil die
+// Quellenlinks an den Knoten haengen. Index 0 bleibt immer, mindestens zwei.
+type N = Record<string, unknown>
+const p = (text: string): N => ({ type: 'paragraph', content: [{ type: 'text', text }] })
+const drei: N[] = [sourceParagraph, p('Zweiter.'), p('Dritter.')]
+const upd = (level: 'none' | 'minor' | 'major'): TopicUpdate => ({
+  weekday: 'Montag', updateLevel: level, summary: 'S',
+  sources: [{ url: 'https://reuters.com/u', title: 'Reuters', date: '2026-10-14' }], searches: 1,
+})
+const texteVon = (doc: N) => (doc.content as N[]).map((n) => JSON.stringify(n))
+
+describe('selectParagraphs', () => {
+  it('gibt alle Knoten zurueck, wenn keine Auswahl vorliegt', () => {
+    expect(selectParagraphs(drei, undefined)).toEqual(drei)
+    expect(selectParagraphs(drei, [])).toEqual(drei)
+  })
+
+  it('behaelt Index 0 immer, sortiert, dedupliziert und ignoriert Indizes ausserhalb', () => {
+    expect(selectParagraphs(drei, [2, 2, 7])).toEqual([drei[0], drei[2]])
+  })
+
+  it('fuellt auf mindestens zwei Knoten auf', () => {
+    expect(selectParagraphs(drei, [0])).toEqual([drei[0], drei[1]])
+  })
+
+  it('laesst einen einzelnen Knoten einzeln', () => {
+    expect(selectParagraphs([drei[0]], [0])).toEqual([drei[0]])
+  })
+})
+
+describe('assembleWrapupDoc mit Updates', () => {
+  const sections = [{ weekday: 'Montag', update: 'Das hat gehalten.', keepParagraphs: [2] }]
+
+  it('setzt bei major nur die gewaehlten Bericht-Knoten ein — unveraendert, samt Marks', () => {
+    const doc = assembleWrapupDoc([topic({ bodyNodes: drei })], { intro: 'X.', sections }, [upd('major')])
+    const s = JSON.stringify(doc)
+    expect(s).toContain('reuters.com/x')
+    expect(s).toContain('Dritter.')
+    expect(s).not.toContain('Zweiter.')
+    expect((doc.content as N[]).find((n) => JSON.stringify(n).includes('reuters.com/x'))).toEqual(sourceParagraph)
+  })
+
+  it('ignoriert keepParagraphs bei minor', () => {
+    const s = JSON.stringify(assembleWrapupDoc([topic({ bodyNodes: drei })], { intro: 'X.', sections }, [upd('minor')]))
+    expect(s).toContain('Zweiter.')
+  })
+
+  it('setzt das Update-Label statt des Take-Labels und verdoppelt es nicht', () => {
+    const s = JSON.stringify(assembleWrapupDoc(
+      [topic()], { intro: 'X.', sections: [{ weekday: 'Montag', update: 'Synthszr Update: Neu.' }] }, [upd('minor')],
+    ))
+    expect(s).toContain('Synthszr Update: Neu.')
+    expect(s).not.toContain('Synthszr Update: Synthszr Update:')
+    expect(s).not.toContain('Synthszr Take:')
+  })
+
+  it('haengt den Quellen-Absatz mit link-Mark und Datum direkt hinter das Update', () => {
+    const doc = assembleWrapupDoc([topic()], { intro: 'X.', sections: [{ weekday: 'Montag', update: 'Neu.' }] }, [upd('minor')])
+    const texts = texteVon(doc)
+    const u = texts.findIndex((t) => t.includes('Synthszr Update: Neu.'))
+    expect(texts[u + 1]).toContain(UPDATE_SOURCES_LABEL)
+    expect(texts[u + 1]).toContain('"href":"https://reuters.com/u"')
+    expect(texts[u + 1]).toContain('14.10.2026')
+  })
+
+  it('nimmt bei Stufe none ein mitgeliefertes update als Take mit Take-Label, ohne Quellen', () => {
+    // Die Recherche hat nichts gefunden — dann darf kein „Update" behauptet
+    // werden, auch wenn das Modell das Feld fuellt.
+    const s = JSON.stringify(assembleWrapupDoc([topic()], { intro: 'X.', sections: [{ weekday: 'Montag', update: 'Doch.' }] }, [upd('none')]))
+    expect(s).toContain('Synthszr Take: Doch.')
+    expect(s).not.toContain(UPDATE_SOURCES_LABEL)
+  })
+
+  it('bleibt ohne Updates beim bisherigen Dokument', () => {
+    const basis = { intro: 'X.', sections: [{ weekday: 'Montag', take: 'Kurz.' }] }
+    const ohne = assembleWrapupDoc([topic()], basis)
+    expect(assembleWrapupDoc([topic()], basis, [])).toEqual(ohne)
+    expect(JSON.stringify(ohne)).not.toContain(UPDATE_SOURCES_LABEL)
+  })
+
+  it('ordnet den Bezug VOR dem Update ein', () => {
+    const texts = texteVon(assembleWrapupDoc(
+      [topic()], { intro: 'X.', sections: [{ weekday: 'Montag', update: 'Neu.', bridge: 'Bezug.' }] }, [upd('minor')],
+    ))
+    expect(texts.findIndex((t) => t.includes('Bezug.'))).toBeLessThan(texts.findIndex((t) => t.includes('Synthszr Update')))
+  })
+})
+
+describe('sourcesParagraph', () => {
+  it('verlinkt jeden Titel und trennt Quellen mit Komma', () => {
+    const node = sourcesParagraph([
+      { url: 'https://a.de', title: 'A', date: '2026-10-14' },
+      { url: 'https://b.de', title: 'B', date: '2026-10-15' },
+    ])
+    const content = node.content as Array<{ text: string; marks?: Array<{ type: string; attrs: { href: string } }> }>
+    expect(content.map((c) => c.text).join('')).toBe('Update-Quellen: A (14.10.2026), B (15.10.2026)')
+    expect(content.filter((c) => c.marks?.length).map((c) => c.marks![0].attrs.href)).toEqual(['https://a.de', 'https://b.de'])
   })
 })
