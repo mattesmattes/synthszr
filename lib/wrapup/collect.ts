@@ -15,6 +15,7 @@
  * der Woche, die gekürzten Takes und dort, wo es sie gibt, ein Bezugs-Absatz.
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
+import { WRAPUP_SLUG_PREFIX } from '@/lib/wrapup/slug'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -138,6 +139,10 @@ export async function collectWeekTopics(
   const out: WrapupTopic[] = []
   const seenDays = new Set<string>()
   for (const row of (data ?? []) as Array<{ slug: string; created_at: string; content: unknown }>) {
+    // Ein Rückblick ist keine Themenquelle: seit der Zeitraum frei wählbar ist
+    // (auch Sonntag), kann der sonntags veröffentlichte Wrap-up im Fenster
+    // liegen — seine H2s „Montag — …" würden sonst als Tagesthema eingesammelt.
+    if (row.slug.startsWith(WRAPUP_SLUG_PREFIX)) continue
     const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' })
       .format(new Date(row.created_at))
     // Ein Tag, ein Thema. Erscheinen an einem Tag zwei Artikel, zählt der

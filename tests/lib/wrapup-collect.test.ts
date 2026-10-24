@@ -7,7 +7,7 @@
  * geprueften Woche ueberhaupt.
  */
 import { describe, expect, it } from 'vitest'
-import { pickTopicFromPost } from '@/lib/wrapup/collect'
+import { pickTopicFromPost, collectWeekTopics } from '@/lib/wrapup/collect'
 
 function heading(text: string, bundleType?: string) {
   return {
@@ -107,5 +107,27 @@ describe('pickTopicFromPost', () => {
       expect(r?.bodyNodes).toHaveLength(1)
       expect(r?.takeText).toBe('')
     })
+  })
+})
+
+// --- Wrap-up-Posts sind keine Themenquelle (Review 2026-10-24) -------------
+// Seit der Zeitraum frei waehlbar ist (auch Sonntag), kann ein am Sonntag
+// veroeffentlichter Rueckblick im Fenster liegen. Er traegt H2s wie „Montag —
+// …" und wuerde sonst selbst als „Thema des Tages" eingesammelt.
+describe('collectWeekTopics', () => {
+  function fakeClient(rows: unknown[]) {
+    const chain: Record<string, unknown> = {}
+    for (const m of ['select', 'eq', 'gte', 'lt']) chain[m] = () => chain
+    chain.order = () => Promise.resolve({ data: rows, error: null })
+    return { from: () => chain } as never
+  }
+  const doc = (text: string) => ({ type: 'doc', content: [heading(text, 'topic'), para('Bericht.'), para('Synthszr Take: T.')] })
+
+  it('ueberspringt Wrap-up-Posts, auch wenn sie an ihrem Tag zuerst erschienen sind', async () => {
+    const topics = await collectWeekTopics(fakeClient([
+      { slug: 'ai-week-wrap-up-2026-10-19', created_at: '2026-10-25T06:00:00Z', content: doc('Montag — Rueckblick') },
+      { slug: 'normaler-post', created_at: '2026-10-25T08:00:00Z', content: doc('Echtes Thema') },
+    ]), '2026-10-24T22:00:00.000Z', '2026-10-25T23:00:00.000Z')
+    expect(topics.map((t) => t.headline)).toEqual(['Echtes Thema'])
   })
 })

@@ -85,6 +85,21 @@ describe('parseResearchResponse', () => {
     expect(r).toEqual({ updateLevel: 'none', summary: '', sources: [] })
   })
 
+  it('dedupliziert Quellen nach URL, kappt auf vier und kuerzt lange Titel', () => {
+    // Review 2026-10-24: der Trockenlauf lieferte bis zu acht Quellen je Thema,
+    // darunter dieselbe Meldung doppelt — die Quellenzeile wuerde unlesbar.
+    const r = parseResearchResponse({ ...ok, sources: [
+      { url: 'https://a.de/1', title: 'A', date: '2026-10-14' },
+      { url: 'https://a.de/1', title: 'A nochmal', date: '2026-10-14' },
+      { url: 'https://b.de/2', title: 'B'.repeat(200), date: '2026-10-15' },
+      { url: 'https://c.de/3', title: 'C', date: '2026-10-15' },
+      { url: 'https://d.de/4', title: 'D', date: '2026-10-16' },
+      { url: 'https://e.de/5', title: 'E', date: '2026-10-16' },
+    ] }, '2026-10-13', '2026-10-25')
+    expect(r.sources.map((s) => s.url)).toEqual(['https://a.de/1', 'https://b.de/2', 'https://c.de/3', 'https://d.de/4'])
+    expect(r.sources[1].title.length).toBeLessThanOrEqual(120)
+  })
+
   it('liefert none bei unbrauchbarer Antwort und bei Stufe none trotz Quellen', () => {
     expect(parseResearchResponse(null, '2026-10-13', '2026-10-25').updateLevel).toBe('none')
     expect(parseResearchResponse({ ...ok, updateLevel: 'none' }, '2026-10-13', '2026-10-25'))

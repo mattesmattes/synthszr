@@ -47,6 +47,7 @@ export interface ResearchClient {
 
 const RESEARCH_TIMEOUT_MS = 90_000
 const MAX_SEARCHES = 4
+const MAX_TITLE_CHARS = 120
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 export function noUpdate(weekday: string): TopicUpdate {
@@ -83,16 +84,22 @@ export function parseResearchResponse(
   const outer = ReportSchema.safeParse(raw)
   if (!outer.success || outer.data.updateLevel === 'none') return none
 
+  // Dedup nach URL und Kappung: der Trockenlauf 2026-10-24 lieferte bis zu
+  // acht Quellen je Thema, dieselbe Meldung darunter doppelt — die Quellenzeile
+  // im Artikel wäre unlesbar. Höchstens so viele Quellen wie Suchen.
   const sources: UpdateSource[] = []
+  const seen = new Set<string>()
   for (const s of outer.data.sources ?? []) {
+    if (sources.length >= MAX_SEARCHES) break
     const p = SourceSchema.safeParse(s)
     if (!p.success) continue
     const url = p.data.url.trim()
     const date = p.data.date?.trim() ?? ''
-    if (!/^https?:\/\//i.test(url)) continue
+    if (!/^https?:\/\//i.test(url) || seen.has(url)) continue
     // ISO-Datumsstrings vergleichen sich lexikographisch korrekt.
     if (!DATE_RE.test(date) || date <= articleDate || date > asOfDate) continue
-    sources.push({ url, title: stripCite(p.data.title ?? '') || url, date })
+    seen.add(url)
+    sources.push({ url, title: (stripCite(p.data.title ?? '') || url).slice(0, MAX_TITLE_CHARS), date })
   }
   if (sources.length === 0) return none
 

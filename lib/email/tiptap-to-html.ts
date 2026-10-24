@@ -1344,7 +1344,7 @@ function applyMarks(text: string, marks?: Array<{ type: string; attrs?: Record<s
         case 'link': {
           const rawHref = mark.attrs?.href || '#'
           const cleanHref = sanitizeUrl(rawHref) || rawHref
-          result = `<a href="${absolutizeHref(cleanHref, lang)}">${result}</a>`
+          result = `<a href="${escapeAttr(absolutizeHref(cleanHref, lang))}">${result}</a>`
           break
         }
         case 'glossaryLink': {
@@ -1493,7 +1493,7 @@ function renderContent(content?: TiptapNode[], lang: string = 'de'): string {
             case 'link': {
               const rawHref = mark.attrs?.href || '#'
               const cleanHref = sanitizeUrl(rawHref) || rawHref
-              text = `<a href="${absolutizeHref(cleanHref, lang)}">${text}</a>`
+              text = `<a href="${escapeAttr(absolutizeHref(cleanHref, lang))}">${text}</a>`
               break
             }
             case 'glossaryLink': {

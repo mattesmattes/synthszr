@@ -10,6 +10,7 @@ import type { createAdminClient } from '@/lib/supabase/admin'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { lastCompleteWeek, dateRangeWindow } from '@/lib/wrapup/week'
 import { collectWeekTopics } from '@/lib/wrapup/collect'
+import { WRAPUP_SLUG_PREFIX } from '@/lib/wrapup/slug'
 import { generateWrapupParts } from '@/lib/wrapup/generate'
 import { researchWeekUpdates, type TopicUpdate, type UpdateLevel } from '@/lib/wrapup/research'
 import { assembleWrapupDoc, formatExcerpt } from '@/lib/wrapup/assemble'
@@ -19,7 +20,7 @@ type AdminClient = ReturnType<typeof createAdminClient>
 
 /** Slug-Stamm eines Wochenrückblicks — auch die Duplikatsprüfung hängt daran. */
 export function wrapupSlugBase(mondayDate: string): string {
-  return `ai-week-wrap-up-${mondayDate}`
+  return `${WRAPUP_SLUG_PREFIX}${mondayDate}`
 }
 
 function slugify(s: string): string {
