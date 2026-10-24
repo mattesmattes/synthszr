@@ -7,8 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Loader2, CalendarRange, AlertCircle, CheckCircle2, CircleSlash } from 'lucide-react'
 
 /**
- * AI-Week Wrap-up: fasst die „Thema des Tages"-Nachrichten der letzten
- * abgeschlossenen Woche zu einem Post zusammen.
+ * AI-Week Wrap-up: fasst die „Thema des Tages"-Nachrichten eines Zeitraums zu
+ * einem Post zusammen. Der Zeitraum ist seit dem 2026-10-24 frei aus den
+ * letzten zehn Tagen (heute eingeschlossen) waehlbar; die Tage und der
+ * Vorschlag kommen vom Server (Berliner Zeitzone), nicht aus dem Browser.
  *
  * Bewusst KEINE Kopie von create-article/page.tsx (über 1.000 Zeilen): die
  * gesamte Queue-Auswahl entfällt, weil die Themen durch den Zeitraum
@@ -27,7 +29,11 @@ export default function WeekWrapupPage() {
     topicCount: number
     verdict: 'vorhanden' | 'fehlt' | 'keine_themen'
     post: { id: string; slug: string; status: string; created_at: string } | null
+    days: Array<{ date: string; label: string }>
+    defaultRange: { from: string; to: string }
   } | null>(null)
+  /** Gewaehlter Zeitraum (beide Tage inklusiv); null, bis der Status geladen ist. */
+  const [range, setRange] = useState<{ from: string; to: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{
     postId: string
@@ -47,7 +53,7 @@ export default function WeekWrapupPage() {
         method: 'POST',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify(range ?? {}),
       })
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(data?.error ?? `Fehlgeschlagen (HTTP ${res.status})`)
@@ -63,7 +69,13 @@ export default function WeekWrapupPage() {
   const loadStatus = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/week-wrapup')
-      if (res.ok) setStatus(await res.json())
+      if (res.ok) {
+        const data = await res.json()
+        setStatus(data)
+        // Vorschlag nur setzen, solange der Betreiber nichts gewaehlt hat —
+        // loadStatus laeuft nach jedem Lauf erneut.
+        setRange((r) => r ?? data.defaultRange ?? null)
+      }
     } catch { /* Anzeige ist Beiwerk — ein Fehler hier darf die Seite nicht blockieren */ }
   }, [])
   useEffect(() => { void loadStatus() }, [loadStatus])
@@ -76,8 +88,8 @@ export default function WeekWrapupPage() {
           AI-Week Wrap-up
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Fasst die „Thema des Tages"-Nachrichten der letzten abgeschlossenen Woche
-          (Montag bis Sonnabend) zu einem Rückblick zusammen.
+          Fasst die „Thema des Tages"-Nachrichten eines wählbaren Zeitraums (die letzten zehn
+          Tage, heute eingeschlossen) zu einem Rückblick zusammen.
         </p>
       </div>
 
@@ -136,14 +148,38 @@ export default function WeekWrapupPage() {
         <CardHeader>
           <CardTitle className="text-base">Rückblick erzeugen</CardTitle>
           <CardDescription className="text-xs">
-            Je Thema wird per Web-Suche geprüft, ob sich die Story seit dem Tagesartikel
+            Zeitraum wählen (beide Tage zählen mit; Vorschlag: Montag der laufenden Woche bis
+            heute). Je Thema wird per Web-Suche geprüft, ob sich die Story seit dem Tagesartikel
             weiterentwickelt hat; wo ja, ersetzt ein Synthszr Update den gekürzten Take.
             Die Berichte werden unverändert übernommen, der Vorlauf teasert die Updates an.
             Das Ergebnis ist ein Entwurf, den du vor dem Veröffentlichen prüfst.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Button onClick={generate} disabled={running}>
+          {status && range && (
+            <div className="flex flex-wrap items-end gap-4">
+              {(['from', 'to'] as const).map((key) => (
+                <label key={key} className="flex flex-col gap-1 text-xs text-muted-foreground">
+                  {key === 'from' ? 'Von' : 'Bis'}
+                  <select
+                    className="rounded-md border bg-background px-3 py-2 text-sm text-foreground"
+                    value={range[key]}
+                    disabled={running}
+                    onChange={(e) => setRange({ ...range, [key]: e.target.value })}
+                  >
+                    {status.days.map((d) => (
+                      <option key={d.date} value={d.date}>{d.label}</option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+              {range.from > range.to && (
+                <span className="pb-2 text-xs text-destructive">„Von" liegt nach „Bis".</span>
+              )}
+            </div>
+          )}
+
+          <Button onClick={generate} disabled={running || !range || range.from > range.to}>
             {running
               ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               : <CalendarRange className="mr-2 h-4 w-4" />}
@@ -170,7 +206,7 @@ export default function WeekWrapupPage() {
             <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
               <p className="font-medium">{result.title}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {result.topicCount} {result.topicCount === 1 ? 'Thema' : 'Themen'} zusammengefasst
+                Zeitraum {result.weekLabel}: {result.topicCount} {result.topicCount === 1 ? 'Thema' : 'Themen'} zusammengefasst
                 {result.weekdays?.length ? ` (${result.weekdays.join(', ')})` : ''}.
               </p>
               <p className="mt-1 text-xs text-muted-foreground">

@@ -119,3 +119,75 @@ export function lastCompleteWeek(now: Date): WrapupWeek {
     label: formatLabel(monday, addDays(monday, 6)),
   }
 }
+
+// --- Frei wählbarer Zeitraum (Betreiber-Wunsch 2026-10-24) -------------------
+// Im Admin sind die letzten zehn Tage (heute eingeschlossen) als Von/Bis
+// wählbar. Die Feldnamen von WrapupWeek (mondayIso …) bleiben, damit
+// collect.ts und build.ts unverändert mit beiden Fenstern arbeiten: `monday*`
+// ist der erste, `saturday*` der letzte gewählte Tag.
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
+
+/**
+ * Fenster für einen gewählten Zeitraum, beide Tage inklusiv: von 00:00 Berliner
+ * Zeit des ersten Tags bis 00:00 des Tags NACH dem letzten (exklusiv) — der
+ * letzte Tag zählt also ganz, auch ein Artikel von 23:30.
+ */
+export function dateRangeWindow(fromDate: string, toDate: string): WrapupWeek {
+  if (!DATE_RE.test(fromDate) || !DATE_RE.test(toDate)) {
+    throw new Error(`Ungültiges Datum: ${fromDate} / ${toDate} (erwartet YYYY-MM-DD)`)
+  }
+  if (fromDate > toDate) throw new Error(`Zeitraum verdreht: ${fromDate} liegt nach ${toDate}`)
+  return {
+    mondayIso: berlinMidnightIso(fromDate),
+    saturdayEndIso: berlinMidnightIso(addDays(toDate, 1)),
+    mondayDate: fromDate,
+    saturdayDate: toDate,
+    label: formatLabel(fromDate, toDate),
+  }
+}
+
+/** Die letzten `count` Berliner Kalendertage, ältester zuerst, heute zuletzt —
+ *  mit Anzeige-Label „Fr, 24.10.2026" für die Auswahl im Admin. */
+export function selectableDays(now: Date, count = 10): Array<{ date: string; label: string }> {
+  const today = berlinDateStr(now)
+  const out: Array<{ date: string; label: string }> = []
+  for (let back = count - 1; back >= 0; back--) {
+    const date = addDays(today, -back)
+    const [y, m, d] = date.split('-')
+    out.push({ date, label: `${WEEKDAY_SHORT[weekdayOf(date)]}, ${d}.${m}.${y}` })
+  }
+  return out
+}
+
+/**
+ * Vorschlag für die Auswahl: Montag der laufenden Woche bis heute. Am Sonntag
+ * endet der Vorschlag mit dem Sonnabend — der Sonntag gehört nach der Konvention
+ * des Rückblicks (Mo–Sa) nicht dazu. Der Montag wird auf den ältesten wählbaren
+ * Tag geklemmt, falls das Fenster kleiner ist.
+ */
+export function defaultRange(now: Date, count = 10): { from: string; to: string } {
+  const today = berlinDateStr(now)
+  const to = weekdayOf(today) === 0 ? addDays(today, -1) : today
+  const monday = addDays(to, -((weekdayOf(to) + 6) % 7))
+  const oldest = addDays(today, -(count - 1))
+  return { from: monday < oldest ? oldest : monday, to }
+}
+
+/**
+ * Prüft einen vom Admin gewählten Zeitraum. `null` heißt gültig, sonst die
+ * Meldung für die 400-Antwort. Höchstens `maxDays` Tage, nichts in der
+ * Zukunft — die Auswahl im Panel bietet genau diese Tage an, die Route traut
+ * dem Browser aber nicht.
+ */
+export function rangeError(from: unknown, to: unknown, now: Date, maxDays = 10): string | null {
+  if (typeof from !== 'string' || typeof to !== 'string' || !DATE_RE.test(from) || !DATE_RE.test(to)) {
+    return 'Zeitraum: „von“ und „bis“ werden als YYYY-MM-DD erwartet.'
+  }
+  if (from > to) return 'Zeitraum verdreht: „von“ liegt nach „bis“.'
+  if (to > berlinDateStr(now)) return 'Das Enddatum liegt in der Zukunft.'
+  const span = Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000) + 1
+  if (span > maxDays) return `Der Zeitraum darf höchstens ${maxDays === 10 ? 'zehn' : maxDays} Tage umfassen.`
+  return null
+}

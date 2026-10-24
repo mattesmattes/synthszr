@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildWeekWrapup } from '@/lib/wrapup/build'
 import { getWrapupStatus } from '@/lib/wrapup/status'
+import { rangeError } from '@/lib/wrapup/week'
 
 /**
  * Erzeugt den Wochenrückblick der letzten abgeschlossenen Woche als Entwurf —
@@ -45,10 +46,20 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}))
 
+  // Zeitraum aus dem Panel (2026-10-24): beide Tage inklusiv, höchstens zehn,
+  // nichts in der Zukunft. Ohne Angabe bleibt es bei der letzten
+  // abgeschlossenen Woche.
+  let range: { from: string; to: string } | undefined
+  if (body.from !== undefined || body.to !== undefined) {
+    const fehler = rangeError(body.from, body.to, new Date())
+    if (fehler) return NextResponse.json({ error: fehler }, { status: 400 })
+    range = { from: body.from as string, to: body.to as string }
+  }
+
   try {
     // Ohne skipIfExists: Von Hand darf der Betreiber einen zweiten Rückblick
     // derselben Woche erzeugen — etwa wenn der erste misslungen ist.
-    const r = await buildWeekWrapup(createAdminClient(), { model: body.model as string | undefined })
+    const r = await buildWeekWrapup(createAdminClient(), { model: body.model as string | undefined, range })
     if (r.status === 'no_topics') {
       // Klare Meldung statt eines leeren Entwurfs: der wäre in der Artikelliste
       // nicht von einem misslungenen zu unterscheiden.

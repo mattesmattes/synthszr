@@ -72,3 +72,17 @@ describe('getWrapupStatus', () => {
     expect(s.slugBase).toMatch(/^ai-week-wrap-up-\d{4}-\d{2}-\d{2}$/)
   })
 })
+
+describe('getWrapupStatus — waehlbarer Zeitraum (2026-10-24)', () => {
+  it('liefert die letzten zehn waehlbaren Tage (heute zuletzt) und einen Vorschlag', async () => {
+    fakePosts([])
+    mocks.collect.mockResolvedValue([])
+    const { getWrapupStatus } = await import('@/lib/wrapup/status')
+    const s = await getWrapupStatus({ from: mocks.from } as never)
+    const heute = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' }).format(new Date())
+    expect(s.days).toHaveLength(10)
+    expect(s.days[9].date).toBe(heute)
+    expect(s.defaultRange.from <= s.defaultRange.to).toBe(true)
+    expect(s.days.some((d) => d.date === s.defaultRange.from)).toBe(true)
+  })
+})

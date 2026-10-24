@@ -39,8 +39,11 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }))
 
-function req() {
-  return new NextRequest('https://x/api/admin/week-wrapup', { method: 'POST' })
+function req(body?: unknown) {
+  return new NextRequest('https://x/api/admin/week-wrapup', {
+    method: 'POST',
+    ...(body ? { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } } : {}),
+  })
 }
 
 beforeEach(() => {
@@ -131,5 +134,31 @@ describe('POST /api/admin/week-wrapup', () => {
     const res = await POST(req())
     expect(res.status).toBe(200)
     expect((await res.json()).updates).toEqual([])
+  })
+
+  // --- Frei waehlbarer Zeitraum (Betreiber-Wunsch 2026-10-24) ---------------
+  it('nutzt den gewaehlten Zeitraum als Fenster fuer die Themen', async () => {
+    const { POST } = await import('@/app/api/admin/week-wrapup/route')
+    const res = await POST(req({ from: '2026-10-20', to: '2026-10-24' }))
+    expect(res.status).toBe(200)
+    // 00:00 Berlin (MESZ) = 22:00Z des Vortags; der letzte Tag zaehlt ganz.
+    expect(mocks.collectWeekTopics).toHaveBeenCalledWith(expect.anything(), '2026-10-19T22:00:00.000Z', '2026-10-24T22:00:00.000Z')
+    expect((await res.json()).weekLabel).toBe('20. bis 24. Oktober 2026')
+  })
+
+  it('lehnt einen verdrehten Zeitraum mit 400 ab, ohne das Modell zu rufen', async () => {
+    const { POST } = await import('@/app/api/admin/week-wrapup/route')
+    const res = await POST(req({ from: '2026-10-24', to: '2026-10-20' }))
+    expect(res.status).toBe(400)
+    expect(mocks.generateWrapupParts).not.toHaveBeenCalled()
+  })
+
+  it('lehnt ein Enddatum in der Zukunft ab', async () => {
+    const d = new Date(); d.setUTCDate(d.getUTCDate() + 2)
+    const zukunft = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' }).format(d)
+    const { POST } = await import('@/app/api/admin/week-wrapup/route')
+    const res = await POST(req({ from: zukunft, to: zukunft }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/Zukunft/)
   })
 })

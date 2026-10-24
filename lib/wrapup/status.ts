@@ -1,5 +1,5 @@
 import type { createAdminClient } from '@/lib/supabase/admin'
-import { lastCompleteWeek } from '@/lib/wrapup/week'
+import { lastCompleteWeek, selectableDays, defaultRange } from '@/lib/wrapup/week'
 import { collectWeekTopics } from '@/lib/wrapup/collect'
 import { wrapupSlugBase } from '@/lib/wrapup/build'
 
@@ -20,6 +20,11 @@ export interface WrapupStatus {
    * `keine_themen` heisst, es gaebe ohnehin nichts zusammenzufassen.
    */
   verdict: 'vorhanden' | 'fehlt' | 'keine_themen'
+  /** Die letzten zehn Berliner Tage (heute zuletzt) fuer die Zeitraum-Auswahl
+   *  im Panel — vom Server, damit die Zeitzone an einer Stelle gerechnet wird. */
+  days: Array<{ date: string; label: string }>
+  /** Vorschlag: Montag der laufenden Woche bis heute (Sonntag: bis Sonnabend). */
+  defaultRange: { from: string; to: string }
 }
 
 /**
@@ -65,5 +70,7 @@ export async function getWrapupStatus(supabase: AdminClient): Promise<WrapupStat
     post,
     topicCount: topics.length,
     verdict: post ? 'vorhanden' : topics.length > 0 ? 'fehlt' : 'keine_themen',
+    days: selectableDays(new Date()),
+    defaultRange: defaultRange(new Date()),
   }
 }

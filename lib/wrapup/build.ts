@@ -8,7 +8,7 @@
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { getModelForUseCase } from '@/lib/ai/model-config'
-import { lastCompleteWeek } from '@/lib/wrapup/week'
+import { lastCompleteWeek, dateRangeWindow } from '@/lib/wrapup/week'
 import { collectWeekTopics } from '@/lib/wrapup/collect'
 import { generateWrapupParts } from '@/lib/wrapup/generate'
 import { researchWeekUpdates, type TopicUpdate, type UpdateLevel } from '@/lib/wrapup/research'
@@ -51,12 +51,14 @@ export interface WrapupResult {
  *   buildUniqueSlug bei Kollision eine Zahl anhängt statt abzubrechen.
  * @param research  `false` überspringt die Update-Recherche (Trockenlauf,
  *   Rückfall ohne Web-Suche). Default `true`.
+ * @param range  Vom Admin gewählter Zeitraum (beide Tage inklusiv, Berliner
+ *   Datum, von der Route geprüft). Ohne Angabe: die letzte abgeschlossene Woche.
  */
 export async function buildWeekWrapup(
   supabase: AdminClient,
-  opts: { model?: string; skipIfExists?: boolean; research?: boolean } = {},
+  opts: { model?: string; skipIfExists?: boolean; research?: boolean; range?: { from: string; to: string } } = {},
 ): Promise<WrapupResult> {
-  const week = lastCompleteWeek(new Date())
+  const week = opts.range ? dateRangeWindow(opts.range.from, opts.range.to) : lastCompleteWeek(new Date())
   const slugBase = wrapupSlugBase(week.mondayDate)
 
   if (opts.skipIfExists) {
