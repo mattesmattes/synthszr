@@ -154,7 +154,7 @@ export default function WeekWrapupPage() {
               Hinweis wirkt eine Minute Wartezeit wie ein Haenger. */}
           {running && (
             <p className="text-xs text-muted-foreground">
-              Das dauert zwei bis drei Minuten (Recherche je Thema, dann ein Schreibdurchgang).
+              Das dauert ein bis zwei Minuten (Recherche je Thema, dann ein Schreibdurchgang).
               Das Fenster muss so lange offen bleiben.
             </p>
           )}

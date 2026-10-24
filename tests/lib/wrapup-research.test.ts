@@ -39,6 +39,14 @@ describe('buildResearchPrompt', () => {
     expect(p).toContain('Bericht.')
     expect(p).toContain('Alt.')
   })
+
+  it('verlangt Primaerquellen und schliesst Aggregator-Redirects und Digest-Seiten aus', () => {
+    // Trockenlauf 2026-10-24: das Modell lieferte einen news.google.com-Redirect
+    // und ein GitHub-"AI Daily Digest"-Issue als Beleg.
+    expect(p).toMatch(/news\.google\.com/)
+    expect(p).toMatch(/Digest/)
+    expect(p).toMatch(/Primärquelle/)
+  })
 })
 
 describe('parseResearchResponse', () => {

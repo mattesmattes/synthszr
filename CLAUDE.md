@@ -214,6 +214,40 @@ Doppelpunkte, Zahl im Take und Schlusssatz, Prognosen, Überleben des letzten
 Entwurfssatzes, Leser-Zustimmung. Kosten: ein zusätzlicher Opus-Aufruf je
 Abschnitt (≈ 0,05 USD), Ghostwriter-Abschnitt davor Ø 0,13 USD.
 
+### AI WEEK Wrap-Up — Synthszr Update (2026-10-24)
+Der Wochenrückblick (`lib/wrapup/*`, Admin `/admin/week-wrapup`) prüft seit dem
+2026-10-24 je Thema per Web-Suche, ob sich die Story seit dem Tagesartikel
+weiterentwickelt hat, und ersetzt dort den gekürzten Take durch ein
+„Synthszr Update“. Spec: `docs/superpowers/specs/2026-10-24-wrapup-updates-spec.md`.
+- **Ablauf:** `collectWeekTopics` → `researchWeekUpdates` (`lib/wrapup/research.ts`,
+  je Thema ein Aufruf mit Server-Tool `web_search_20250305`, `max_uses` 4,
+  Timeout 90 s, parallel; Use Case `wrapup_research`, Default `claude-sonnet-5`)
+  → EIN Compose-Aufruf (`generate.ts`, bekommt je Thema das RECHERCHE-UPDATE)
+  → `assembleWrapupDoc(topics, parts, updates)`. Fällt die Recherche aus,
+  ergibt das Thema `none`, der Entwurf entsteht trotzdem.
+- **Stufen:** `none` (gekürzter Take, 40–60 Wörter), `minor` (Update 40–60
+  Wörter, Bericht unverändert), `major` (Update bis 120 Wörter, Bericht darf
+  auf etwa die Hälfte schrumpfen). Ein Update zählt nur mit Quelle, deren
+  Datum NACH dem Artikeldatum und nicht nach dem Stichtag liegt
+  (`parseResearchResponse`); sonst `none`. Das Intro teasert Updates in
+  höchstens zwei Sätzen an, ohne Updates kein Teaser.
+- **Kürzen heißt Weglassen:** Bei `major` liefert das Modell `keepParagraphs`
+  (Indizes in `bodyNodes`, im Prompt als `[0]`, `[1]` … nummeriert);
+  `selectParagraphs` behält Index 0 immer und mindestens zwei Knoten. Sätze
+  werden nie umformuliert, weil die Quellenlinks an den Marks hängen.
+- **Label und Quellen:** `assemble.ts` setzt „Synthszr Update: “ (nie das
+  Modell) und darunter „Update-Quellen: Titel (Datum), …“ mit link-Marks.
+  Web-Renderer (`lib/tiptap/dom-processors/*`), Newsletter-HTML
+  (`lib/email/tiptap-to-html.ts`) und Take-Barometer erkennen den Marker
+  `Synthszr Update` wie `Take|Contra`. `take-exemplars.ts` matcht nur
+  „Synthszr Take:“, Updates werden also keine Vorbilder.
+- **Trockenlauf:** `pnpm wrapup:research-dry` (`scripts/wrapup-research-dry.ts`,
+  optional `-- --asof YYYY-MM-DD`): nur Recherche, kein Entwurf; Ausgabe je
+  Thema plus Kosten aus `llm_usage` (Web-Suchen separat, 0,01 USD je Suche).
+  Erster Lauf 2026-10-24 (Woche 12.–18.10.): 1× none, 3× minor, 2× major,
+  25 s, 1,06 USD Token plus 19 Suchen. Der Admin-Lauf dauert damit rund eine
+  halbe Minute länger als bisher.
+
 ### Artikel-Job im Hintergrund (2026-10-19)
 „AI Artikel erstellen“ (`app/admin/create-article/page.tsx`) legt nur noch den
 Job an (`POST /api/admin/article-job`) und pollt den Status; der Tab darf

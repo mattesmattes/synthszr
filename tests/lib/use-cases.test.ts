@@ -28,6 +28,7 @@ const EXPECTED_USE_CASES: UseCase[] = [
   'glossary_translation',
   'ghostwriter_take',
   'wrapup',
+  'wrapup_research',
   'comment_moderation',
   'search_rerank',
   'techmeme_relevance',

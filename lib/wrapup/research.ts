@@ -126,7 +126,8 @@ VORGEHEN: Suche gezielt nach der Story und ihren Akteuren mit Zeitbezug (z. B. "
 ANTWORT NUR über das Tool report_update:
 - updateLevel: none | minor | major
 - summary: auf DEUTSCH, 2-5 Sätze. Der erste Satz nennt, was wann passiert ist (Datum oder Akteur). Nur belegte Fakten, keine Wertung, keine Vermutung. Leer bei none.
-- sources: je Quelle url, title und date im Format YYYY-MM-DD (Veröffentlichungsdatum der Quelle). Nur Quellen mit Datum NACH dem ${topic.date}. Ohne solche Quelle: updateLevel none.`
+- sources: je Quelle url, title und date im Format YYYY-MM-DD (Veröffentlichungsdatum der Quelle). Nur Quellen mit Datum NACH dem ${topic.date}. Ohne solche Quelle: updateLevel none.
+  Bevorzugt Primärquellen (Unternehmen, Behörden, Beteiligte) und etablierte Medien. KEINE Aggregator- oder Redirect-Links (news.google.com, Yahoo-Syndikate), KEINE Digest-/Sammelseiten, Foren-Threads oder SEO-Blogs als Beleg.`
 }
 
 const REPORT_UPDATE_TOOL = {
