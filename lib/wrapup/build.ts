@@ -11,6 +11,7 @@ import { getModelForUseCase } from '@/lib/ai/model-config'
 import { lastCompleteWeek } from '@/lib/wrapup/week'
 import { collectWeekTopics } from '@/lib/wrapup/collect'
 import { generateWrapupParts } from '@/lib/wrapup/generate'
+import { researchWeekUpdates, type TopicUpdate, type UpdateLevel } from '@/lib/wrapup/research'
 import { assembleWrapupDoc, formatExcerpt } from '@/lib/wrapup/assemble'
 import { buildUniqueSlug } from '@/lib/article-jobs/unique-slug'
 
@@ -38,6 +39,9 @@ export interface WrapupResult {
   topicCount?: number
   weekLabel: string
   weekdays?: string[]
+  /** Themen mit Synthszr Update (Stufe minor/major) — leer, wenn die Recherche
+   *  nichts fand oder ausfiel. */
+  updates?: Array<{ weekday: string; updateLevel: UpdateLevel; searches: number }>
 }
 
 /**
@@ -45,10 +49,12 @@ export interface WrapupResult {
  *   passiert nichts. Ohne diese Prüfung legte ein zweiter Sonntagslauf — oder
  *   ein Neustart nach Zeitüberschreitung — einen zweiten Entwurf an, weil
  *   buildUniqueSlug bei Kollision eine Zahl anhängt statt abzubrechen.
+ * @param research  `false` überspringt die Update-Recherche (Trockenlauf,
+ *   Rückfall ohne Web-Suche). Default `true`.
  */
 export async function buildWeekWrapup(
   supabase: AdminClient,
-  opts: { model?: string; skipIfExists?: boolean } = {},
+  opts: { model?: string; skipIfExists?: boolean; research?: boolean } = {},
 ): Promise<WrapupResult> {
   const week = lastCompleteWeek(new Date())
   const slugBase = wrapupSlugBase(week.mondayDate)
@@ -70,9 +76,19 @@ export async function buildWeekWrapup(
   const topics = await collectWeekTopics(supabase, week.mondayIso, week.saturdayEndIso)
   if (topics.length === 0) return { status: 'no_topics', weekLabel: week.label, topicCount: 0 }
 
+  // Recherche VOR dem Compose-Aufruf, parallel je Thema (research.ts). Ein
+  // Totalausfall darf den Rückblick nicht verhindern — dann gibt es keine
+  // Updates, aber den Entwurf (Spec: Grenzen).
+  const updates: TopicUpdate[] = opts.research === false
+    ? []
+    : await researchWeekUpdates(topics).catch((err) => {
+      console.error('[WeekWrapup] Recherche fehlgeschlagen:', err instanceof Error ? err.message : err)
+      return []
+    })
+
   const model = opts.model || (await getModelForUseCase('wrapup'))
-  const { title, parts } = await generateWrapupParts(topics, week.label, model)
-  let tiptap = assembleWrapupDoc(topics, parts) as Record<string, unknown>
+  const { title, parts } = await generateWrapupParts(topics, week.label, model, updates)
+  let tiptap = assembleWrapupDoc(topics, parts, updates) as Record<string, unknown>
 
   // Lexikon-Links über das FERTIGE Dokument ziehen: die übernommenen Absätze
   // tragen ihre Marks schon, die neu geschriebenen (Vorlauf, Bezug, Take) noch
@@ -119,5 +135,8 @@ export async function buildWeekWrapup(
     topicCount: topics.length,
     weekLabel: week.label,
     weekdays: topics.map((t) => t.weekday),
+    updates: updates
+      .filter((u) => u.updateLevel !== 'none')
+      .map(({ weekday, updateLevel, searches }) => ({ weekday, updateLevel, searches })),
   }
 }

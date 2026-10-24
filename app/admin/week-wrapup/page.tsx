@@ -35,6 +35,7 @@ export default function WeekWrapupPage() {
     topicCount: number
     weekLabel: string
     weekdays: string[]
+    updates?: Array<{ weekday: string; updateLevel: 'minor' | 'major'; searches: number }>
   } | null>(null)
 
   async function generate() {
@@ -135,8 +136,9 @@ export default function WeekWrapupPage() {
         <CardHeader>
           <CardTitle className="text-base">Rückblick erzeugen</CardTitle>
           <CardDescription className="text-xs">
-            Ein Modell-Aufruf über alle Themen der Woche — die Abschnitte werden neu
-            formuliert, aufeinander bezogen und mit einem kurzen Vorlauf versehen.
+            Je Thema wird per Web-Suche geprüft, ob sich die Story seit dem Tagesartikel
+            weiterentwickelt hat; wo ja, ersetzt ein Synthszr Update den gekürzten Take.
+            Die Berichte werden unverändert übernommen, der Vorlauf teasert die Updates an.
             Das Ergebnis ist ein Entwurf, den du vor dem Veröffentlichen prüfst.
           </CardDescription>
         </CardHeader>
@@ -152,7 +154,8 @@ export default function WeekWrapupPage() {
               Hinweis wirkt eine Minute Wartezeit wie ein Haenger. */}
           {running && (
             <p className="text-xs text-muted-foreground">
-              Das dauert etwa eine Minute. Das Fenster muss so lange offen bleiben.
+              Das dauert zwei bis drei Minuten (Recherche je Thema, dann ein Schreibdurchgang).
+              Das Fenster muss so lange offen bleiben.
             </p>
           )}
 
@@ -169,6 +172,11 @@ export default function WeekWrapupPage() {
               <p className="mt-1 text-xs text-muted-foreground">
                 {result.topicCount} {result.topicCount === 1 ? 'Thema' : 'Themen'} zusammengefasst
                 {result.weekdays?.length ? ` (${result.weekdays.join(', ')})` : ''}.
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {result.updates?.length
+                  ? `Updates: ${result.updates.map((u) => `${u.weekday} (${u.updateLevel})`).join(', ')}`
+                  : 'Keine Entwicklungen seit den Tagesartikeln gefunden.'}
               </p>
               <Button
                 size="sm"

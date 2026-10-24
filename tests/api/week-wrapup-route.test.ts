@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   collectWeekTopics: vi.fn(),
   generateWrapupParts: vi.fn(),
+  researchWeekUpdates: vi.fn(),
   insertSingle: vi.fn(),
   getModelForUseCase: vi.fn(),
 }))
@@ -25,6 +26,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/auth/session', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/wrapup/collect', () => ({ collectWeekTopics: mocks.collectWeekTopics }))
 vi.mock('@/lib/wrapup/generate', () => ({ generateWrapupParts: mocks.generateWrapupParts }))
+// Die Recherche ruft Anthropic mit Web-Suche — im Test gemockt, sonst liefe sie
+// mit dem Key aus .env.local gegen das echte Netz.
+vi.mock('@/lib/wrapup/research', () => ({ researchWeekUpdates: mocks.researchWeekUpdates }))
 vi.mock('@/lib/ai/model-config', () => ({ getModelForUseCase: mocks.getModelForUseCase }))
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
@@ -60,6 +64,7 @@ beforeEach(() => {
     },
   })
   mocks.insertSingle.mockResolvedValue({ data: { id: 'post-1' }, error: null })
+  mocks.researchWeekUpdates.mockResolvedValue([])
 })
 
 describe('POST /api/admin/week-wrapup', () => {
@@ -104,5 +109,27 @@ describe('POST /api/admin/week-wrapup', () => {
     const body = await res.json()
     expect(res.status).toBe(500)
     expect(body.error).toMatch(/verweigert/i)
+  })
+
+  it('reicht die Recherche-Ergebnisse an den Compose-Aufruf und in die Antwort durch', async () => {
+    const upd = {
+      weekday: 'Montag', updateLevel: 'major', summary: 'S',
+      sources: [{ url: 'https://r.de', title: 'R', date: '2026-08-05' }], searches: 2,
+    }
+    mocks.researchWeekUpdates.mockResolvedValue([upd])
+    const { POST } = await import('@/app/api/admin/week-wrapup/route')
+    const body = await (await POST(req())).json()
+    expect(mocks.generateWrapupParts).toHaveBeenCalledWith(expect.anything(), expect.any(String), 'claude-opus-5', [upd])
+    expect(body.updates).toEqual([{ weekday: 'Montag', updateLevel: 'major', searches: 2 }])
+  })
+
+  it('baut den Entwurf auch dann, wenn die Recherche scheitert', async () => {
+    // Spec: ein gescheitertes Thema ergibt none; ein Totalausfall der
+    // Recherche darf den Rueckblick nicht verhindern.
+    mocks.researchWeekUpdates.mockRejectedValue(new Error('timeout'))
+    const { POST } = await import('@/app/api/admin/week-wrapup/route')
+    const res = await POST(req())
+    expect(res.status).toBe(200)
+    expect((await res.json()).updates).toEqual([])
   })
 })
