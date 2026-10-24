@@ -6,7 +6,8 @@
  * an die Vorgaben haelt, ist nur an echten Laeufen zu beobachten.
  */
 import { describe, expect, it } from 'vitest'
-import { buildWrapupPrompt, WRAPUP_SYSTEM_PROMPT } from '@/lib/wrapup/generate'
+import { buildWrapupPrompt, WRAPUP_SYSTEM_PROMPT, WRAPUP_TOOL } from '@/lib/wrapup/generate'
+import type { TopicUpdate } from '@/lib/wrapup/research'
 import type { WrapupTopic } from '@/lib/wrapup/collect'
 
 const topics: WrapupTopic[] = [
@@ -99,5 +100,87 @@ describe('WRAPUP_SYSTEM_PROMPT', () => {
     expect(WRAPUP_SYSTEM_PROMPT).toMatch(/excerptBullets/)
     expect(WRAPUP_SYSTEM_PROMPT).toMatch(/[Dd]rei|3 /)
     expect(WRAPUP_SYSTEM_PROMPT).toMatch(/65 Zeichen/)
+  })
+})
+
+// --- Synthszr Update (Spec 2026-10-24) -------------------------------------
+// Das Modell bekommt je Thema das Recherche-Ergebnis als Kontext. Bei `major`
+// darf es Bericht-Knoten weglassen — dafuer muss es die Knoten mit ihrem
+// bodyNodes-Index sehen; textlose Knoten (Bilder) behalten ihren Index, damit
+// keepParagraphs auf dieselben Positionen zeigt wie assemble.ts.
+const major: TopicUpdate = {
+  weekday: 'Montag', updateLevel: 'major',
+  summary: 'Alibaba zog das Modell am 14.10. zurück.',
+  sources: [{ url: 'https://reuters.com/q', title: 'Reuters', date: '2026-10-14' }],
+  searches: 3,
+}
+const topicsMitKnoten: WrapupTopic[] = topics.map((t) => t.weekday === 'Montag' ? { ...t, bodyNodes: [
+  { type: 'paragraph', content: [{ type: 'text', text: 'Text Mo.' }] },
+  { type: 'image', attrs: { src: 'x' } },
+  { type: 'paragraph', content: [{ type: 'text', text: 'Zweiter Absatz Mo.' }] },
+] } : t)
+
+describe('buildWrapupPrompt mit Updates', () => {
+  it('markiert Themen ohne Recherche-Ergebnis als "RECHERCHE-UPDATE: keines"', () => {
+    expect(buildWrapupPrompt(topics, 'W')).toMatch(/RECHERCHE-UPDATE: keines/)
+  })
+
+  it('gibt Stufe, Zusammenfassung und Quellen eines Updates mit', () => {
+    const p = buildWrapupPrompt(topicsMitKnoten, 'W', [major])
+    expect(p).toContain('Stufe: major')
+    expect(p).toContain('zog das Modell am 14.10. zurück')
+    expect(p).toContain('https://reuters.com/q')
+    expect(p).toContain('(2026-10-14)')
+  })
+
+  it('nummeriert bei major die Bericht-Knoten nach bodyNodes-Index und ueberspringt textlose Knoten', () => {
+    const p = buildWrapupPrompt(topicsMitKnoten, 'W', [major])
+    expect(p).toContain('[0] Text Mo.')
+    expect(p).toContain('[2] Zweiter Absatz Mo.')
+    expect(p).not.toContain('[1]')
+  })
+
+  it('nummeriert bei minor nicht', () => {
+    expect(buildWrapupPrompt(topicsMitKnoten, 'W', [{ ...major, updateLevel: 'minor' }])).not.toContain('[0]')
+  })
+})
+
+describe('WRAPUP_SYSTEM_PROMPT — Updates', () => {
+  it('kennt die drei Stufen mit Wortbudgets', () => {
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/40 bis 60 Wörter/)
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/bis 120 Wörter/)
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/minor/)
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/major/)
+  })
+
+  it('laesst das Update den Take ersetzen und verbietet dessen Vorsilbe', () => {
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/ersetzt den Take/)
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/Beginne NICHT mit "Synthszr Update:"/)
+  })
+
+  it('bindet Fakten des Updates an die Recherche und verlangt das Urteil ueber den Original-Take', () => {
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/RECHERCHE-UPDATE/)
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/gehalten hat/)
+  })
+
+  it('regelt keepParagraphs: nur major, Index 0 bleibt, etwa die Haelfte, mindestens zwei', () => {
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/keepParagraphs/)
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/NUR bei major/i)
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/\[0\]/)
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/Hälfte/)
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/mindestens zwei/)
+  })
+
+  it('laesst das Intro Updates anteasern, aber ohne Updates keinen Teaser', () => {
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/höchstens zwei Sätzen/)
+    expect(WRAPUP_SYSTEM_PROMPT).toMatch(/kein Teaser/)
+  })
+})
+
+describe('WRAPUP_TOOL', () => {
+  it('kennt update und keepParagraphs je Abschnitt, take ist nicht mehr Pflicht', () => {
+    const item = WRAPUP_TOOL.input_schema.properties.sections.items
+    expect(Object.keys(item.properties)).toEqual(expect.arrayContaining(['take', 'update', 'keepParagraphs']))
+    expect(item.required).toEqual(['weekday'])
   })
 })
