@@ -174,7 +174,7 @@ export function appendProductVoteBlock(container: HTMLElement, products: Product
     while (prev) {
       const t = (prev as HTMLElement).innerText || prev.textContent || ''
       if (prev.tagName.match(/^H[1-6]$/)) { textToSearch = t + ' ' + textToSearch; break }
-      if (/synthszr take|synthszr contra|mattes synthese/i.test(t)) break
+      if (/synthszr take|synthszr update|synthszr contra|mattes synthese/i.test(t)) break
       if (prev.tagName === 'P') textToSearch = t + ' ' + textToSearch
       prev = prev.previousElementSibling
     }

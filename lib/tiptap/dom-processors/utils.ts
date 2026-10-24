@@ -5,6 +5,7 @@ export const SYNTHESE_PATTERNS = [
   /mattes' synthese:?/gi,
   /synthszr take:?/gi,
   /synthszr contra:?/gi,
+  /synthszr update:?/gi,
   /synthszr vote:?/gi,
   /synthszr meent:?/gi,        // NDS (Low German)
   /pohled synthszr:?/gi,       // Czech (actual translation)
@@ -32,6 +33,7 @@ export function isSyntheseText(text: string): boolean {
          lower.includes("mattes' synthese") ||
          lower.includes('synthszr take') ||
          lower.includes('synthszr contra') ||
+         lower.includes('synthszr update') ||
          lower.includes('synthszr vote') ||
          lower.includes('synthszr meent') ||       // NDS
          lower.includes('pohled synthszr') ||      // Czech

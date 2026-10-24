@@ -20,7 +20,7 @@ export interface TakeInjectionResult {
   sectionComments: TakeBarometerPortal[]
 }
 
-const TAKE_RE = /^\s*(Synthszr Take|Mattes Synthese)\s*:/i
+const TAKE_RE = /^\s*(Synthszr Take|Synthszr Update|Mattes Synthese)\s*:/i
 
 /**
  * Findet jeden Take-Absatz und setzt dahinter einen Portal-Platzhalter.

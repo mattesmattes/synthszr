@@ -114,6 +114,7 @@ export async function processSynthszrRatingLinks(
         const text = getNodeText(node).toLowerCase()
         return text.includes('synthszr take') ||
                text.includes('synthszr contra') ||
+               text.includes('synthszr update') ||
                text.includes('mattes synthese') ||
                text.includes('synthszr vote') ||
                text.includes('synthszr meent') ||    // NDS
@@ -172,6 +173,7 @@ export async function processSynthszrRatingLinks(
       }
       if (prevText.toLowerCase().includes('synthszr take') ||
           prevText.toLowerCase().includes('synthszr contra') ||
+          prevText.toLowerCase().includes('synthszr update') ||
           prevText.toLowerCase().includes('mattes synthese')) break
       if (prevElement.tagName === 'P') {
         textToSearch = prevText + ' ' + textToSearch

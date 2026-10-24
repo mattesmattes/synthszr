@@ -685,7 +685,7 @@ export async function generateEmailContentWithVotes(
   doc.content.forEach((node, index) => {
     if (node.type === 'paragraph') {
       const text = extractTextFromNode(node)
-      if (/synthszr (take|contra):?/i.test(text)) {
+      if (/synthszr (take|contra|update):?/i.test(text)) {
         // Get text from surrounding paragraphs too (news context)
         let contextText = text
         // Look at previous 3 nodes for context
@@ -971,7 +971,7 @@ export async function generateEmailContentWithVotes(
 </table>`.trim()
     // Match <p …> whose visible text starts with "Synthszr Take" (allowing any
     // prior inline tags like <strong>, <span>, whitespace, nbsp).
-    const firstTakeRe = /<p\b[^>]*>(?:\s|&nbsp;|<[^>]+>)*synthszr\s*take/i
+    const firstTakeRe = /<p\b[^>]*>(?:\s|&nbsp;|<[^>]+>)*synthszr\s*(?:take|update)/i
     const m = html.match(firstTakeRe)
     if (m && typeof m.index === 'number') {
       html = html.slice(0, m.index) + box + '\n' + html.slice(m.index)
@@ -1082,7 +1082,7 @@ function barometerHtml(
   locale?: string,
 ): string {
   if (node.type !== 'paragraph' || !anchor || !slug) return ''
-  if (!/synthszr (take|contra):?/i.test(extractTextFromNode(node))) return ''
+  if (!/synthszr (take|contra|update):?/i.test(extractTextFromNode(node))) return ''
 
   const lang = locale || 'de'
   const link = (v: 'agree' | 'disagree') =>
@@ -1245,7 +1245,7 @@ function renderContentWithLastSentenceHighlight(content?: TiptapNode[], lang: st
 
   // Fallback: if no sentence boundary, try highlighting after "Synthszr Take/Contra:"
   if (lastSentenceStart === 0) {
-    const synthszrMatch = plainText.match(/synthszr (?:take|contra):?\s*/i)
+    const synthszrMatch = plainText.match(/synthszr (?:take|contra|update):?\s*/i)
     if (synthszrMatch) {
       lastSentenceStart = synthszrMatch.index! + synthszrMatch[0].length
       if (!plainText.slice(lastSentenceStart).trim()) {
@@ -1286,7 +1286,7 @@ function renderContentWithLastSentenceHighlight(content?: TiptapNode[], lang: st
     const highlightStartInNode = Math.max(0, lastSentenceStart - seg.charStart)
 
     // Style "Synthszr Take/Contra:" label
-    const synthszrPattern = /(Synthszr (?:Take|Contra):?)/gi
+    const synthszrPattern = /(Synthszr (?:Take|Contra|Update):?)/gi
     const hasBoldMark = node.marks?.some(m => m.type === 'bold')
 
     if (!hasBoldMark && synthszrPattern.test(text)) {
@@ -1305,8 +1305,8 @@ function renderContentWithLastSentenceHighlight(content?: TiptapNode[], lang: st
 
       // Re-apply Synthszr label styling on the before part
       let styledBefore = beforeText
-      if (!hasBoldMark && /synthszr (?:take|contra):?/i.test(styledBefore)) {
-        styledBefore = styledBefore.replace(/(Synthszr (?:Take|Contra):?)/gi,
+      if (!hasBoldMark && /synthszr (?:take|contra|update):?/i.test(styledBefore)) {
+        styledBefore = styledBefore.replace(/(Synthszr (?:Take|Contra|Update):?)/gi,
           '<strong style="background-color: #FFFF00; padding: 2px 6px; font-size: 13px; text-transform: uppercase;">$1</strong>')
       }
 
@@ -1332,7 +1332,7 @@ function applyMarks(text: string, marks?: Array<{ type: string; attrs?: Record<s
     for (const mark of marks) {
       switch (mark.type) {
         case 'bold':
-          if (/synthszr (take|contra):?/i.test(result)) {
+          if (/synthszr (take|contra|update):?/i.test(result)) {
             result = `<strong style="background-color: #FFFF00; padding: 2px 6px; font-size: 13px; text-transform: uppercase;">${result}</strong>`
           } else {
             result = `<strong>${result}</strong>`
@@ -1373,7 +1373,7 @@ function convertNodeToHtml(node: TiptapNode, locale: string = 'de'): string {
     case 'paragraph': {
       const textContent = extractTextFromNode(node)
       // Check if this paragraph contains "Synthszr Take:" - highlight the last sentence
-      if (/synthszr (take|contra):?/i.test(textContent)) {
+      if (/synthszr (take|contra|update):?/i.test(textContent)) {
         const content = renderContentWithLastSentenceHighlight(node.content, locale)
         return `<p>${content}</p>`
       }
@@ -1467,7 +1467,7 @@ function renderContent(content?: TiptapNode[], lang: string = 'de'): string {
       text = escapeHtml(text)
 
       // Check if text contains "Synthszr Take:" or "Synthszr Contra:" and style it
-      const synthszrPattern = /(Synthszr (?:Take|Contra):?)/gi
+      const synthszrPattern = /(Synthszr (?:Take|Contra|Update):?)/gi
       const hasBoldMark = node.marks?.some(m => m.type === 'bold')
 
       // If "Synthszr Take/Contra:" is not already bold, wrap it with styling
@@ -1481,7 +1481,7 @@ function renderContent(content?: TiptapNode[], lang: string = 'de'): string {
           switch (mark.type) {
             case 'bold':
               // Check if this is "Synthszr Take:" - add background styling
-              if (/synthszr (take|contra):?/i.test(text)) {
+              if (/synthszr (take|contra|update):?/i.test(text)) {
                 text = `<strong style="background-color: #FFFF00; padding: 2px 6px; font-size: 13px; text-transform: uppercase;">${text}</strong>`
               } else {
                 text = `<strong>${text}</strong>`

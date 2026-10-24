@@ -18,7 +18,7 @@ export function insertTipPromoSlot(container: HTMLElement): HTMLElement | null {
 
   for (const el of candidates) {
     const text = (el.textContent || '').trim().toLowerCase()
-    if (text.startsWith('synthszr take') || text.startsWith('mattes synthese')) {
+    if (text.startsWith('synthszr take') || text.startsWith('synthszr update') || text.startsWith('mattes synthese')) {
       target = el
       break
     }
