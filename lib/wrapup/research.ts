@@ -166,22 +166,37 @@ export async function researchTopicUpdate(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? RESEARCH_TIMEOUT_MS)
   try {
+    const caps = getModelCapabilities(opts.model)
     const params: Record<string, unknown> = {
       model: opts.model,
-      max_tokens: 3000,
+      // Bei Modellen ohne abschaltbares Thinking (Opus 5.5, Fable 5) zählt das
+      // Denken gegen max_tokens — dieselbe Untergrenze wie in tool-call.ts
+      // (ALWAYS_THINKING_MIN_TOKENS), sonst käme der Tool-Aufruf nicht mehr heraus.
+      max_tokens: caps.supportsDisabledThinking ? 3000 : 4096,
       // KEIN tool_choice: Server-Tools wie web_search verlangen `auto`.
       tools: [REPORT_UPDATE_TOOL, { type: 'web_search_20250305', name: 'web_search', max_uses: MAX_SEARCHES }],
       messages: [{ role: 'user', content: buildResearchPrompt(topic, opts.asOfDate) }],
     }
-    // Reine Web-Extraktion braucht kein Reasoning — Thinking aus, wo das Modell es verträgt.
-    if (getModelCapabilities(opts.model).supportsDisabledThinking) params.thinking = { type: 'disabled' }
+    // Reine Web-Extraktion braucht kein Reasoning — Thinking aus, wo das Modell
+    // es verträgt; sonst die kleinste Stufe.
+    if (caps.supportsDisabledThinking) params.thinking = { type: 'disabled' }
+    else if (caps.supportsEffort) params.output_config = { effort: 'low' }
 
     const resp = (await opts.client.messages.create(params, { signal: controller.signal })) as {
       content?: Array<{ type: string; name?: string; input?: unknown }>
+      stop_reason?: string | null
       usage?: { server_tool_use?: { web_search_requests?: number } }
     }
     const block = [...(resp.content ?? [])].reverse()
       .find((b) => b.type === 'tool_use' && b.name === 'report_update')
+    if (!block) {
+      // Nicht still auf `none` fallen: Verweigerung, Textschluss und
+      // max_tokens-Abbruch müssen von „nichts gefunden" unterscheidbar bleiben.
+      console.warn(
+        `[WeekWrapup] Recherche ${topic.weekday}: kein report_update-Block in der Antwort`,
+        `stop_reason: ${resp.stop_reason ?? 'unbekannt'}`,
+      )
+    }
     const parsed = parseResearchResponse(block?.input ?? null, topic.date, opts.asOfDate)
     return {
       weekday: topic.weekday,

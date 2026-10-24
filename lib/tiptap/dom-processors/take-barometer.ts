@@ -73,14 +73,19 @@ export function insertTakeBarometers(container: HTMLElement): TakeInjectionResul
     // --- Kommentar-BLOCK direkt UNTER dem Take-Absatz. Zeigt die Takes genau
     // dieses Abschnitts (Betreiber-Wunsch: direkt am News-Artikel, nicht
     // gepoolt am Seitenende). <div> als Block, per p.after() als Geschwister.
-    const existingComments = p.nextElementSibling
+    // Ein Synthszr Update traegt direkt darunter seinen „Update-Quellen"-Absatz
+    // (assemble.ts) — der Block gehoert HINTER diesen, sonst saehe die
+    // Quellenzeile wie Teil der Leser-Kommentare aus (Review 2026-10-24).
+    const next = p.nextElementSibling
+    const tail = next?.tagName === 'P' && (next.textContent ?? '').trimStart().startsWith('Update-Quellen:') ? next : p
+    const existingComments = tail.nextElementSibling
     if (existingComments instanceof HTMLElement && existingComments.dataset.sectionComments) {
       sectionComments.push({ anchor: existingComments.dataset.sectionComments, headline, element: existingComments })
     } else {
       const cslot = document.createElement('div')
       cslot.dataset.sectionComments = anchor
       cslot.className = 'section-comments-slot not-prose'
-      p.after(cslot)
+      tail.after(cslot)
       sectionComments.push({ anchor, headline, element: cslot })
     }
   })

@@ -41,4 +41,23 @@ describe('Marker Synthszr Update', () => {
   it('insertTipPromoSlot findet das Update als ersten Take', () => {
     expect(insertTipPromoSlot(container(html))).not.toBeNull()
   })
+
+  // Review-Befund 2026-10-24: der Kommentar-Block (p.after) landete ZWISCHEN
+  // Update und „Update-Quellen" — die Quellenzeile sah aus wie Teil der
+  // Leser-Kommentare.
+  it('setzt den Kommentar-Block HINTER den Quellen-Absatz des Updates', () => {
+    const c = container(html + '<p>Update-Quellen: Reuters (14.10.2026)</p>')
+    const r = insertTakeBarometers(c)
+    const quellen = Array.from(c.querySelectorAll('p')).find((el) => el.textContent?.startsWith('Update-Quellen:'))!
+    expect(quellen.nextElementSibling?.classList.contains('section-comments-slot')).toBe(true)
+    expect(r.sectionComments).toHaveLength(1)
+  })
+
+  it('bleibt mit Quellen-Absatz idempotent — ein zweiter Lauf setzt keinen zweiten Block', () => {
+    const c = container(html + '<p>Update-Quellen: Reuters (14.10.2026)</p>')
+    insertTakeBarometers(c)
+    const r = insertTakeBarometers(c)
+    expect(c.querySelectorAll('.section-comments-slot')).toHaveLength(1)
+    expect(r.sectionComments).toHaveLength(1)
+  })
 })

@@ -7,7 +7,7 @@
  * Ohne diese Schranke wuerde das Modell die Original-Nachricht aus einem
  * anderen Medium als „Entwicklung" melden.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { buildResearchPrompt, parseResearchResponse, researchTopicUpdate, noUpdate } from '@/lib/wrapup/research'
 import type { WrapupTopic } from '@/lib/wrapup/collect'
 
@@ -114,5 +114,32 @@ describe('researchTopicUpdate', () => {
     expect(r.updateLevel).toBe('minor')
     expect(r.searches).toBe(3)
     expect(r.weekday).toBe('Dienstag')
+  })
+
+  // Review-Befund 2026-10-24: ohne report_update-Block gab es still `none` —
+  // Verweigerung, Textschluss und max_tokens-Abbruch sahen aus wie „nichts gefunden".
+  it('warnt mit stop_reason, wenn das Modell keinen report_update-Block liefert', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const client = { messages: { create: async () => ({ content: [{ type: 'text', text: 'Nichts.' }], stop_reason: 'max_tokens', usage: {} }) } }
+      const r = await researchTopicUpdate(topic, { model: 'claude-sonnet-5', asOfDate: '2026-10-25', client })
+      expect(r.updateLevel).toBe('none')
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('[WeekWrapup]'), expect.stringContaining('max_tokens'))
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('hebt max_tokens auf 4096, wenn sich das Thinking des Modells nicht abschalten laesst', async () => {
+    // tool-call.ts setzt dieselbe Untergrenze (ALWAYS_THINKING_MIN_TOKENS):
+    // bei Opus 5.5 / Fable 5 zaehlt das Denken gegen max_tokens.
+    const seen: Array<Record<string, unknown>> = []
+    const client = { messages: { create: async (params: unknown) => { seen.push(params as Record<string, unknown>); return { content: [], usage: {} } } } }
+    await researchTopicUpdate(topic, { model: 'claude-opus-5-5', asOfDate: '2026-10-25', client })
+    await researchTopicUpdate(topic, { model: 'claude-sonnet-5', asOfDate: '2026-10-25', client })
+    expect(seen[0].max_tokens).toBe(4096)
+    expect(seen[0].thinking).toBeUndefined()
+    expect(seen[1].max_tokens).toBe(3000)
+    expect(seen[1].thinking).toEqual({ type: 'disabled' })
   })
 })
