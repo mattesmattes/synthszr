@@ -17,8 +17,8 @@ export type TranslationModel =
 export const TRANSLATION_MODEL_LABELS: Record<TranslationModel, string> = {
   'claude-sonnet-4': 'Claude Sonnet 4',
   'claude-haiku-3.5': 'Claude Haiku 3.5',
-  'gemini-2.5-flash': 'Gemini 2.0 Flash',
-  'gemini-2.5-pro': 'Gemini 2.5 Pro',
+  'gemini-2.5-flash': 'Gemini 3.8 Flash',
+  'gemini-2.5-pro': 'Gemini 3.8 Flash (ehem. 2.5 Pro)',
 }
 
 /** Check which models have API keys configured (does not validate) */
@@ -72,7 +72,7 @@ export async function testApiKeys(): Promise<{
   if (googleKey) {
     results.google.lastChars = googleKey.slice(-4)
     try {
-      const gemini = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+      const gemini = genAI.getGenerativeModel({ model: GEMINI_API_MODEL })
       await gemini.generateContent('Say "ok"')
       results.google.valid = true
     } catch (error) {
@@ -409,26 +409,26 @@ async function translateWithClaude(
 }
 
 /**
+ * Gemini-Modell für alle Übersetzungen.
+ *
+ * Seit dem Key-Wechsel am 2026-10-24 (neues Google-Projekt) weist Google
+ * gemini-2.5-flash und gemini-2.5-pro mit 404 „no longer available to new
+ * users“ ab. Die Auswahlwerte `TranslationModel` bleiben bestehen — sie stehen
+ * in `languages.llm_model` —, laufen aber beide auf dieses Modell. Die frühere
+ * Ausweichroute Pro → Flash bei Überlast ist damit gegenstandslos.
+ */
+const GEMINI_API_MODEL = 'gemini-3.8-flash'
+
+/**
  * Translate using Gemini.
- * Retries transient overload errors (503/429) with exponential backoff,
- * then falls back to gemini-2.0-flash if gemini-2.5-pro stays overloaded.
+ * Retries transient overload errors (503/429) with exponential backoff.
  */
 async function translateWithGemini(
   systemPrompt: string,
   userPrompt: string,
-  model: TranslationModel
+  _model: TranslationModel
 ): Promise<string> {
-  const primaryId = model === 'gemini-2.5-pro' ? 'gemini-2.5-pro' : 'gemini-2.5-flash'
-
-  try {
-    return await callGeminiWithRetry(primaryId, systemPrompt, userPrompt, 3)
-  } catch (error) {
-    if (primaryId === 'gemini-2.5-pro' && isOverloadError(error)) {
-      console.warn('[Translation] gemini-2.5-pro overloaded after retries, falling back to gemini-2.0-flash')
-      return await callGeminiWithRetry('gemini-2.5-flash', systemPrompt, userPrompt, 2)
-    }
-    throw error
-  }
+  return await callGeminiWithRetry(GEMINI_API_MODEL, systemPrompt, userPrompt, 3)
 }
 
 async function callGeminiWithRetry(

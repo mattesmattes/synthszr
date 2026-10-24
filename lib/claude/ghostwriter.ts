@@ -80,9 +80,18 @@ const CLAUDE_LEGACY_ALIASES: Record<string, string> = {
   'claude-haiku': 'claude-haiku-4-5-20251001',
 }
 
+// Legacy-Kurznamen für Gemini: 2.0-flash hat Google zurückgezogen, 2.5-pro ist
+// seit dem Key-Wechsel 2026-10-24 (neues Google-Projekt) 404 „no longer
+// available to new users“. Beide laufen auf gemini-3.8-flash; andere konkrete
+// Gemini-IDs gehen unverändert an die API.
+const GEMINI_LEGACY_ALIASES: Record<string, string> = {
+  'gemini-2.0-flash': 'gemini-3.8-flash',
+  'gemini-2.5-pro': 'gemini-3.8-flash',
+}
+
 export function resolveModel(model: string): { provider: 'anthropic' | 'openai' | 'google'; modelId: string } | null {
   if (model.startsWith('claude')) return { provider: 'anthropic', modelId: CLAUDE_LEGACY_ALIASES[model] ?? model }
-  if (model.startsWith('gemini')) return { provider: 'google', modelId: model === 'gemini-2.0-flash' ? 'gemini-2.5-flash' : model }
+  if (model.startsWith('gemini')) return { provider: 'google', modelId: GEMINI_LEGACY_ALIASES[model] ?? model }
   if (model.startsWith('gpt')) return { provider: 'openai', modelId: model }
   return null
 }
@@ -394,8 +403,10 @@ ${originalText}`
     }
   } else if (model === 'gemini-2.5-pro' || model === 'gemini-2.0-flash') {
     const geminiModel = genAI.getGenerativeModel({
-      // 'gemini-2.0-flash' was retired by Google → route that legacy choice to 2.5-flash
-      model: model === 'gemini-2.5-pro' ? 'gemini-2.5-pro' : 'gemini-2.5-flash',
+      // Beide Auswahlwerte laufen auf gemini-3.8-flash: 2.0-flash hat Google
+      // zurückgezogen, 2.5-pro/2.5-flash sind seit dem Key-Wechsel 2026-10-24
+      // (neues Google-Projekt) 404 „no longer available to new users“.
+      model: 'gemini-3.8-flash',
       systemInstruction: deduplicationSystem,
     })
 

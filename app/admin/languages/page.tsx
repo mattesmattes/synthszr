@@ -15,8 +15,8 @@ import type { TranslationModel } from '@/lib/i18n/translation-service'
 const MODEL_LABELS: Record<string, string> = {
   'claude-sonnet-4': 'Claude Sonnet 4',
   'claude-haiku-3.5': 'Claude Haiku 3.5',
-  'gemini-2.0-flash': 'Gemini 2.0 Flash',
-  'gemini-2.5-pro': 'Gemini 2.5 Pro',
+  'gemini-2.5-flash': 'Gemini 3.8 Flash',
+  'gemini-2.5-pro': 'Gemini 3.8 Flash (ehem. 2.5 Pro)',
 }
 
 export default function LanguagesPage() {

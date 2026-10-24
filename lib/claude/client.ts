@@ -54,7 +54,9 @@ ${content}`
 
   try {
     const result = streamText({
-      model: google('gemini-2.5-flash'),  // Better quality than 2.0-flash, fast enough for cron budget
+      // gemini-3.8-flash seit 2026-10-24: das neue Google-Projekt (Key-Wechsel)
+      // bekommt für gemini-2.5-flash nur noch 404 „no longer available to new users“.
+      model: google('gemini-3.8-flash'),
       prompt: fullPrompt,
       maxOutputTokens: 65536,  // ~50k Wörter max — kein künstlicher Deckel mehr
     })
