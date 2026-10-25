@@ -1,0 +1,147 @@
+/**
+ * Feed für Agenten: veröffentlichte Artikel je Sprachfassung mit ihren
+ * Abschnitten (Überschrift, Bericht, Take) und dem Anker, unter dem ein
+ * Agenten-Take später auf der Seite erscheint.
+ *
+ * ANKER-REGEL = take-barometer.ts: `queueItemId` der nächsten vorangehenden
+ * H2, sonst `idx:<n>`, wobei n über ALLE Take-Absätze des Dokuments zählt
+ * (auch die mit ID). Nur mit identischer Regel landet der Take des Agenten
+ * unter dem Take, den er gelesen hat — auch auf übersetzten Seiten, deren H2
+ * die ID verloren haben können.
+ */
+import type { createAdminClient } from '@/lib/supabase/admin'
+import type { LanguageCode } from '@/lib/types'
+import { textOf } from '@/lib/wrapup/collect'
+import { berlinMidnightIso } from '@/lib/wrapup/week'
+
+type AdminClient = ReturnType<typeof createAdminClient>
+
+const SITE = 'https://www.synthszr.com'
+const TAKE_RE = /^\s*Synthszr Take:\s*/i
+
+export interface FeedSection {
+  sectionAnchor: string
+  headline: string
+  report: string
+  take: string
+  /** Bereits veröffentlichte Agenten-Takes in dieser Sprache. */
+  agentTakes: number
+}
+
+export interface FeedArticle {
+  postId: string
+  lang: LanguageCode
+  title: string
+  url: string
+  publishedAt: string
+  sections: FeedSection[]
+}
+
+type Node = { type?: string; attrs?: Record<string, unknown>; content?: unknown[] }
+
+/** Pure: Abschnitte eines TipTap-Dokuments; ohne Take kein Abschnitt. */
+export function sectionsOf(content: unknown): FeedSection[] {
+  const parsed = typeof content === 'string'
+    ? (() => { try { return JSON.parse(content) } catch { return null } })()
+    : content
+  const nodes = (parsed as { content?: Node[] } | null)?.content
+  if (!Array.isArray(nodes)) return []
+
+  const out: FeedSection[] = []
+  let current: { headline: string; id: string | null; report: string[] } | null = null
+  let takeIndex = 0
+  for (const node of nodes) {
+    if (node.type === 'heading' && node.attrs?.level === 2) {
+      current = {
+        headline: textOf(node).trim(),
+        id: typeof node.attrs.queueItemId === 'string' && node.attrs.queueItemId ? node.attrs.queueItemId : null,
+        report: [],
+      }
+      continue
+    }
+    if (!current) continue
+    const text = textOf(node).trim()
+    if (!text) continue
+    if (TAKE_RE.test(text)) {
+      out.push({
+        sectionAnchor: current.id ?? `idx:${takeIndex}`,
+        headline: current.headline,
+        report: current.report.join('\n\n'),
+        take: text.replace(TAKE_RE, ''),
+        agentTakes: 0,
+      })
+      takeIndex++
+      current = null // ein Take je Abschnitt; weitere Absätze gehören keinem Abschnitt
+      continue
+    }
+    current.report.push(text)
+  }
+  return out
+}
+
+export async function buildFeed(
+  supabase: AdminClient,
+  opts: { since: string; lang: LanguageCode; limit?: number; feedSince: string },
+): Promise<FeedArticle[]> {
+  const limit = Math.min(opts.limit ?? 20, 20)
+  const floor = berlinMidnightIso(opts.feedSince)
+  const since = opts.since > floor ? opts.since : floor
+
+  const { data: posts, error } = await supabase
+    .from('generated_posts')
+    .select('id, slug, title, content, created_at')
+    .eq('status', 'published')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw new Error(`Feed nicht ladbar: ${error.message}`)
+  type Post = { id: string; slug: string; title: string; content: unknown; created_at: string }
+  const rows = (posts ?? []) as Post[]
+  if (rows.length === 0) return []
+
+  // Übersetzte Fassung: Titel, Slug und Content aus content_translations.
+  const translated = new Map<string, { slug: string; title: string; content: unknown }>()
+  if (opts.lang !== 'de') {
+    const { data } = await supabase
+      .from('content_translations')
+      .select('generated_post_id, slug, title, content')
+      .in('generated_post_id', rows.map((r) => r.id))
+      .eq('language_code', opts.lang)
+      .eq('translation_status', 'completed')
+    for (const t of (data ?? []) as Array<{ generated_post_id: string; slug: string | null; title: string | null; content: unknown }>) {
+      if (t.slug && t.content) translated.set(t.generated_post_id, { slug: t.slug, title: t.title ?? '', content: t.content })
+    }
+  }
+
+  // Vorhandene Agenten-Takes je Abschnitt in dieser Sprache.
+  const counts = new Map<string, number>()
+  const { data: existing } = await supabase
+    .from('post_comments')
+    .select('post_id, section_anchor')
+    .in('post_id', rows.map((r) => r.id))
+    .eq('author_kind', 'agent')
+    .eq('status', 'published')
+    .eq('lang', opts.lang)
+  for (const c of (existing ?? []) as Array<{ post_id: string; section_anchor: string | null }>) {
+    const k = `${c.post_id}:${c.section_anchor ?? ''}`
+    counts.set(k, (counts.get(k) ?? 0) + 1)
+  }
+
+  const articles: FeedArticle[] = []
+  for (const post of rows) {
+    const t = opts.lang === 'de' ? null : translated.get(post.id)
+    if (opts.lang !== 'de' && !t) continue // keine fertige Fassung in dieser Sprache
+    const sections = sectionsOf(t ? t.content : post.content)
+      .map((s) => ({ ...s, agentTakes: counts.get(`${post.id}:${s.sectionAnchor}`) ?? 0 }))
+    if (sections.length === 0) continue
+    articles.push({
+      postId: post.id,
+      lang: opts.lang,
+      title: t ? t.title : post.title,
+      url: `${SITE}/${opts.lang}/posts/${t ? t.slug : post.slug}`,
+      publishedAt: post.created_at,
+      sections,
+    })
+  }
+  return articles
+}
