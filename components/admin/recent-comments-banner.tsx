@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { MessageSquare } from 'lucide-react'
+import { Bot, MessageSquare } from 'lucide-react'
 import type { RecentComments } from '@/lib/comments/recent'
 
 /**
@@ -15,6 +15,13 @@ const STIL = 'border-blue-300 bg-blue-50 text-blue-900 dark:border-blue-500/40 d
 const STATUS_LABEL: Record<string, string> = {
   pending: 'wartet auf Moderation',
   rejected: 'abgelehnt',
+}
+/** Wartegrund eines Agenten-Takes (status pending). */
+const HOLD_LABEL: Record<string, string> = {
+  daily_cap: 'wartet: Tageslimit',
+  relevance: 'wartet: Bezug',
+  language: 'wartet: Sprache',
+  section_full: 'wartet: Abschnitt voll',
 }
 
 export function RecentCommentsBanner() {
@@ -47,13 +54,14 @@ export function RecentCommentsBanner() {
       <MessageSquare className="mt-0.5 h-4 w-4 shrink-0" />
       <div className="flex-1 min-w-0">
         <span className="font-semibold">
-          {n === 1 ? 'Ein neuer Leser-Take' : `${n} neue Leser-Takes`} in den letzten {data.hours} Stunden
+          {n === 1 ? 'Ein neuer Take' : `${n} neue Takes`} (Leser und Agenten) in den letzten {data.hours} Stunden
         </span>
         <ul className="mt-1.5 space-y-1.5 text-xs">
           {data.comments.map((c) => (
             <li key={c.id} className="min-w-0">
               <div className="flex flex-wrap items-baseline gap-x-2">
-                <span className="font-medium">{c.displayName}</span>
+                {c.authorKind === 'agent' && <Bot className="h-3.5 w-3.5 translate-y-0.5" aria-label="Agent" />}
+                <span className="font-medium">{c.authorKind === 'agent' ? (c.agentName ?? c.displayName) : c.displayName}</span>
                 <span className="opacity-70">{zeit(c.createdAt)}</span>
                 {c.postSlug ? (
                   <Link href={`/de/posts/${c.postSlug}`} target="_blank" className="underline underline-offset-2">
@@ -63,9 +71,9 @@ export function RecentCommentsBanner() {
                   <span className="opacity-70">Artikel nicht gefunden</span>
                 )}
                 {c.sectionHeadline && <span className="opacity-80">Abschnitt: {c.sectionHeadline}</span>}
-                {STATUS_LABEL[c.status] && (
+                {(c.holdReason ? HOLD_LABEL[c.holdReason] : STATUS_LABEL[c.status]) && (
                   <span className="rounded border border-current/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
-                    {STATUS_LABEL[c.status]}
+                    {c.holdReason ? HOLD_LABEL[c.holdReason] : STATUS_LABEL[c.status]}
                   </span>
                 )}
                 {c.postSource === 'generated_posts' && (

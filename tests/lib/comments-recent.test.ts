@@ -91,4 +91,24 @@ describe('listRecentComments', () => {
     expect(r.comments).toEqual([])
     expect(r.since).toBeTruthy()
   })
+
+  it('kennzeichnet Agenten-Takes mit Name und Wartegrund', async () => {
+    const client = fakeClient({
+      post_comments: [{ id: 'c1', post_source: 'generated_posts', post_id: 'p1', display_name: 'Argus', body: 'b',
+        section_anchor: 'q-1', section_headline: 'H', status: 'pending', created_at: '2026-10-26T08:00:00Z',
+        author_kind: 'agent', agent_name: 'Argus', hold_reason: 'daily_cap' }],
+      generated_posts: [{ id: 'p1', slug: 's', title: 'T', content }],
+    })
+    const r = await listRecentComments(client, { hours: 48, now: new Date('2026-10-26T10:00:00Z') })
+    expect(r.comments[0]).toMatchObject({ authorKind: 'agent', agentName: 'Argus', holdReason: 'daily_cap' })
+  })
+
+  it('liefert fuer Leser-Takes authorKind reader', async () => {
+    const client = fakeClient({
+      post_comments: [{ id: 'c1', post_source: 'generated_posts', post_id: 'p1', display_name: 'w', body: 'b',
+        section_anchor: null, section_headline: null, status: 'published', created_at: '2026-10-26T08:00:00Z' }],
+    })
+    const r = await listRecentComments(client, { hours: 48, now: new Date('2026-10-26T10:00:00Z') })
+    expect(r.comments[0]).toMatchObject({ authorKind: 'reader', agentName: null, holdReason: null })
+  })
 })

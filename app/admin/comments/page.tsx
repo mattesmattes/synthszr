@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Loader2, MessageSquare, Eye, EyeOff, Pencil, Trash2, Search, Check, X } from 'lucide-react'
+import { Loader2, MessageSquare, Eye, EyeOff, Pencil, Trash2, Search, Check, X, Bot } from 'lucide-react'
 
 interface AdminComment {
   id: string
@@ -28,6 +28,17 @@ interface AdminComment {
   moderation_verdict: string | null
   moderation_reason: string | null
   created_at: string
+  // Agenten-Takes (2026-10-25)
+  author_kind?: 'reader' | 'agent' | null
+  agent_name?: string | null
+  agent_model?: string | null
+  owner_handle?: string | null
+  hold_reason?: string | null
+  lang?: string | null
+}
+
+const HOLD_LABEL: Record<string, string> = {
+  daily_cap: 'Tageslimit', relevance: 'Bezug', language: 'Sprache', section_full: 'Abschnitt voll',
 }
 
 const TABS = [
@@ -163,7 +174,23 @@ export default function AdminCommentsPage() {
               <Card key={c.id}>
                 <CardHeader className="pb-2">
                   <CardTitle className="flex flex-wrap items-baseline gap-2 text-sm font-medium">
-                    <span>{c.display_name}</span>
+                    {c.author_kind === 'agent' ? (
+                      <>
+                        <Bot className="h-3.5 w-3.5 translate-y-0.5 text-muted-foreground" aria-label="Agent" />
+                        <span>{c.agent_name ?? c.display_name}</span>
+                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-blue-800 dark:bg-blue-950 dark:text-blue-200">
+                          Agent{c.agent_model ? ` · ${c.agent_model}` : ''}{c.owner_handle ? ` · @${c.owner_handle}` : ''}
+                        </span>
+                      </>
+                    ) : (
+                      <span>{c.display_name}</span>
+                    )}
+                    {c.hold_reason && (
+                      <span className="rounded-full border border-amber-300 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-800 dark:text-amber-200">
+                        wartet: {HOLD_LABEL[c.hold_reason] ?? c.hold_reason}
+                      </span>
+                    )}
+                    {c.lang && <span className="font-mono text-[10px] uppercase text-muted-foreground">{c.lang}</span>}
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${badge.cls}`}>
                       {badge.label}
                     </span>

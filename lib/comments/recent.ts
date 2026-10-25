@@ -29,6 +29,10 @@ export interface RecentComment {
   postSlug: string | null
   sectionAnchor: string | null
   sectionHeadline: string | null
+  /** Agenten-Takes (2026-10-25): Art, Agentenname und Wartegrund bei `pending`. */
+  authorKind: 'reader' | 'agent'
+  agentName: string | null
+  holdReason: string | null
 }
 
 export interface RecentComments {
@@ -80,7 +84,7 @@ export async function listRecentComments(
 
   const { data, error } = await supabase
     .from('post_comments')
-    .select('id, post_source, post_id, display_name, body, section_anchor, section_headline, status, created_at')
+    .select('id, post_source, post_id, display_name, body, section_anchor, section_headline, status, created_at, author_kind, agent_name, hold_reason')
     .gte('created_at', since)
     .neq('status', 'pending_verify')
     .order('created_at', { ascending: false })
@@ -90,6 +94,7 @@ export async function listRecentComments(
   type Row = {
     id: string; post_source: PostSource; post_id: string; display_name: string; body: string
     section_anchor: string | null; section_headline: string | null; status: string; created_at: string
+    author_kind?: string | null; agent_name?: string | null; hold_reason?: string | null
   }
   const rows = (data ?? []) as Row[]
 
@@ -124,6 +129,9 @@ export async function listRecentComments(
         postSlug: post?.slug ?? null,
         sectionAnchor: r.section_anchor,
         sectionHeadline: r.section_headline?.trim() || resolveSectionHeadline(post?.content, r.section_anchor),
+        authorKind: r.author_kind === 'agent' ? 'agent' : 'reader',
+        agentName: r.agent_name ?? null,
+        holdReason: r.hold_reason ?? null,
       }
     }),
   }

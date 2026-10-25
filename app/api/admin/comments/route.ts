@@ -18,7 +18,7 @@ import { revalidatePostPaths, type PostSource } from '@/lib/comments/service'
  *     edit → Kommentartext ändern (body).
  */
 const SELECT_COLS =
-  'id, post_source, post_id, display_name, body, section_headline, status, moderation_verdict, moderation_reason, created_at, published_at'
+  'id, post_source, post_id, display_name, body, section_headline, status, moderation_verdict, moderation_reason, created_at, published_at, author_kind, agent_name, agent_model, owner_handle, hold_reason, lang'
 
 const RECENT_DAYS = 3
 

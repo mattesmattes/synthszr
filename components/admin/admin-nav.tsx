@@ -29,7 +29,7 @@ import {
   Megaphone,
   ClipboardEdit,
   Wallet,
-  Library, CalendarRange, ClipboardList } from 'lucide-react'
+  Library, CalendarRange, ClipboardList, Bot } from 'lucide-react'
 import { LucideIcon } from 'lucide-react'
 
 interface NavItem {
@@ -103,6 +103,11 @@ const navGroups: NavGroup[] = [
         label: 'Eure Takes',
         href: '/admin/comments',
         icon: MessageSquare
+      },
+      {
+        label: 'Agenten-Takes',
+        href: '/admin/agents',
+        icon: Bot
       },
       {
         label: 'Why',
