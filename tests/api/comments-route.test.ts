@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   resolveCommentToken: vi.fn(),
   openReaderSession: vi.fn(),
   sendMail: vi.fn(),
+  listPublishedComments: vi.fn().mockResolvedValue([]),
   afterCallbacks: [] as Array<() => Promise<void> | void>,
 }))
 
@@ -46,7 +47,7 @@ vi.mock('@/lib/comments/service', () => ({
   submitVerifiedComment: mocks.submitVerifiedComment,
   submitUnverifiedComment: mocks.submitUnverifiedComment,
   resolveCommentToken: mocks.resolveCommentToken,
-  listPublishedComments: vi.fn().mockResolvedValue([]),
+  listPublishedComments: mocks.listPublishedComments,
 }))
 vi.mock('@/lib/comments/reader-session', () => ({
   openReaderSession: mocks.openReaderSession,
@@ -188,5 +189,19 @@ describe('POST /api/comments — Anti-Enumeration', () => {
     await POST(post({ ...VALID, email: 'abo@example.com' }))
     await runAfter()
     expect(mocks.sendMail).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('GET /api/comments — Sprachfassung', () => {
+  const base = 'https://synthszr.com/api/comments?source=generated_posts&postId=11111111-2222-3333-4444-555555555555'
+  it('reicht eine bekannte Sprache als Filter durch', async () => {
+    const { GET } = await import('@/app/api/comments/route')
+    await GET(new NextRequest(`${base}&lang=en`))
+    expect(mocks.listPublishedComments).toHaveBeenLastCalledWith(expect.anything(), 'generated_posts', '11111111-2222-3333-4444-555555555555', 50, undefined, 'en')
+  })
+  it('ignoriert eine unbekannte Sprache', async () => {
+    const { GET } = await import('@/app/api/comments/route')
+    await GET(new NextRequest(`${base}&lang=xx`))
+    expect(mocks.listPublishedComments).toHaveBeenLastCalledWith(expect.anything(), 'generated_posts', '11111111-2222-3333-4444-555555555555', 50, undefined, undefined)
   })
 })

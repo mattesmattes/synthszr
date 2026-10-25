@@ -58,6 +58,15 @@ export interface PublicComment {
   sectionAnchor: string | null
   sectionHeadline: string | null
   publishedAt: string
+  // Agenten-Takes (Spec 2026-10-25): Bestand ohne diese Spalten ist 'reader'.
+  authorKind: 'reader' | 'agent'
+  agentName: string | null
+  agentModel: string | null
+  ownerHandle: string | null
+  stance: 'agree' | 'disagree' | 'nuance' | null
+  sources: Array<{ url: string; title: string }>
+  /** Sprache der kommentierten Fassung; null = Bestand, auf allen Seiten. */
+  lang: string | null
 }
 
 /** Titel des Artikels für den Moderations-Kontext. Fehlschlag ist unkritisch —
@@ -352,33 +361,54 @@ export async function verifyAndPublishComments(
 
 /** Veröffentlichte Kommentare eines Posts, neueste zuerst. Für SSR und die
  *  Client-Auffrischung — dieselbe Auswahl, damit beide dasselbe zeigen. */
+export const PUBLIC_COMMENT_COLUMNS =
+  'id, display_name, body, section_anchor, section_headline, published_at, author_kind, agent_name, agent_model, owner_handle, stance, sources, lang'
+
 export async function listPublishedComments(
   supabase: AdminClient,
   source: PostSource,
   postId: string,
   limit = 50,
   sectionAnchor?: string,
+  lang?: string,
 ): Promise<PublicComment[]> {
   let query = supabase
     .from('post_comments')
-    .select('id, display_name, body, section_anchor, section_headline, published_at')
+    .select(PUBLIC_COMMENT_COLUMNS)
     .eq('post_source', source)
     .eq('post_id', postId)
     .eq('status', 'published')
-    .order('published_at', { ascending: false })
-    .limit(limit)
   // Optional auf einen Abschnitt eingegrenzt — für die Anzeige direkt unter dem
   // jeweiligen Take.
   if (sectionAnchor) query = query.eq('section_anchor', sectionAnchor)
-  const { data } = await query
-  return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+  // Sprachfassung der Seite: Takes dieser Sprache plus Bestand ohne lang
+  // (Leser-Takes von vor den Agenten-Takes erscheinen weiter überall).
+  if (lang) query = query.or(`lang.eq.${lang},lang.is.null`)
+  const { data } = await query.order('published_at', { ascending: false }).limit(limit)
+  return ((data ?? []) as Array<Record<string, unknown>>).map(toPublicComment)
+}
+
+function toPublicComment(r: Record<string, unknown>): PublicComment {
+  const sources = Array.isArray(r.sources)
+    ? (r.sources as Array<{ url?: unknown; title?: unknown }>)
+      .filter((x) => typeof x?.url === 'string')
+      .map((x) => ({ url: x.url as string, title: typeof x.title === 'string' ? x.title : (x.url as string) }))
+    : []
+  return {
     id: r.id as string,
     displayName: r.display_name as string,
     body: r.body as string,
     sectionAnchor: (r.section_anchor as string | null) ?? null,
     sectionHeadline: (r.section_headline as string | null) ?? null,
     publishedAt: r.published_at as string,
-  }))
+    authorKind: r.author_kind === 'agent' ? 'agent' : 'reader',
+    agentName: (r.agent_name as string | null) ?? null,
+    agentModel: (r.agent_model as string | null) ?? null,
+    ownerHandle: (r.owner_handle as string | null) ?? null,
+    stance: (r.stance as PublicComment['stance']) ?? null,
+    sources,
+    lang: (r.lang as string | null) ?? null,
+  }
 }
 
 /** Prüft, ob ein roher Token (aus ?ct= im Newsletter-Link) eine gültige

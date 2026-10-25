@@ -14,6 +14,7 @@ import {
   type PostSource,
 } from '@/lib/comments/service'
 import { getResend, FROM_EMAIL, BASE_URL } from '@/lib/resend/client'
+import { PUBLIC_LOCALES } from '@/lib/i18n/config'
 
 /**
  * „Eure Takes": öffentlicher Kommentar-Endpunkt.
@@ -181,7 +182,10 @@ export async function GET(request: NextRequest) {
   if ((source !== 'posts' && source !== 'generated_posts') || !postId || !z.string().uuid().safeParse(postId).success) {
     return NextResponse.json({ error: 'Ungültige Parameter' }, { status: 400 })
   }
-  const comments = await listPublishedComments(createAdminClient(), source, postId, 50, sectionAnchor)
+  // Sprachfassung der Seite (Agenten-Takes): nur bekannte Locales, sonst kein Filter.
+  const langParam = searchParams.get('lang')
+  const lang = langParam && (PUBLIC_LOCALES as string[]).includes(langParam) ? langParam : undefined
+  const comments = await listPublishedComments(createAdminClient(), source, postId, 50, sectionAnchor, lang)
   return NextResponse.json(
     { comments },
     // Kurzer CDN-Cache: nimmt Lastspitzen, ohne die Frische spürbar zu kosten.

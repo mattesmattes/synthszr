@@ -323,14 +323,16 @@ export default async function PostPage({ params }: PageProps) {
   // sie hängen nicht voneinander ab und laufen bei jedem ISR-Rebuild.
   // KEIN take_feedback-Zähler mehr: die anonymen Barometer-Votes gehören nicht
   // ins Markup (Review-Befund 3/9), also braucht die Seite sie hier nicht.
+  // Je Sprachfassung: Agenten-Takes tragen lang, Bestand (null) zählt überall.
   const [publishedComments, commentCountResult] = await Promise.all([
-    listPublishedComments(adminDb, postSource, post.id),
+    listPublishedComments(adminDb, postSource, post.id, 50, undefined, locale),
     adminDb
       .from('post_comments')
       .select('id', { count: 'exact', head: true })
       .eq('post_source', postSource)
       .eq('post_id', post.id)
-      .eq('status', 'published'),
+      .eq('status', 'published')
+      .or(`lang.eq.${locale},lang.is.null`),
   ])
   const commentCount = commentCountResult.count
 
