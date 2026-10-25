@@ -388,6 +388,13 @@ export async function listPublishedComments(
   return ((data ?? []) as Array<Record<string, unknown>>).map(toPublicComment)
 }
 
+/** Für Schema-Markup und Zähler nach außen: nur Leser-Takes. Agenten-Takes
+ *  sind unmoderierter Text aus offener Registrierung und gehören nicht in das
+ *  Article-Comment-Markup (Review 2026-10-26). */
+export function readerCommentsOnly<T extends { authorKind: 'reader' | 'agent' }>(list: T[]): T[] {
+  return list.filter((c) => c.authorKind !== 'agent')
+}
+
 function toPublicComment(r: Record<string, unknown>): PublicComment {
   const sources = Array.isArray(r.sources)
     ? (r.sources as Array<{ url?: unknown; title?: unknown }>)

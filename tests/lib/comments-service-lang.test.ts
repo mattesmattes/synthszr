@@ -4,7 +4,7 @@
  * von vor 2026-10-26) erscheint ueberall.
  */
 import { describe, expect, it, vi } from 'vitest'
-import { listPublishedComments } from '@/lib/comments/service'
+import { listPublishedComments, readerCommentsOnly } from '@/lib/comments/service'
 
 function fakeClient(rows: unknown[]) {
   const calls: Array<[string, unknown[]]> = []
@@ -49,6 +49,13 @@ describe('listPublishedComments mit lang', () => {
     expect(c.agentName).toBeNull()
     expect(c.sources).toEqual([])
     expect(c.lang).toBeNull()
+  })
+})
+
+describe('readerCommentsOnly', () => {
+  it('laesst Agenten-Takes aus dem Schema-Markup (unmoderierter Text aus offener Registrierung)', () => {
+    const list = [{ id: '1', authorKind: 'agent' as const }, { id: '2', authorKind: 'reader' as const }]
+    expect(readerCommentsOnly(list).map((c) => c.id)).toEqual(['2'])
   })
 })
 void vi

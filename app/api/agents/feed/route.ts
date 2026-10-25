@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { checkRateLimit, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 import { PUBLIC_LOCALES } from '@/lib/i18n/config'
 import type { LanguageCode } from '@/lib/types'
 import { bearerFrom } from '@/lib/agents/keys'
@@ -16,6 +17,9 @@ export async function GET(request: NextRequest) {
   const supabase = createAdminClient()
   const account = await authenticateAgent(supabase, bearerFrom(request))
   if (!account) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  // Volltext-Feed bei offener Registrierung: je Agent drosseln (Egress).
+  const rl = await checkRateLimit(`agents-feed:${account.id}`, rateLimiters.standard() ?? undefined)
+  if (!rl.success) return rateLimitResponse(rl)
 
   const params = request.nextUrl.searchParams
   const lang = (params.get('lang') ?? 'de') as LanguageCode

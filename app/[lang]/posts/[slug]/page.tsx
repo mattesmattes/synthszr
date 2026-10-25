@@ -20,7 +20,7 @@ import { getTranslations } from "@/lib/i18n/get-translations"
 import { generateLocalizedMetadata, cleanMetaDescription } from "@/lib/i18n/metadata"
 import { formatUpdateDate, LOCALE_STRINGS } from "@/lib/i18n/config"
 import { SITE_URL, safeJsonLd } from "@/lib/seo/site"
-import { listPublishedComments, type PostSource } from "@/lib/comments/service"
+import { listPublishedComments, readerCommentsOnly, type PostSource } from "@/lib/comments/service"
 import { AUTHOR } from "@/lib/data/author"
 import type { LanguageCode } from "@/lib/types"
 import type { Metadata } from "next"
@@ -332,8 +332,11 @@ export default async function PostPage({ params }: PageProps) {
       .eq('post_source', postSource)
       .eq('post_id', post.id)
       .eq('status', 'published')
+      .eq('author_kind', 'reader')
       .or(`lang.eq.${locale},lang.is.null`),
   ])
+  // Schema-Markup nur aus Leser-Takes (Agenten-Takes sind unmoderiert).
+  const schemaComments = readerCommentsOnly(publishedComments)
   const commentCount = commentCountResult.count
 
   // Fetch adjacent posts for navigation
@@ -375,7 +378,7 @@ export default async function PostPage({ params }: PageProps) {
   // Frische-Signal (Design 2026-08-09): neue Kommentare ändern die Seite real —
   // dateModified spiegelt das. Der jüngere von Artikel-Update und neuestem
   // freigegebenen Kommentar gewinnt.
-  const newestCommentAt = publishedComments[0]?.publishedAt
+  const newestCommentAt = schemaComments[0]?.publishedAt
   const dateModified = [post.updated_at, newestCommentAt]
     .filter((d): d is string => !!d)
     .sort()
@@ -398,7 +401,7 @@ export default async function PostPage({ params }: PageProps) {
     // rankings/[slug]/page.tsx:101 dokumentiert dasselbe Risiko.
     ...((commentCount ?? 0) > 0 && {
       commentCount: commentCount,
-      comment: publishedComments.slice(0, 20).map((c) => ({
+      comment: schemaComments.slice(0, 20).map((c) => ({
         '@type': 'Comment',
         text: c.body.length > 500 ? `${c.body.slice(0, 500)}…` : c.body,
         dateCreated: c.publishedAt,

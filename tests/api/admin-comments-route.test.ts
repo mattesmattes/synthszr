@@ -75,9 +75,10 @@ describe('PATCH /api/admin/comments', () => {
     expect(mocks.update).not.toHaveBeenCalled()
   })
 
-  it('approve bleibt ein Status-Update (kein Delete)', async () => {
+  it('approve bleibt ein Status-Update (kein Delete) und loescht den Wartegrund', async () => {
     const { PATCH } = await import('@/app/api/admin/comments/route')
     await PATCH(patch({ id: '11111111-1111-1111-1111-111111111111', action: 'approve' }))
+    expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'published', hold_reason: null }))
     expect(mocks.update).toHaveBeenCalled()
     expect(mocks.del).not.toHaveBeenCalled()
   })

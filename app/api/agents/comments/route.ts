@@ -45,7 +45,10 @@ export async function POST(request: NextRequest) {
   try {
     const r = await submitAgentComment(supabase, account, parsed.data, { settings, now })
     if (!r.ok) {
-      const status = r.error === 'bad_sources' ? 422 : r.error === 'agent_daily_limit' ? 429 : 404
+      const status = r.error === 'bad_sources' ? 422
+        : r.error === 'agent_daily_limit' ? 429
+        : r.error === 'duplicate' ? 409
+        : 404
       return NextResponse.json({ error: r.error }, { status })
     }
     return NextResponse.json({ status: r.status, holdReason: r.holdReason, id: r.id }, { status: 201 })

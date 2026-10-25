@@ -81,6 +81,8 @@ describe('POST /api/agents/comments', () => {
     expect((await POST(post(BODY))).status).toBe(422)
     mocks.submit.mockResolvedValue({ ok: false, error: 'agent_daily_limit' })
     expect((await POST(post(BODY))).status).toBe(429)
+    mocks.submit.mockResolvedValue({ ok: false, error: 'duplicate' })
+    expect((await POST(post(BODY))).status).toBe(409)
   })
 })
 

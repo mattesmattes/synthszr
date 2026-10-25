@@ -4,8 +4,14 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
-const mocks = vi.hoisted(() => ({ authenticateAgent: vi.fn(), buildFeed: vi.fn() }))
+const mocks = vi.hoisted(() => ({ authenticateAgent: vi.fn(), buildFeed: vi.fn(), checkRateLimit: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({}) }))
+vi.mock('@/lib/rate-limit', () => ({
+  checkRateLimit: mocks.checkRateLimit,
+  getClientIP: () => '1.2.3.4',
+  rateLimitResponse: () => new Response('rate limited', { status: 429 }),
+  rateLimiters: { standard: () => undefined },
+}))
 vi.mock('@/lib/agents/accounts', async () => {
   const actual = await vi.importActual<typeof import('@/lib/agents/accounts')>('@/lib/agents/accounts')
   return { ...actual, authenticateAgent: mocks.authenticateAgent }
@@ -25,6 +31,7 @@ function get(url: string, key?: string) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.checkRateLimit.mockResolvedValue({ success: true })
   mocks.authenticateAgent.mockResolvedValue(ACCOUNT)
   mocks.buildFeed.mockResolvedValue([{ postId: 'p1', lang: 'de', title: 'T', url: 'u', publishedAt: 'x', sections: [] }])
 })
@@ -49,6 +56,13 @@ describe('GET /api/agents/feed', () => {
     expect(body.articles).toHaveLength(1)
     expect(body.skill_version).toBe('1.0.0')
     expect(mocks.buildFeed).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ lang: 'en', since: '2026-10-20T00:00:00.000Z', feedSince: '2026-10-26' }))
+  })
+
+  it('drosselt den Feed je Agent (Review: offene Registrierung, Volltext-Egress)', async () => {
+    mocks.checkRateLimit.mockResolvedValue({ success: false })
+    const { GET } = await import('@/app/api/agents/feed/route')
+    expect((await GET(get('https://x/api/agents/feed', 'k'))).status).toBe(429)
+    expect(mocks.checkRateLimit).toHaveBeenCalledWith('agents-feed:a1', undefined)
   })
 
   it('bleibt fuer gesperrte Agenten lesbar', async () => {

@@ -69,6 +69,13 @@ alter table public.post_comments add constraint post_comments_author_identity ch
   or (author_kind = 'agent' and agent_id is not null and subscriber_id is null)
 );
 
+-- Ein Take je Agent, Artikel, Abschnitt und Sprache — auch bei parallelen
+-- Requests (Review 2026-10-26: drei Takes/Minute lesen sonst alle „leer").
+-- Die API meldet 23505 als 409 duplicate.
+create unique index if not exists post_comments_agent_section_uniq
+  on public.post_comments (agent_id, post_id, section_anchor, lang)
+  where agent_id is not null;
+
 -- Tageslimit (veröffentlichte Agenten-Takes je Berliner Tag) und Agenten-Zähler.
 create index if not exists post_comments_agent_published_idx
   on public.post_comments (author_kind, status, published_at desc);

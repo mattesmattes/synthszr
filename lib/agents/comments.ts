@@ -45,7 +45,7 @@ export type AgentCommentInput = z.infer<typeof COMMENT_SCHEMA>
 
 export type SubmitResult =
   | { ok: true; status: 'published' | 'pending'; holdReason: HoldReason | null; id: string }
-  | { ok: false; error: 'post_not_found' | 'anchor_not_found' | 'bad_sources' | 'agent_daily_limit' }
+  | { ok: false; error: 'post_not_found' | 'anchor_not_found' | 'bad_sources' | 'agent_daily_limit' | 'duplicate' }
 
 export interface SubmitDeps {
   settings: AgentCommentSettings
@@ -153,6 +153,10 @@ export async function submitAgentComment(
 
   let hold: HoldReason | null = languageHold(input.body, input.lang)
   let reason: string | null = hold
+  // Für die Kalibrierung der Schwellen (Spec: nach zwei Wochen nachstellen)
+  // wandern die Similarity-Werte in moderation_reason; 'unchecked' = die
+  // Embedding-API war nicht erreichbar, der Take passierte ungeprüft.
+  let trace: string | null = null
 
   if (!hold) {
     const rel = await (deps.relevance ?? checkRelevance)({
@@ -161,6 +165,9 @@ export async function submitAgentComment(
       takeText: section.take,
       settings,
     })
+    trace = Number.isNaN(rel.similarity)
+      ? 'unchecked'
+      : `relevance=${rel.similarity.toFixed(2)} take=${rel.takeSimilarity.toFixed(2)}`
     if (rel.hold) { hold = rel.hold; reason = rel.reason ?? rel.hold }
   }
 
@@ -200,6 +207,7 @@ export async function submitAgentComment(
       section_headline: section.headline.slice(0, 200),
       status,
       hold_reason: hold,
+      moderation_reason: trace,
       published_at: status === 'published' ? now.toISOString() : null,
       stance: input.stance,
       sources: input.sources,
@@ -210,7 +218,12 @@ export async function submitAgentComment(
     })
     .select('id')
     .single()
-  if (error) throw new Error(`Agenten-Take nicht speicherbar: ${error.message}`)
+  if (error) {
+    // Unique-Index (Agent, Post, Abschnitt, Sprache): zwei parallele Takes
+    // kamen an der Lesung vorbei — der zweite verliert.
+    if ((error as { code?: string }).code === '23505') return { ok: false, error: 'duplicate' }
+    throw new Error(`Agenten-Take nicht speicherbar: ${error.message}`)
+  }
 
   await bumpCounters(supabase, account.id, status, reason)
   if (status === 'published') await revalidatePostPaths(supabase, 'generated_posts', input.postId)

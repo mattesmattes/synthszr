@@ -3,11 +3,9 @@
  * Abschnitten (Überschrift, Bericht, Take) und dem Anker, unter dem ein
  * Agenten-Take später auf der Seite erscheint.
  *
- * ANKER-REGEL = take-barometer.ts: `queueItemId` der nächsten vorangehenden
- * H2, sonst `idx:<n>`, wobei n über ALLE Take-Absätze des Dokuments zählt
- * (auch die mit ID). Nur mit identischer Regel landet der Take des Agenten
- * unter dem Take, den er gelesen hat — auch auf übersetzten Seiten, deren H2
- * die ID verloren haben können.
+ * ANKER-REGEL = take-barometer.ts (s. sectionsOf). Nur mit identischer Regel
+ * landet der Take des Agenten unter dem Take, den er gelesen hat — auch auf
+ * übersetzten Seiten, deren H2 die ID verloren haben können.
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
 import type { LanguageCode } from '@/lib/types'
@@ -17,7 +15,6 @@ import { berlinMidnightIso } from '@/lib/wrapup/week'
 type AdminClient = ReturnType<typeof createAdminClient>
 
 const SITE = 'https://www.synthszr.com'
-const TAKE_RE = /^\s*Synthszr Take:\s*/i
 
 export interface FeedSection {
   sectionAnchor: string
@@ -39,7 +36,17 @@ export interface FeedArticle {
 
 type Node = { type?: string; attrs?: Record<string, unknown>; content?: unknown[] }
 
-/** Pure: Abschnitte eines TipTap-Dokuments; ohne Take kein Abschnitt. */
+/** Dieselben Marker wie take-barometer.ts: alle drei zählen im Index. */
+const TAKE_MARKER_RE = /^\s*(Synthszr Take|Synthszr Update|Mattes Synthese)\s*:\s*/i
+
+/**
+ * Pure: Abschnitte eines TipTap-Dokuments mit EXAKT der Anker-Regel von
+ * take-barometer.ts (Review 2026-10-26): der Anker ist die `queueItemId` der
+ * letzten vorangehenden Überschrift MIT ID — ID-lose Überschriften werden
+ * übersprungen —, sonst `idx:<n>` über alle Take-Absätze; doppelte Anker
+ * (Wrap-up-Bündel teilen eine ID) bekommen `~2`, `~3` … Überschrift des
+ * Abschnitts ist die nächstgelegene vorangehende Überschrift, mit oder ohne ID.
+ */
 export function sectionsOf(content: unknown): FeedSection[] {
   const parsed = typeof content === 'string'
     ? (() => { try { return JSON.parse(content) } catch { return null } })()
@@ -48,33 +55,38 @@ export function sectionsOf(content: unknown): FeedSection[] {
   if (!Array.isArray(nodes)) return []
 
   const out: FeedSection[] = []
-  let current: { headline: string; id: string | null; report: string[] } | null = null
+  let lastHeadline = ''
+  let lastId: string | null = null
+  let report: string[] = []
   let takeIndex = 0
+  const seen = new Map<string, number>()
+
   for (const node of nodes) {
-    if (node.type === 'heading' && node.attrs?.level === 2) {
-      current = {
-        headline: textOf(node).trim(),
-        id: typeof node.attrs.queueItemId === 'string' && node.attrs.queueItemId ? node.attrs.queueItemId : null,
-        report: [],
-      }
+    if (node.type === 'heading') {
+      lastHeadline = textOf(node).trim()
+      const id = node.attrs?.queueItemId
+      if (typeof id === 'string' && id) lastId = id
+      report = []
       continue
     }
-    if (!current) continue
     const text = textOf(node).trim()
     if (!text) continue
-    if (TAKE_RE.test(text)) {
+    if (TAKE_MARKER_RE.test(text)) {
+      const base = lastId ?? `idx:${takeIndex}`
+      takeIndex++
+      const occ = (seen.get(base) ?? 0) + 1
+      seen.set(base, occ)
       out.push({
-        sectionAnchor: current.id ?? `idx:${takeIndex}`,
-        headline: current.headline,
-        report: current.report.join('\n\n'),
-        take: text.replace(TAKE_RE, ''),
+        sectionAnchor: occ > 1 ? `${base}~${occ}` : base,
+        headline: lastHeadline,
+        report: report.join('\n\n'),
+        take: text.replace(TAKE_MARKER_RE, ''),
         agentTakes: 0,
       })
-      takeIndex++
-      current = null // ein Take je Abschnitt; weitere Absätze gehören keinem Abschnitt
+      report = []
       continue
     }
-    current.report.push(text)
+    report.push(text)
   }
   return out
 }

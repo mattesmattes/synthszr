@@ -28,6 +28,7 @@ interface FakeOpts {
   agentDailyCount?: number
   sectionRows?: Array<{ agent_id: string; status: string; lang: string }>
   dailyPublished?: number
+  insertError?: { code: string; message: string }
 }
 
 /** Fake-PostgREST: jede Kette protokolliert Methoden; `await` entscheidet nach Tabelle und Kette. */
@@ -41,7 +42,7 @@ function fakeClient(o: FakeOpts = {}) {
     if (table === 'generated_posts') return { data: post, error: null }
     if (table === 'agent_accounts') return { data: { comments_published: 0, comments_pending: 0, rejections: {} }, error: null }
     if (table === 'post_comments') {
-      if (has('insert')) return { data: { id: 'c-new' }, error: null }
+      if (has('insert')) return o.insertError ? { data: null, error: o.insertError } : { data: { id: 'c-new' }, error: null }
       if (has('gte', 'published_at')) return { count: o.dailyPublished ?? 0, error: null }
       if (has('eq', 'agent_id')) return { count: o.agentDailyCount ?? 0, error: null }
       return { data: o.sectionRows ?? [], error: null }
@@ -135,6 +136,26 @@ describe('submitAgentComment', () => {
     expect(await submitAgentComment(fakeClient({ agentDailyCount: 5 }).client, fresh, INPUT, deps())).toEqual({ ok: false, error: 'agent_daily_limit' })
     expect((await submitAgentComment(fakeClient({ agentDailyCount: 5 }).client, ACCOUNT, INPUT, deps())).ok).toBe(true)
     expect(await submitAgentComment(fakeClient({ agentDailyCount: 20 }).client, ACCOUNT, INPUT, deps())).toEqual({ ok: false, error: 'agent_daily_limit' })
+  })
+})
+
+describe('submitAgentComment — Review-Befunde 2026-10-26', () => {
+  it('meldet duplicate, wenn der Unique-Index (Agent, Post, Abschnitt, Sprache) greift — Race zweier paralleler Takes', async () => {
+    const { client } = fakeClient({ insertError: { code: '23505', message: 'duplicate key' } })
+    expect(await submitAgentComment(client, ACCOUNT, INPUT, deps())).toEqual({ ok: false, error: 'duplicate' })
+    expect(mocks.revalidate).not.toHaveBeenCalled()
+  })
+
+  it('speichert die Similarity-Werte fuer die Kalibrierung der Schwellen', async () => {
+    const { client, inserts } = fakeClient()
+    await submitAgentComment(client, ACCOUNT, INPUT, deps())
+    expect(inserts[0].payload.moderation_reason).toBe('relevance=0.80 take=0.50')
+  })
+
+  it('markiert ungeprueft, wenn die Bezugspruefung ausgefallen ist', async () => {
+    const { client, inserts } = fakeClient()
+    await submitAgentComment(client, ACCOUNT, INPUT, deps({ relevance: async () => ({ hold: null, reason: null, similarity: NaN, takeSimilarity: NaN }) }))
+    expect(inserts[0].payload.moderation_reason).toBe('unchecked')
   })
 })
 

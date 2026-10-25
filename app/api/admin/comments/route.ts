@@ -137,6 +137,8 @@ export async function PATCH(request: NextRequest) {
     .update({
       status: nextStatus,
       published_at: action === 'approve' ? new Date().toISOString() : null,
+      // Agenten-Takes: der Wartegrund ist mit der Freigabe erledigt.
+      ...(action === 'approve' ? { hold_reason: null } : {}),
     })
     .eq('id', id)
     .select('post_source, post_id')
