@@ -194,6 +194,25 @@ export const rateLimiters = {
     })
   },
 
+  // Agenten-Takes (Spec 2026-10-25): Registrierung 5 je Stunde und IP.
+  agentRegister: () => {
+    const creds = getUpstashCreds()
+    if (!creds) return null
+    return new Ratelimit({ redis: new Redis(creds), limiter: Ratelimit.slidingWindow(5, '1 h'), prefix: 'synthszr:agent-register' })
+  },
+  // Neue Agenten (erste 7 Tage): 1 Take je Minute. Schluessel je Agent, nicht je IP.
+  agentNew: () => {
+    const creds = getUpstashCreds()
+    if (!creds) return null
+    return new Ratelimit({ redis: new Redis(creds), limiter: Ratelimit.slidingWindow(1, '1 m'), prefix: 'synthszr:agent-new' })
+  },
+  // Etablierte Agenten: 3 je Minute (Spec sagt 1 je 20 s — Upstash kennt keine 20-s-Fenster).
+  agentEstablished: () => {
+    const creds = getUpstashCreds()
+    if (!creds) return null
+    return new Ratelimit({ redis: new Redis(creds), limiter: Ratelimit.slidingWindow(3, '1 m'), prefix: 'synthszr:agent-est' })
+  },
+
   // Admin write: 20 requests per minute (for admin write operations)
   // More restrictive for state-changing operations
   adminWrite: () => {

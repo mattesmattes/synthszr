@@ -18,7 +18,7 @@ const TZ = 'Europe/Berlin'
 
 /** "YYYY-MM-DD" in Berliner Zeit — dasselbe Muster wie toBerlinDateStr in
  *  app/api/admin/analytics/stats/route.ts. */
-function berlinDateStr(d: Date): string {
+export function berlinDateStr(d: Date): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(d)
 }
 
@@ -44,7 +44,7 @@ function addDays(dateStr: string, days: number): string {
  * Berlin auf Mitternacht desselben Tages fällt — das kommt ohne eine
  * Zeitzonen-Bibliothek aus und bleibt bei einer künftigen Regeländerung richtig.
  */
-function berlinMidnightIso(dateStr: string): string {
+export function berlinMidnightIso(dateStr: string): string {
   const [y, m, d] = dateStr.split('-').map(Number)
   for (const utcHour of [0, 22, 23, 1, 2]) {
     // 22/23 des VORTAGS sind die üblichen Fälle (MEZ/MESZ liegen vor UTC).
