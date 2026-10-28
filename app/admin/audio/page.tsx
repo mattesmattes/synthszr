@@ -519,6 +519,31 @@ const DEFAULT_MOMENT_STYLE = { label: 'Moment', color: 'bg-gray-500/20 text-gray
 // Main Page Component
 // ---------------------------------------------------------------------------
 
+/**
+ * Antwort der Script-Route lesen, auch wenn sie KEIN JSON ist (Diagnose
+ * 2026-10-28: „bricht sofort ab" ohne verwertbare Meldung). Eine HTML-Seite
+ * einer Zwischenschicht, ein leerer Body oder ein Netzwerkfehler erscheinen
+ * jetzt mit Status und Auszug im roten Hinweis statt als „Unexpected token".
+ */
+async function readScriptResponse(res: Response): Promise<{ script: string }> {
+  const text = await res.text()
+  let data: { error?: string; script?: string } = {}
+  try { data = JSON.parse(text) } catch { /* kein JSON — unten als Auszug gemeldet */ }
+  if (!res.ok || typeof data.script !== 'string') {
+    const auszug = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240)
+    throw new Error(data.error ?? `HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''}: ${auszug || 'leere Antwort'}`)
+  }
+  return { script: data.script }
+}
+
+function describeScriptError(error: unknown): string {
+  if (!(error instanceof Error)) return 'Unbekannter Fehler'
+  // fetch() wirft TypeError, wenn die Anfrage den Server gar nicht erreicht
+  // (Netz, VPN, Proxy, Browser-Erweiterung) — das sieht sonst aus wie ein Serverfehler.
+  if (error.name === 'TypeError') return `Netzwerkfehler vor dem Server: ${error.message}`
+  return error.message
+}
+
 export default function AudioPageWrapper() {
   return (
     <Suspense fallback={<div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
@@ -1003,15 +1028,14 @@ function AudioPage() {
           smalltalkTopic: smalltalkTopic.trim() || undefined,
         }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Script-Generierung fehlgeschlagen')
+      const data = await readScriptResponse(res)
       setPodcastScript(data.script)
       setScriptGenerated(true)
       setScriptModified(false)
       setPodcastAudioUrl(null)
     } catch (error) {
       console.error('Script generation error:', error)
-      setPodcastError(error instanceof Error ? error.message : 'Unbekannter Fehler')
+      setPodcastError(describeScriptError(error))
     } finally {
       setScriptGenerating(false)
     }
@@ -1036,8 +1060,7 @@ function AudioPage() {
           smalltalkTopic: smalltalkTopic.trim() || undefined,
         }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Script-Generierung fehlgeschlagen')
+      const data = await readScriptResponse(res)
       generatedScript = data.script
       setPodcastScript(generatedScript)
       setScriptGenerated(true)
@@ -1045,7 +1068,7 @@ function AudioPage() {
       setPodcastAudioUrl(null)
     } catch (error) {
       console.error('Script generation error:', error)
-      setPodcastError(error instanceof Error ? error.message : 'Unbekannter Fehler')
+      setPodcastError(describeScriptError(error))
       setScriptGenerating(false)
       return
     }
