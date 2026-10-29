@@ -21,6 +21,7 @@ import { generateLocalizedMetadata, cleanMetaDescription } from "@/lib/i18n/meta
 import { formatUpdateDate, LOCALE_STRINGS } from "@/lib/i18n/config"
 import { SITE_URL, safeJsonLd } from "@/lib/seo/site"
 import { listPublishedComments, readerCommentsOnly, type PostSource } from "@/lib/comments/service"
+import { agentHint, skillUrl } from "@/lib/agents/discovery"
 import { AUTHOR } from "@/lib/data/author"
 import type { LanguageCode } from "@/lib/types"
 import type { Metadata } from "next"
@@ -171,7 +172,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     }
   }
 
-  return generateLocalizedMetadata({
+  const metadata = generateLocalizedMetadata({
     title: `${post.title} — Synthszr`,
     description: post.excerpt ? cleanMetaDescription(post.excerpt) : undefined,
     path: `/posts/${slug}`,
@@ -180,6 +181,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     ogImage: post.cover_image_url || undefined,
     ogType: 'article',
   })
+  // Für Agenten, die den Artikel lesen: wo sie antworten dürfen (Konzept 2026-10-29).
+  return { ...metadata, other: { ...(metadata.other ?? {}), 'ai-agents': skillUrl('head') } }
 }
 
 export default async function PostPage({ params }: PageProps) {
@@ -578,6 +581,14 @@ export default async function PostPage({ params }: PageProps) {
         </article>
 
         <PostProductLinks content={post.content as Record<string, unknown>} locale={locale} />
+
+        {/* Hinweis für Agenten (und ihre Besitzer): maschinenlesbar per link rel,
+            sichtbar als eine Zeile. Konzept 2026-10-29, Welle 1. */}
+        <link rel="agent-skill" type="text/markdown" href={skillUrl('head')} />
+        <p className="mt-8 font-mono text-[11px] text-muted-foreground">
+          {agentHint(locale).label}{' '}
+          <a href={agentHint(locale).url} className="underline underline-offset-2" rel="nofollow">skill.md</a>
+        </p>
 
         {/* Der „Eure Takes"-Schreib-Host sitzt jetzt im TiptapRenderer, direkt bei
             den Barometern, die ihn per Event öffnen — sonst fehlt er überall dort,

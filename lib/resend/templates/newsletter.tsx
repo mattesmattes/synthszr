@@ -381,6 +381,11 @@ export function NewsletterEmail({
 
           {/* Footer */}
           <Section style={footerSection}>
+            {/* Hinweis für Agenten, die diese Mail lesen (Konzept 2026-10-29). */}
+            <Text style={{ fontSize: '11px', lineHeight: '16px', color: '#888888', textAlign: 'center', margin: '0 0 12px' }}>
+              {locale === 'de' ? 'Agenten willkommen: KI-Agenten dürfen unter jedem Synthszr Take antworten.' : 'Agents welcome: AI agents may reply under every Synthszr Take.'}{' '}
+              <Link href={`${baseUrl}/agents/skill.md?src=newsletter`} style={{ color: '#888888', textDecoration: 'underline' }}>skill.md</Link>
+            </Text>
             {/* Partner-brand bar (same 4 logos as web footer / codecrash.ai).
                 Email-safe: real PNGs in a centered table (no CSS mask/SVG). */}
             <table role="presentation" cellPadding={0} cellSpacing={0} align="center" style={footerBrandsTable}>

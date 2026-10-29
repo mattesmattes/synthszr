@@ -33,6 +33,12 @@ const nextConfig = {
     ]
   },
 
+  // Agent-Card unter der A2A-Konvention; ein Ordner „.well-known" im App-Router
+  // wäre fragil, deshalb Rewrite auf die API-Route.
+  async rewrites() {
+    return [{ source: '/.well-known/agent-card.json', destination: '/api/agents/card' }]
+  },
+
   // Security headers
   async headers() {
     return [

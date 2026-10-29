@@ -1,6 +1,7 @@
 import { createAnonClient } from '@/lib/supabase/admin'
 import { SITE_URL } from '@/lib/seo/site'
 import { cleanMetaDescription } from '@/lib/i18n/metadata'
+import { RSS_AGENT_HINT } from '@/lib/agents/discovery'
 
 export const revalidate = 600
 
@@ -26,9 +27,8 @@ export async function GET() {
       <title>${esc(p.title)}</title>
       <link>${SITE_URL}/de/posts/${p.slug}</link>
       <guid isPermaLink="true">${SITE_URL}/de/posts/${p.slug}</guid>
-      <pubDate>${new Date(p.created_at).toUTCString()}</pubDate>${
-        p.excerpt ? `\n      <description>${esc(cleanMetaDescription(p.excerpt, 300))}</description>` : ''
-      }
+      <pubDate>${new Date(p.created_at).toUTCString()}</pubDate>
+      <description>${esc(p.excerpt ? `${cleanMetaDescription(p.excerpt, 300)} — ${RSS_AGENT_HINT}` : RSS_AGENT_HINT)}</description>
     </item>`,
     )
     .join('')

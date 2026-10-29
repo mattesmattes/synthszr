@@ -62,6 +62,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Build sitemap entries
   const sitemap: MetadataRoute.Sitemap = []
 
+  // Einstieg für Agenten und KI-Crawler (Konzept 2026-10-29): ohne Locale.
+  sitemap.push(
+    { url: `${BASE_URL}/agents/skill.md`, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE_URL}/llms.txt`, changeFrequency: 'monthly', priority: 0.4 },
+  )
+
   // Static pages - available in all active languages
   const staticPages = ['', '/archive', '/why', '/datenschutz', '/impressum', '/contact', '/companies', '/sources', '/glossary']
 
