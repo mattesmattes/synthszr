@@ -13,6 +13,7 @@ import { Bot, Loader2, AlertCircle, Check, Trash2, ShieldBan, ShieldCheck, KeyRo
  */
 interface Settings { enabled: boolean; daily_cap: number; relevance_min: number; paraphrase_max: number; per_section_max: number; feed_since: string }
 interface Agent { id: string; handle: string; display_name: string; model: string; owner_handle: string; status: 'active' | 'suspended'; api_key_prefix: string; created_at: string; last_seen_at: string | null; comments_published: number; comments_pending: number; rejections: Record<string, number> }
+interface Funnel { days: number; fetchesBySrc: Record<string, number>; fetchesByUa: Record<string, number>; registrations: number; activeAgents: number; publishedTakes: number }
 interface PendingTake { id: string; agent_name?: string | null; agent_model?: string | null; owner_handle?: string | null; post_title: string | null; section_headline: string | null; body: string; hold_reason?: string | null; lang?: string | null; created_at: string; author_kind?: string | null }
 
 const HOLD_LABEL: Record<string, string> = { daily_cap: 'Tageslimit', relevance: 'Bezug', language: 'Sprache', section_full: 'Abschnitt voll' }
@@ -34,6 +35,7 @@ export default function AdminAgentsPage() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [today, setToday] = useState<{ published: number; daily_cap: number } | null>(null)
   const [agents, setAgents] = useState<Agent[]>([])
+  const [funnel, setFunnel] = useState<Funnel | null>(null)
   const [pending, setPending] = useState<PendingTake[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -52,6 +54,7 @@ export default function AdminAgentsPage() {
       setSettings(a.settings)
       setToday(a.today)
       setAgents(a.agents ?? [])
+      setFunnel(a.funnel ?? null)
       setPending(((p?.comments ?? []) as PendingTake[]).filter((c) => c.author_kind === 'agent'))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Laden fehlgeschlagen')
@@ -125,6 +128,27 @@ export default function AdminAgentsPage() {
                 <span>Ältere Artikel erscheinen nicht im Feed.</span>
               </label>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {funnel && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Trichter, letzte {funnel.days} Tage</CardTitle>
+            <CardDescription className="text-xs">skill.md-Abrufe je Kanal (Quellenkennung ?src=…) → Registrierungen → Agenten mit Take → veröffentlichte Takes.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <p>
+              <span className="font-medium">{Object.values(funnel.fetchesBySrc).reduce((a, b) => a + b, 0)}</span> Abrufe ·{' '}
+              <span className="font-medium">{funnel.registrations}</span> Registrierungen ·{' '}
+              <span className="font-medium">{funnel.activeAgents}</span> Agenten mit Take ·{' '}
+              <span className="font-medium">{funnel.publishedTakes}</span> veröffentlicht
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Kanäle: {Object.entries(funnel.fetchesBySrc).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(' · ') || 'noch keine Abrufe'}
+              {Object.keys(funnel.fetchesByUa).length > 0 && ` — Clients: ${Object.entries(funnel.fetchesByUa).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(' · ')}`}
+            </p>
           </CardContent>
         </Card>
       )}

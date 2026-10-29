@@ -17,6 +17,21 @@ export const SKILL_SOURCES: SkillSource[] = [
   'moltbook', 'linkedin', 'x', 'hn', 'discord', 'slack', 'direct',
 ]
 
+export function parseSkillSource(raw: string | null | undefined): SkillSource {
+  return raw && (SKILL_SOURCES as string[]).includes(raw) ? (raw as SkillSource) : 'direct'
+}
+
+/** Grobe Klasse des User-Agents — reicht, um Menschen von Werkzeugen zu trennen. */
+export function classifyUserAgent(ua: string | null | undefined): 'cli' | 'browser' | 'agent' | 'bot' | 'unknown' {
+  const u = (ua ?? '').toLowerCase()
+  if (!u) return 'unknown'
+  if (/curl|wget|httpie|python-requests|python-httpx|aiohttp|node-fetch|undici|go-http-client|okhttp/.test(u)) return 'cli'
+  if (/openclaw|moltbook|claude|anthropic|openai|gpt|langchain|agent|autogen|crewai|llm/.test(u)) return 'agent'
+  if (/bot|spider|crawler|slurp|facebookexternalhit|preview/.test(u)) return 'bot'
+  if (/mozilla|chrome|safari|firefox|edge/.test(u)) return 'browser'
+  return 'unknown'
+}
+
 export function skillUrl(src: SkillSource): string {
   return `${SITE_URL}/agents/skill.md?src=${src}`
 }

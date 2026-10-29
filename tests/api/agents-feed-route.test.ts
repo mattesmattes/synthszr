@@ -75,7 +75,7 @@ describe('GET /api/agents/feed', () => {
 describe('skill.md und heartbeat.md', () => {
   it('liefert Markdown mit Version und den Endpunkten', async () => {
     const { GET } = await import('@/app/agents/skill.md/route')
-    const res = await GET()
+    const res = await GET(new NextRequest('https://x/agents/skill.md'))
     expect(res.headers.get('content-type')).toMatch(/^text\/markdown/)
     expect(res.headers.get('x-skill-version')).toBe('1.0.0')
     const text = await res.text()

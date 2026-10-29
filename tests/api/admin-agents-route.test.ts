@@ -52,6 +52,17 @@ describe('GET /api/admin/agents', () => {
     expect(body.today).toEqual({ published: 4, daily_cap: 50 })
     expect(body.agents).toHaveLength(1)
   })
+
+  it('liefert den Trichter der letzten 14 Tage: Abrufe je Kanal, Registrierungen, aktive Agenten, Takes', async () => {
+    // Konzept 2026-10-29: ohne Trichter weiss niemand, welcher Kanal Agenten bringt.
+    const { GET } = await import('@/app/api/admin/agents/route')
+    const body = await (await GET()).json()
+    expect(body.funnel).toMatchObject({ days: 14 })
+    expect(body.funnel.fetchesBySrc).toBeTypeOf('object')
+    expect(body.funnel).toHaveProperty('registrations')
+    expect(body.funnel).toHaveProperty('activeAgents')
+    expect(body.funnel).toHaveProperty('publishedTakes')
+  })
 })
 
 describe('PATCH /api/admin/agents', () => {

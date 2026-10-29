@@ -30,17 +30,46 @@ const BODY = z.union([
   z.object({ agentId: z.string().uuid(), action: z.enum(['suspend', 'activate', 'revoke']) }).strict(),
 ])
 
+const FUNNEL_DAYS = 14
+
+/** Trichter je Kanal (Konzept 2026-10-29): Abrufe → Registrierungen → aktive Agenten → Takes. */
+async function loadFunnel(supabase: ReturnType<typeof createAdminClient>) {
+  const since = new Date(Date.now() - FUNNEL_DAYS * 86_400_000).toISOString()
+  const [fetches, registrations, active, published] = await Promise.all([
+    supabase.from('agent_skill_fetches').select('src, ua_class').gte('created_at', since).limit(5000),
+    supabase.from('agent_accounts').select('id', { count: 'exact', head: true }).gte('created_at', since),
+    supabase.from('post_comments').select('agent_id').eq('author_kind', 'agent').gte('created_at', since).limit(5000),
+    supabase.from('post_comments').select('id', { count: 'exact', head: true }).eq('author_kind', 'agent').eq('status', 'published').gte('created_at', since),
+  ])
+  const fetchesBySrc: Record<string, number> = {}
+  const fetchesByUa: Record<string, number> = {}
+  for (const f of ((fetches.data ?? []) as Array<{ src?: string; ua_class?: string }>)) {
+    if (f.src) fetchesBySrc[f.src] = (fetchesBySrc[f.src] ?? 0) + 1
+    if (f.ua_class) fetchesByUa[f.ua_class] = (fetchesByUa[f.ua_class] ?? 0) + 1
+  }
+  const count = (r: { count?: number | null; data?: unknown[] | null }) => r.count ?? r.data?.length ?? 0
+  return {
+    days: FUNNEL_DAYS,
+    fetchesBySrc,
+    fetchesByUa,
+    registrations: count(registrations),
+    activeAgents: new Set(((active.data ?? []) as Array<{ agent_id?: string }>).map((r) => r.agent_id).filter(Boolean)).size,
+    publishedTakes: count(published),
+  }
+}
+
 export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   const supabase = createAdminClient()
   try {
-    const [settings, published, agents] = await Promise.all([
+    const [settings, published, agents, funnel] = await Promise.all([
       loadAgentCommentSettings(supabase),
       countPublishedAgentTakesToday(supabase, new Date()),
       supabase.from('agent_accounts').select(AGENT_COLS).order('created_at', { ascending: false }).limit(200),
+      loadFunnel(supabase),
     ])
-    return NextResponse.json({ settings, today: { published, daily_cap: settings.daily_cap }, agents: agents.data ?? [] })
+    return NextResponse.json({ settings, today: { published, daily_cap: settings.daily_cap }, agents: agents.data ?? [], funnel })
   } catch (err) {
     console.error('[Agents] admin GET:', err)
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Fehler' }, { status: 500 })
