@@ -32,7 +32,9 @@ async function main() {
     import('@/lib/ai/usage-log'),
   ])
   const supabase = createAdminClient()
-  const cmd = process.argv[2]
+  // pnpm reicht ein fuehrendes "--" mit durch — ueberspringen.
+  const argv = process.argv.slice(2).filter((a, i) => !(i === 0 && a === "--"))
+  const cmd = argv[0]
 
   if (cmd === 'list') {
     const agents = await house.loadHouseAgents(supabase)
@@ -42,7 +44,7 @@ async function main() {
   }
 
   if (cmd === 'register') {
-    const handle = process.argv[3]
+    const handle = argv[1]
     const persona = personas.HOUSE_PERSONAS.find((p) => p.handle === handle)
     if (!persona) throw new Error(`Unbekannte Persona: ${handle}. Bekannt: ${personas.HOUSE_PERSONAS.map((p) => p.handle).join(', ')}`)
     const existing = await house.loadHouseAgents(supabase)
