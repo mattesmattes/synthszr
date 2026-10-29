@@ -29,6 +29,7 @@ const EXPECTED_USE_CASES: UseCase[] = [
   'ghostwriter_take',
   'wrapup',
   'wrapup_research',
+  'agent_house',
   'comment_moderation',
   'search_rerank',
   'techmeme_relevance',

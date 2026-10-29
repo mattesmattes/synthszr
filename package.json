@@ -29,7 +29,8 @@
     "curation:shadow-once": "tsx scripts/shadow-once-curation.ts",
     "curation:reconcile": "tsx scripts/reconcile-curation.ts",
     "takes:measure": "tsx scripts/measure-takes.ts",
-    "wrapup:research-dry": "tsx scripts/wrapup-research-dry.ts"
+    "wrapup:research-dry": "tsx scripts/wrapup-research-dry.ts",
+    "agents:house": "tsx scripts/house-agent.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.46",

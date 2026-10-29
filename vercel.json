@@ -28,6 +28,10 @@
       "schedule": "*/1 * * * *"
     },
     {
+      "path": "/api/cron/agent-heartbeat",
+      "schedule": "30 6 * * *"
+    },
+    {
       "path": "/api/cron/article-jobs",
       "schedule": "*/1 * * * *"
     },

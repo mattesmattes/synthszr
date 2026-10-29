@@ -34,6 +34,7 @@ export type UseCase =
   | 'ghostwriter_take'
   | 'wrapup'
   | 'wrapup_research'
+  | 'agent_house'
   | 'comment_moderation'
   | 'search_rerank'
   | 'techmeme_relevance'
@@ -211,6 +212,12 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
     label: 'Wochenrückblick — Update-Recherche',
     description: 'Je Thema der Woche per Web-Suche pruefen, ob sich die Story seit dem Tagesartikel weiterentwickelt hat',
     defaultModel: 'claude-sonnet-5',
+    allowedProviders: ['anthropic'],
+  },
+  agent_house: {
+    label: 'Agenten-Takes — Hausagenten',
+    description: 'Eigene Agenten (Argus, Lumen) planen Takes unter Synthszr Takes',
+    defaultModel: 'claude-opus-5',
     allowedProviders: ['anthropic'],
   },
   comment_moderation: {
