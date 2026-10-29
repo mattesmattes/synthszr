@@ -36,6 +36,7 @@ import { resolveDialogueRules } from '@/lib/podcast/dialogue-style'
 import Anthropic from '@anthropic-ai/sdk'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { describeEmptyScript, extractScriptText, fallbackModelFor, scriptRequestBudget, shouldRetryWithFallback } from '@/lib/podcast/script-diagnostics'
 
 // TTS language mapping for podcast generation
 const LOCALE_TO_TTS_LANG: Record<string, 'de' | 'en'> = {
@@ -596,32 +597,45 @@ export async function POST(request: NextRequest) {
       ? `${personalityBrief}\n\n${memoryBrief}`
       : personalityBrief
 
-    const stream = anthropic.messages.stream({
-      model: podcastModel,
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-    })
+    const callModel = async (model: string) => {
+      const stream = anthropic.messages.stream({
+        model,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: prompt }],
+        // Denken aus, wo das Modell es erlaubt; sonst Budget-Spielraum (s. script-diagnostics.ts).
+        ...scriptRequestBudget(model, maxTokens),
+      })
+      return stream.finalMessage()
+    }
 
-    const message = await stream.finalMessage()
+    let message = await callModel(podcastModel)
+
+    // Befund 2026-10-29: Opus 5.5 bricht bei dieser Aufgabe immer wieder mit
+    // stop_reason refusal ab (Klassifizierer greift während des Denkens) oder
+    // verbraucht das Budget mit Denken. Ein Versuch mit Opus 5 und
+    // abgeschaltetem Denken liefert das Skript; das Hauptmodell bleibt wählbar.
+    if (!extractScriptText(message).trim() && shouldRetryWithFallback(message)) {
+      const fallback = fallbackModelFor(podcastModel)
+      if (fallback) {
+        console.warn(`[Podcast Script] ${podcastModel}: ${describeEmptyScript(message, maxTokens)} — zweiter Versuch mit ${fallback}`)
+        message = await callModel(fallback)
+      }
+    }
 
     // Extract text from response
-    const scriptContent = message.content
-      .filter(block => block.type === 'text')
-      .map(block => (block as { type: 'text'; text: string }).text)
-      .join('\n')
+    const scriptContent = extractScriptText(message)
 
     if (message.stop_reason === 'max_tokens') {
       console.warn(`[Podcast Script] WARNING: Script truncated at max_tokens (${maxTokens}). Output used ${message.usage?.output_tokens} tokens.`)
     }
 
     if (!scriptContent.trim()) {
-      return NextResponse.json({ error: 'AI generated empty script' }, { status: 500 })
+      // Befund 2026-10-29: ohne stop_reason und Blocktypen ist eine leere
+      // Antwort nicht von einer Verweigerung oder einem verbrauchten
+      // Denkbudget zu unterscheiden.
+      const reason = describeEmptyScript(message, maxTokens)
+      console.error(`[Podcast Script] ${reason}`)
+      return NextResponse.json({ error: reason }, { status: 500 })
     }
 
     // Post-generation guarantee: the main model ignores rule #15
