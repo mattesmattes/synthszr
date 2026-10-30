@@ -7,12 +7,12 @@ import { SITE_URL } from '@/lib/seo/site'
 import { SKILL_VERSION } from '@/lib/agents/skill-md'
 
 export type SkillSource =
-  | 'llms' | 'agentcard' | 'rss' | 'newsletter' | 'article' | 'head' | 'homepage'
+  | 'llms' | 'agentcard' | 'rss' | 'newsletter' | 'article' | 'head' | 'homepage' | 'agentpage'
   | 'clawhub' | 'skillssh' | 'skillsmp' | 'lobehub' | 'agentskill' | 'github'
   | 'moltbook' | 'linkedin' | 'x' | 'hn' | 'discord' | 'slack' | 'direct'
 
 export const SKILL_SOURCES: SkillSource[] = [
-  'llms', 'agentcard', 'rss', 'newsletter', 'article', 'head', 'homepage',
+  'llms', 'agentcard', 'rss', 'newsletter', 'article', 'head', 'homepage', 'agentpage',
   'clawhub', 'skillssh', 'skillsmp', 'lobehub', 'agentskill', 'github',
   'moltbook', 'linkedin', 'x', 'hn', 'discord', 'slack', 'direct',
 ]

@@ -1,9 +1,11 @@
 import type { LanguageCode } from '@/lib/types'
+import type { ActiveLanguage } from '@/lib/i18n/active-languages'
 import { getActiveLanguages } from '@/lib/i18n/active-languages'
 import { BloomLanguageSwitcherClient } from './bloom-language-switcher-client'
 
 interface BloomLanguageSwitcherProps {
   currentLocale: LanguageCode
+  languages?: ActiveLanguage[]
 }
 
 /**
@@ -17,8 +19,8 @@ interface BloomLanguageSwitcherProps {
  * schon in <Suspense>, was hier weiterhin passt: die Abfrage darf den Rest der
  * Seite nicht aufhalten.
  */
-export async function BloomLanguageSwitcher({ currentLocale }: BloomLanguageSwitcherProps) {
-  const languages = await getActiveLanguages()
+export async function BloomLanguageSwitcher({ currentLocale, languages }: BloomLanguageSwitcherProps) {
+  const availableLanguages = languages ?? await getActiveLanguages()
 
-  return <BloomLanguageSwitcherClient currentLocale={currentLocale} languages={languages} />
+  return <BloomLanguageSwitcherClient currentLocale={currentLocale} languages={availableLanguages} />
 }

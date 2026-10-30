@@ -5,10 +5,12 @@ import { LanguageSwitcher } from './language-switcher'
 import { Newsletter } from './newsletter'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import type { LanguageCode } from '@/lib/types'
+import type { ActiveLanguage } from '@/lib/i18n/active-languages'
+import { agentReadingCopy } from '@/lib/agents/reading'
 
 /** Vollständiger Seiten-Footer (wie auf /home): Newsletter-Anmeldung + Brand-Footer
  *  mit Sprach-Switcher und rechtlichen Links. */
-export async function SiteFooter({ locale, showNewsletter = true }: { locale: string; showNewsletter?: boolean }) {
+export async function SiteFooter({ locale, showNewsletter = true, languages }: { locale: string; showNewsletter?: boolean; languages?: ActiveLanguage[] }) {
   const t = await getTranslations(locale as LanguageCode)
   return (
     <>
@@ -19,7 +21,7 @@ export async function SiteFooter({ locale, showNewsletter = true }: { locale: st
             <FooterBrands />
             <div className="flex flex-wrap items-center justify-center gap-6 text-xs">
               <Suspense fallback={null}>
-                <LanguageSwitcher currentLocale={locale as LanguageCode} />
+                <LanguageSwitcher currentLocale={locale as LanguageCode} languages={languages} />
               </Suspense>
               <Link href={`/${locale}/rankings`} className="hover:text-accent transition-colors">
                 Charts
@@ -33,8 +35,8 @@ export async function SiteFooter({ locale, showNewsletter = true }: { locale: st
               <a href={`/${locale}/sources`} className="hover:text-accent transition-colors">
                 {t['footer.sources'] || 'Sources'}
               </a>
-              <Link href={`/${locale}/contact`} className="hover:text-accent transition-colors">
-                Contact
+              <Link href={`/${locale}/agents`} className="hover:text-accent transition-colors">
+                {agentReadingCopy(locale).navLabel}
               </Link>
               <Link href={`/${locale}/impressum`} className="hover:text-accent transition-colors">
                 Imprint

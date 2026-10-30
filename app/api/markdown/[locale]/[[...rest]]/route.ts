@@ -4,7 +4,8 @@ import { convertTiptapToMarkdown, parseTiptapContent } from '@/lib/utils/tiptap-
 import { getGlossaryTerm } from '@/lib/glossary/detail'
 import { getCategoryCappedProductsShared, getActiveCategories } from '@/lib/rankings/leaderboard'
 import { toDisplayScore } from '@/lib/rankings/score'
-import { PUBLIC_LOCALES } from '@/lib/i18n/config'
+import { agentReadingCopy, agentReadingMarkdown } from '@/lib/agents/reading'
+import { ALL_LOCALES, PUBLIC_LOCALES } from '@/lib/i18n/config'
 import { SITE_URL } from '@/lib/seo/site'
 import { getTranslations } from '@/lib/i18n/get-translations'
 import type { LanguageCode } from '@/lib/types'
@@ -35,7 +36,7 @@ function md(body: string, status = 200): NextResponse {
 function footer(locale: string, t: Record<string, string>): string {
   return [
     '---',
-    `[${t['common.home']}](${SITE_URL}/${locale}) · [Synthszr Charts](${SITE_URL}/${locale}/rankings) · [${t['nav.glossary']}](${SITE_URL}/${locale}/glossary) · [${t['nav.archive']}](${SITE_URL}/${locale}/archive)`,
+    `[${t['common.home']}](${SITE_URL}/${locale}) · [Synthszr Charts](${SITE_URL}/${locale}/rankings) · [${t['nav.glossary']}](${SITE_URL}/${locale}/glossary) · [${t['nav.archive']}](${SITE_URL}/${locale}/archive) · [${agentReadingCopy(locale).navLabel}](${SITE_URL}/${locale}/agents)`,
   ].join('\n')
 }
 
@@ -195,8 +196,11 @@ async function renderRankings(locale: string, t: Record<string, string>): Promis
 
 export async function GET(_request: Request, { params }: RouteParams) {
   const { locale: rawLocale, rest } = await params
-  const locale = (PUBLIC_LOCALES as string[]).includes(rawLocale) ? rawLocale : 'de'
   const segments = rest ?? []
+  if (segments.length === 1 && segments[0] === 'agents' && (ALL_LOCALES as string[]).includes(rawLocale)) {
+    return md(agentReadingMarkdown(rawLocale))
+  }
+  const locale = (PUBLIC_LOCALES as string[]).includes(rawLocale) ? rawLocale : 'de'
   const t = await getTranslations(locale as LanguageCode)
 
   if (segments.length === 0) return renderHome(locale, t)
