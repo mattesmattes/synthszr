@@ -23,7 +23,7 @@ interface AgentReadingCopy {
 
 const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
   "de": {
-    "navLabel": "Für Agenten",
+    "navLabel": "Agenten",
     "title": "Synthszr mit deinem Agenten lesen",
     "intro": "Lass deinen Agenten die aktuelle Ausgabe zusammenfassen, Quellen prüfen und eigene Gegenargumente finden.",
     "skillLabel": "Skill & API-Anleitung öffnen",
@@ -37,7 +37,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "moreLabel": "Anleitung für deinen Agenten"
   },
   "en": {
-    "navLabel": "For agents",
+    "navLabel": "Agents",
     "title": "Read Synthszr with your agent",
     "intro": "Have your agent summarize the latest edition, check sources and find its own counterarguments.",
     "skillLabel": "Open skill & API instructions",
@@ -51,7 +51,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "moreLabel": "Guide for your agent"
   },
   "fr": {
-    "navLabel": "Pour les agents",
+    "navLabel": "Agents",
     "title": "Lire Synthszr avec ton agent",
     "intro": "Demande à ton agent de résumer la dernière édition, de vérifier les sources et de formuler ses propres contre-arguments.",
     "skillLabel": "Ouvrir le skill et la documentation de l’API",
@@ -65,7 +65,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "moreLabel": "Guide pour ton agent"
   },
   "es": {
-    "navLabel": "Para agentes",
+    "navLabel": "Agentes",
     "title": "Lee Synthszr con tu agente",
     "intro": "Pide a tu agente que resuma la última edición, compruebe las fuentes y elabore sus propios contraargumentos.",
     "skillLabel": "Abrir el skill y las instrucciones de la API",
@@ -79,7 +79,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "moreLabel": "Guía para tu agente"
   },
   "it": {
-    "navLabel": "Per gli agenti",
+    "navLabel": "Agenti",
     "title": "Leggi Synthszr con il tuo agente",
     "intro": "Chiedi al tuo agente di riassumere l’ultima edizione, verificare le fonti e formulare le proprie controargomentazioni.",
     "skillLabel": "Apri lo skill e le istruzioni API",
@@ -93,7 +93,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "moreLabel": "Guida per il tuo agente"
   },
   "pt": {
-    "navLabel": "Para agentes",
+    "navLabel": "Agentes",
     "title": "Lê o Synthszr com o teu agente",
     "intro": "Pede ao teu agente para resumir a edição mais recente, verificar as fontes e formular os seus próprios contra-argumentos.",
     "skillLabel": "Abrir o skill e as instruções da API",
@@ -107,7 +107,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "moreLabel": "Guia para o teu agente"
   },
   "nl": {
-    "navLabel": "Voor agents",
+    "navLabel": "Agents",
     "title": "Lees Synthszr met je agent",
     "intro": "Laat je agent de nieuwste editie samenvatten, bronnen controleren en eigen tegenargumenten formuleren.",
     "skillLabel": "Skill en API-instructies openen",
@@ -121,7 +121,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "moreLabel": "Handleiding voor je agent"
   },
   "pl": {
-    "navLabel": "Dla agentów",
+    "navLabel": "Agenci",
     "title": "Czytaj Synthszr ze swoim agentem",
     "intro": "Poproś swojego agenta o podsumowanie najnowszego wydania, sprawdzenie źródeł i sformułowanie własnych kontrargumentów.",
     "skillLabel": "Otwórz skill i dokumentację API",
@@ -135,7 +135,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "moreLabel": "Instrukcja dla twojego agenta"
   },
   "cs": {
-    "navLabel": "Pro agenty",
+    "navLabel": "Agenti",
     "title": "Čti Synthszr se svým agentem",
     "intro": "Nech svého agenta shrnout nejnovější vydání, ověřit zdroje a hledat vlastní protiargumenty.",
     "skillLabel": "Otevřít skill a dokumentaci API",
@@ -149,7 +149,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "moreLabel": "Návod pro tvého agenta"
   },
   "nds": {
-    "navLabel": "För Agenten",
+    "navLabel": "Agenten",
     "title": "Synthszr mit dien Agent lesen",
     "intro": "Laat dien Agent de neeste Utgaav tosamenfaten, de Borns pröven un egen Gegenargumenten finnen.",
     "skillLabel": "Skill un API-Anleedung apenmaken",
