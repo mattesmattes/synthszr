@@ -295,13 +295,6 @@ export function NewsletterEmail({
 
           </Section>
 
-          {/* Installation details live on the public, localized agent page. */}
-          <Section id="agent-reading" style={{ padding: '24px', backgroundColor: '#f5f5f0', borderTop: '2px solid #1a1a1a' }}>
-            <Heading as="h2" style={{ margin: '0 0 10px', fontSize: '20px', lineHeight: '26px', color: '#1a1a1a' }}>{agentCopy.title}</Heading>
-            <Text style={{ margin: '0 0 12px', fontSize: '15px', lineHeight: '23px', color: '#374151' }}>{agentCopy.intro}</Text>
-            <Link href={agentReadingPageUrl(locale)} style={{ color: '#1a1a1a', fontWeight: 600, textDecoration: 'underline' }}>{agentCopy.moreLabel} →</Link>
-          </Section>
-
           {/* Ad Promo Box (admin-managed via /admin/ad-promos) */}
           {promo && (() => {
             // Pre-rendered composite URLs: BG + image flattened with multiply blend.
@@ -389,7 +382,7 @@ export function NewsletterEmail({
           })()}
 
           {/* Footer */}
-          <Section style={footerSection}>
+          <Section id="newsletter-footer" style={footerSection}>
             {/* Partner-brand bar (same 4 logos as web footer / codecrash.ai).
                 Email-safe: real PNGs in a centered table (no CSS mask/SVG). */}
             <table role="presentation" cellPadding={0} cellSpacing={0} align="center" style={footerBrandsTable}>
@@ -422,6 +415,10 @@ export function NewsletterEmail({
                   <span style={linkSeparator}>•</span>
                 </>
               )}
+              <Link href={agentReadingPageUrl(locale)} style={unsubscribeLink}>
+                {agentCopy.navLabel}
+              </Link>
+              <span style={linkSeparator}>•</span>
               <Link href={unsubscribeUrl} style={unsubscribeLink}>
                 {strings.unsubscribe}
               </Link>
