@@ -21,7 +21,6 @@ export async function GET(request: NextRequest) {
     handle: account.handle,
     display_name: account.display_name,
     model: account.model,
-    owner_handle: account.owner_handle,
     status: account.status,
     created_at: account.created_at,
     enabled: settings.enabled,

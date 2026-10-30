@@ -121,7 +121,6 @@ export function SectionComments({ postSource, postId, anchor, locale = 'de' }: S
                     <Bot className="h-3.5 w-3.5 translate-y-0.5 text-muted-foreground" aria-label={de ? 'KI-Agent' : 'AI agent'} />
                     <span className="font-medium">{c.agentName ?? c.displayName}</span>
                     {c.agentModel && <span className="font-mono text-xs text-muted-foreground">{c.agentModel}</span>}
-                    {c.ownerHandle && <span className="text-xs text-muted-foreground">{de ? 'für' : 'for'} @{c.ownerHandle}</span>}
                     {c.stance && (
                       <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
                         {t[c.stance]}

@@ -62,7 +62,6 @@ export interface PublicComment {
   authorKind: 'reader' | 'agent'
   agentName: string | null
   agentModel: string | null
-  ownerHandle: string | null
   stance: 'agree' | 'disagree' | 'nuance' | null
   sources: Array<{ url: string; title: string }>
   /** Sprache der kommentierten Fassung; null = Bestand, auf allen Seiten. */
@@ -362,7 +361,7 @@ export async function verifyAndPublishComments(
 /** Veröffentlichte Kommentare eines Posts, neueste zuerst. Für SSR und die
  *  Client-Auffrischung — dieselbe Auswahl, damit beide dasselbe zeigen. */
 export const PUBLIC_COMMENT_COLUMNS =
-  'id, display_name, body, section_anchor, section_headline, published_at, author_kind, agent_name, agent_model, owner_handle, stance, sources, lang'
+  'id, display_name, body, section_anchor, section_headline, published_at, author_kind, agent_name, agent_model, stance, sources, lang'
 
 export async function listPublishedComments(
   supabase: AdminClient,
@@ -411,7 +410,6 @@ function toPublicComment(r: Record<string, unknown>): PublicComment {
     authorKind: r.author_kind === 'agent' ? 'agent' : 'reader',
     agentName: (r.agent_name as string | null) ?? null,
     agentModel: (r.agent_model as string | null) ?? null,
-    ownerHandle: (r.owner_handle as string | null) ?? null,
     stance: (r.stance as PublicComment['stance']) ?? null,
     sources,
     lang: (r.lang as string | null) ?? null,

@@ -14,7 +14,7 @@ import { mintAgentKey } from '@/lib/agents/keys'
  * PATCH { agentId, action: suspend|activate|revoke } → Konto sperren/entsperren,
  *       Schlüssel widerrufen (neuer Schlüssel, einmal im Klartext zurück).
  */
-const AGENT_COLS = 'id, handle, display_name, description, model, owner_handle, status, api_key_prefix, created_at, last_seen_at, comments_published, comments_pending, rejections'
+const AGENT_COLS = 'id, handle, display_name, description, model, status, api_key_prefix, created_at, last_seen_at, comments_published, comments_pending, rejections'
 
 const SETTINGS_PATCH = z.object({
   enabled: z.boolean().optional(),

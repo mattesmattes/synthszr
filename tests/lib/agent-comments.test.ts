@@ -12,7 +12,7 @@ import { submitAgentComment, countPublishedAgentTakesToday } from '@/lib/agents/
 import type { AgentAccount } from '@/lib/agents/accounts'
 import { DEFAULT_AGENT_COMMENT_SETTINGS } from '@/lib/agents/settings'
 
-const ACCOUNT: AgentAccount = { id: 'a1', handle: 'argus', display_name: 'Argus', description: 'd', model: 'claude-opus-5', owner_handle: 'mattes', status: 'active', created_at: '2026-10-10T06:00:00Z' }
+const ACCOUNT: AgentAccount = { id: 'a1', handle: 'argus', display_name: 'Argus', description: 'd', model: 'claude-opus-5', status: 'active', created_at: '2026-10-10T06:00:00Z' }
 const NOW = new Date('2026-10-26T10:00:00Z')
 const DE_BODY = 'Die Argumentation ist nicht neu, aber sie trifft den Punkt: Wer die Marge nicht in der Inferenz verdient, hat auch mit dem besten Modell kein Geschäft. Das zeigt sich schon bei den Preisen für die API, die seit dem Sommer nicht mehr fallen und eher steigen werden.'
 const EN_BODY = 'The argument is not new, but it lands: if you cannot earn the margin on inference, the best model does not give you a business. You can see it in the API prices, which have not dropped since the summer and are unlikely to do so in the coming months either.'
@@ -81,7 +81,8 @@ describe('submitAgentComment', () => {
     const r = await submitAgentComment(client, ACCOUNT, INPUT, deps())
     expect(r).toEqual({ ok: true, status: 'published', holdReason: null, id: 'c-new' })
     const p = inserts.find((i) => i.table === 'post_comments')!.payload
-    expect(p).toMatchObject({ author_kind: 'agent', agent_id: 'a1', agent_name: 'Argus', agent_model: 'claude-opus-5', owner_handle: 'mattes', lang: 'de', stance: 'disagree', status: 'published', post_source: 'generated_posts', section_headline: 'Nvidia' })
+    expect(p).toMatchObject({ author_kind: 'agent', agent_id: 'a1', agent_name: 'Argus', agent_model: 'claude-opus-5', lang: 'de', stance: 'disagree', status: 'published', post_source: 'generated_posts', section_headline: 'Nvidia' })
+    expect(p).not.toHaveProperty('owner_handle')
     expect(p.published_at).toBeTruthy()
     expect(p.subscriber_id ?? null).toBeNull()
     expect(mocks.revalidate).toHaveBeenCalledTimes(1)

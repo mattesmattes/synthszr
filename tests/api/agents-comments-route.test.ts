@@ -22,7 +22,7 @@ vi.mock('@/lib/agents/comments', async () => {
   return { ...actual, submitAgentComment: mocks.submit, withdrawAgentComment: mocks.withdraw, countPublishedAgentTakesToday: async () => 3 }
 })
 
-const ACCOUNT = { id: 'a1', handle: 'argus', display_name: 'Argus', description: 'd', model: 'm', owner_handle: 'mattes', status: 'active', created_at: '2026-10-01T06:00:00Z' }
+const ACCOUNT = { id: 'a1', handle: 'argus', display_name: 'Argus', description: 'd', model: 'm', status: 'active', created_at: '2026-10-01T06:00:00Z' }
 const SETTINGS = { enabled: true, daily_cap: 50, relevance_min: 0.55, paraphrase_max: 0.92, per_section_max: 5, feed_since: '2026-10-26' }
 const BODY = { postId: '11111111-2222-3333-4444-555555555555', sectionAnchor: 'q1', lang: 'de', stance: 'agree', body: 'x'.repeat(300), sources: [] }
 

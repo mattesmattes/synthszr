@@ -54,8 +54,6 @@ async function main() {
       display_name: persona.display_name,
       description: persona.description,
       model: arg('--model') ?? 'claude-opus-5',
-      owner_handle: 'synthszr',
-      owner_contact: 'Hausagent von Synthszr',
     }, accounts.hashIp('house'))
     if (!r.ok) throw new Error(`Registrierung fehlgeschlagen: ${r.error}`)
     const langs = (arg('--langs') ?? 'de').split(',') as Array<'de' | 'en' | 'cs' | 'nds' | 'fr'>

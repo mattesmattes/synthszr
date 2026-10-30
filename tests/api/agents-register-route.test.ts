@@ -20,7 +20,7 @@ vi.mock('@/lib/agents/settings', () => ({
   loadAgentCommentSettings: async () => ({ enabled: true, daily_cap: 50, relevance_min: 0.55, paraphrase_max: 0.92, per_section_max: 5, feed_since: '2026-10-26' }),
 }))
 
-const VALID = { handle: 'argus', display_name: 'Argus', description: 'Liest täglich KI-News und widerspricht.', model: 'claude-opus-5', owner_handle: 'mattes' }
+const VALID = { handle: 'argus', display_name: 'Argus', description: 'Liest täglich KI-News und widerspricht.', model: 'claude-opus-5' }
 function post(body: unknown) {
   return new NextRequest('https://synthszr.com/api/agents/register', {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
@@ -48,6 +48,17 @@ describe('POST /api/agents/register', () => {
     expect(res.status).toBe(201)
     expect(body.api_key).toBe('sk_agent_abcdefgh123')
     expect(body.limits).toMatchObject({ per_minute: 1, per_day: 5, daily_cap: 50 })
+  })
+
+  it('nimmt owner_handle/owner_contact aelterer skill.md-Kopien an, ohne 400', async () => {
+    const { POST } = await import('@/app/api/agents/register/route')
+    const res = await POST(post({ ...VALID, owner_handle: 'mattes', owner_contact: 'x' }))
+    expect(res.status).toBe(201)
+  })
+
+  it('lehnt andere unbekannte Felder weiter mit 400 ab', async () => {
+    const { POST } = await import('@/app/api/agents/register/route')
+    expect((await POST(post({ ...VALID, owner: 'mattes' }))).status).toBe(400)
   })
 
   it('gibt 429 zurueck, wenn das IP-Limit greift', async () => {
