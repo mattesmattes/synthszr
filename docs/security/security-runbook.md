@@ -176,8 +176,13 @@ Review-Datum. `tests/lib/repository-security.test.ts` schlägt fehl, wenn eine
 Ausnahme ohne Notiz hinzugefügt wird. Das Audit-Level selbst wird **nie**
 gesenkt.
 
-Aktuelle Ausnahme: `GHSA-f88m-g3jw-g9cj` (sharp < 0.35.0) — 0.35.x crasht auf
-Vercel-Lambda. Review bis 2026-11-02.
+Aktuelle Ausnahme: `GHSA-jmr9-qjv8-65gv` (extract-zip über Remotion, kein
+Patch veröffentlicht). Review bis 2026-11-24. Die frühere sharp-Ausnahme
+`GHSA-f88m-g3jw-g9cj` ist seit 2026-10-30 durch sharp 0.35.5 erledigt;
+0.35.0 crashte damals auf Vercel-Lambda, 0.35.5 vor dem Merge im
+Vercel-Preview prüfen (Newsletter-Thumbnails). Nicht als Ausnahme
+eingetragen (Betreiber 2026-10-30): `GHSA-7pqw-9j4j-h8q3` (extract-zip, kein
+Patch) — der Audit-Check bleibt dafür rot.
 
 ---
 

@@ -27,7 +27,7 @@ const SETTINGS_PATCH = z.object({
 
 const BODY = z.union([
   z.object({ settings: SETTINGS_PATCH }).strict(),
-  z.object({ agentId: z.string().uuid(), action: z.enum(['suspend', 'activate', 'revoke']) }).strict(),
+  z.object({ agentId: z.guid(), action: z.enum(['suspend', 'activate', 'revoke']) }).strict(),
 ])
 
 const FUNNEL_DAYS = 14
