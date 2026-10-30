@@ -221,7 +221,10 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
   // Case 1: URL has a locale prefix
   if (urlLocale) {
     // Check if locale is active
-    if (!activeLanguages.has(urlLocale)) {
+    // This fully translated static guide is available in all supported locales,
+    // even when that locale's daily news edition is not active.
+    const isAgentGuide = pathname === `/${urlLocale}/agents`
+    if (!activeLanguages.has(urlLocale) && !isAgentGuide) {
       // Redirect to default locale (301 permanent)
       const pathWithoutLocale = pathname.replace(`/${urlLocale}`, '') || '/'
       const redirectUrl = new URL(`/${DEFAULT_LOCALE}${pathWithoutLocale}`, request.url)

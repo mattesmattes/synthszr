@@ -69,7 +69,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   )
 
   // Static pages - available in all active languages
-  const staticPages = ['', '/archive', '/why', '/datenschutz', '/impressum', '/contact', '/companies', '/sources', '/glossary']
+  const staticPages = ['', '/archive', '/why', '/datenschutz', '/impressum', '/contact', '/agents', '/companies', '/sources', '/glossary']
 
   // Static pages - each locale gets its own <url> entry with full alternates
   for (const page of staticPages) {

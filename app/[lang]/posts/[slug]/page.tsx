@@ -8,7 +8,6 @@ import { PostContentView } from "@/components/post-content-view"
 import { PostProductLinks } from "@/components/post-product-links"
 import { SiteFooter } from "@/components/site-footer"
 import { AdPromo } from "@/components/ad-promo"
-import { AgentReading } from "@/components/agent-reading"
 import { PostCompanies } from "@/components/companies/post-companies"
 import { getCompanyMentionsForPost } from "@/lib/companies/recent-posts"
 import { SwipeNavigation } from "@/components/swipe-navigation"
@@ -584,7 +583,6 @@ export default async function PostPage({ params }: PageProps) {
         <PostProductLinks content={post.content as Record<string, unknown>} locale={locale} />
 
         <link rel="agent-skill" type="text/markdown" href={skillUrl('head')} />
-        <AgentReading locale={locale} source="article" />
 
         {/* Der „Eure Takes"-Schreib-Host sitzt jetzt im TiptapRenderer, direkt bei
             den Barometern, die ihn per Event öffnen — sonst fehlt er überall dort,

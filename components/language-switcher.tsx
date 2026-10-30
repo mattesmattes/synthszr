@@ -1,9 +1,11 @@
 import type { LanguageCode } from '@/lib/types'
+import type { ActiveLanguage } from '@/lib/i18n/active-languages'
 import { getActiveLanguages } from '@/lib/i18n/active-languages'
 import { LanguageSwitcherClient } from './language-switcher-client'
 
 interface LanguageSwitcherProps {
   currentLocale: LanguageCode
+  languages?: ActiveLanguage[]
 }
 
 /**
@@ -15,8 +17,8 @@ interface LanguageSwitcherProps {
  * Signatur und Exportname bleiben gleich, die fünf Aufrufstellen und der
  * SiteFooter bleiben unverändert.
  */
-export async function LanguageSwitcher({ currentLocale }: LanguageSwitcherProps) {
-  const languages = await getActiveLanguages()
+export async function LanguageSwitcher({ currentLocale, languages }: LanguageSwitcherProps) {
+  const availableLanguages = languages ?? await getActiveLanguages()
 
-  return <LanguageSwitcherClient currentLocale={currentLocale} languages={languages} />
+  return <LanguageSwitcherClient currentLocale={currentLocale} languages={availableLanguages} />
 }
