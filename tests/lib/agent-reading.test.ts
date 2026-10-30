@@ -23,7 +23,7 @@ describe('localized public agent guide', () => {
     expect(agentReadingMarkdown(locale)).toBe(agentReadingMarkdown('de'))
   })
 
-  it.each(ALL_LOCALES)('links the %s newsletter to the guide without sharing recipient credentials', async (locale) => {
+  it.each(ALL_LOCALES)('links to the guide only in the %s newsletter footer without sharing recipient credentials', async (locale) => {
     const html = await render(NewsletterEmail({
       subject: 'Public edition',
       content: '<p>Public news</p>',
@@ -35,13 +35,18 @@ describe('localized public agent guide', () => {
     }))
     const dom = new JSDOM(html)
     try {
-      const teaser = dom.window.document.querySelector('#agent-reading')
-      expect(teaser).not.toBeNull()
-      expect(teaser!.querySelector('a')!.getAttribute('href')).toBe(agentReadingPageUrl(locale))
-      expect(teaser!.textContent).not.toContain('npx skills add')
+      const doc = dom.window.document
+      expect(doc.querySelector('#agent-reading')).toBeNull()
+      const guideLinks = doc.querySelectorAll(`a[href="${agentReadingPageUrl(locale)}"]`)
+      expect(guideLinks).toHaveLength(1)
+      const guideLink = guideLinks[0]
+      expect(guideLink.closest('#newsletter-footer')).not.toBeNull()
+      expect(guideLink.textContent).toBe(agentReadingCopy(locale).navLabel)
+      expect(doc.body.textContent).not.toContain(agentReadingCopy(locale).title)
+      expect(doc.body.textContent).not.toContain('npx skills add')
       for (const token of ['PRIVATE_COMMENT_TOKEN', 'PRIVATE_UNSUB_TOKEN', 'PRIVATE_PREF_TOKEN']) {
         expect(html).toContain(token)
-        expect(teaser!.outerHTML).not.toContain(token)
+        expect(guideLink.outerHTML).not.toContain(token)
       }
     } finally {
       dom.window.close()
