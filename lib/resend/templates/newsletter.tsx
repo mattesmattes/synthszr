@@ -16,6 +16,8 @@ import {
 import { formatUpdateDate } from '@/lib/i18n/config'
 import type { LanguageCode } from '@/lib/types'
 import type { AdPromo } from '@/lib/ad-promos/types'
+import { skillUrl } from '@/lib/agents/discovery'
+import { AGENT_SKILL_INSTALL, AGENT_SKILL_REPOSITORY, agentReadingCopy } from '@/lib/agents/reading'
 import { sanitizeAdminHtml } from '@/lib/security/sanitize-html'
 
 interface NewsletterEmailProps {
@@ -154,6 +156,7 @@ export function NewsletterEmail({
   const formattedDate = postDate ? formatUpdateDate(postDate, locale) : null
   const strings = UI_STRINGS[locale] || UI_STRINGS.de
   const actualFooterText = footerText || strings.footer
+  const agentCopy = agentReadingCopy(locale)
 
   return (
     <Html>
@@ -293,6 +296,20 @@ export function NewsletterEmail({
 
           </Section>
 
+          {/* Public agent entry: intentionally independent of recipient-token URLs. */}
+          <Section id="agent-reading" style={{ padding: '24px', backgroundColor: '#f5f5f0', borderTop: '2px solid #1a1a1a' }}>
+            <Heading as="h2" style={{ margin: '0 0 10px', fontSize: '20px', lineHeight: '26px', color: '#1a1a1a' }}>{agentCopy.title}</Heading>
+            <Text style={{ margin: '0 0 12px', fontSize: '15px', lineHeight: '23px', color: '#374151' }}>{agentCopy.intro}</Text>
+            <Link href={skillUrl('newsletter')} style={{ color: '#1a1a1a', fontWeight: 600, textDecoration: 'underline' }}>{agentCopy.skillLabel} →</Link>
+            <Text style={{ margin: '18px 0 8px', fontSize: '14px', lineHeight: '21px', color: '#374151' }}>{agentCopy.installLabel}</Text>
+            <Text style={{ margin: '0 0 10px', padding: '12px', backgroundColor: '#ffffff', fontFamily: 'monospace', fontSize: '12px', lineHeight: '20px', overflowWrap: 'anywhere', color: '#1a1a1a' }}>{AGENT_SKILL_INSTALL}</Text>
+            <Link href={AGENT_SKILL_REPOSITORY} style={{ color: '#1a1a1a', fontSize: '14px', textDecoration: 'underline' }}>{agentCopy.installHelp} →</Link>
+            <Text style={{ margin: '12px 0', fontSize: '14px', lineHeight: '21px', color: '#374151' }}>{agentCopy.manualHelp}</Text>
+            <Text style={{ margin: '16px 0 8px', fontSize: '14px', fontWeight: 600, color: '#1a1a1a' }}>{agentCopy.exampleLabel}</Text>
+            <Text style={{ margin: '0', paddingLeft: '12px', borderLeft: '2px solid #999999', fontSize: '14px', lineHeight: '22px', overflowWrap: 'anywhere', color: '#374151' }}>{agentCopy.example}</Text>
+            <Text style={{ margin: '16px 0 0', fontSize: '12px', lineHeight: '18px', color: '#555555' }}>{agentCopy.consent}</Text>
+          </Section>
+
           {/* Ad Promo Box (admin-managed via /admin/ad-promos) */}
           {promo && (() => {
             // Pre-rendered composite URLs: BG + image flattened with multiply blend.
@@ -381,11 +398,6 @@ export function NewsletterEmail({
 
           {/* Footer */}
           <Section style={footerSection}>
-            {/* Hinweis für Agenten, die diese Mail lesen (Konzept 2026-10-29). */}
-            <Text style={{ fontSize: '11px', lineHeight: '16px', color: '#888888', textAlign: 'center', margin: '0 0 12px' }}>
-              {locale === 'de' ? 'Agenten willkommen: KI-Agenten dürfen unter jedem Synthszr Take antworten.' : 'Agents welcome: AI agents may reply under every Synthszr Take.'}{' '}
-              <Link href={`${baseUrl}/agents/skill.md?src=newsletter`} style={{ color: '#888888', textDecoration: 'underline' }}>skill.md</Link>
-            </Text>
             {/* Partner-brand bar (same 4 logos as web footer / codecrash.ai).
                 Email-safe: real PNGs in a centered table (no CSS mask/SVG). */}
             <table role="presentation" cellPadding={0} cellSpacing={0} align="center" style={footerBrandsTable}>

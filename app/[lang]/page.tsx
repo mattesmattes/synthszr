@@ -3,6 +3,7 @@ import Link from "next/link"
 import { FeaturedArticle } from "@/components/featured-article"
 import { SiteFooter } from "@/components/site-footer"
 import { AdPromo } from "@/components/ad-promo"
+import { AgentReading } from "@/components/agent-reading"
 import { BloomLanguageSwitcher } from "@/components/bloom-language-switcher"
 // import { CalligramFooter } from "@/components/calligram-footer"
 import { createAnonClient, createAdminClient } from "@/lib/supabase/admin"
@@ -277,6 +278,8 @@ export default async function Page({ params }: PageProps) {
         <Suspense fallback={null}>
           <BloomLanguageSwitcher currentLocale={locale} />
         </Suspense>
+
+        <AgentReading locale={locale} source="homepage" />
 
         {featuredPost ? (
           <>
