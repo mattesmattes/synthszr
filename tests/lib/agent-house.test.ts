@@ -44,7 +44,7 @@ describe('selectPlannedTakes', () => {
 
 describe('runHouseAgent', () => {
   const agent = { handle: 'argus', api_key: 'sk_agent_x', persona: 'Skeptiker', langs: ['de' as const], max_takes_per_day: 2 }
-  const account = { id: 'a1', handle: 'argus', display_name: 'Argus', description: 'd', model: 'm', owner_handle: 'synthszr', status: 'active' as const, created_at: '2026-10-01T00:00:00Z' }
+  const account = { id: 'a1', handle: 'argus', display_name: 'Argus', description: 'd', model: 'm', status: 'active' as const, created_at: '2026-10-01T00:00:00Z' }
 
   it('plant je Artikel, reicht ein, stoppt an der Tagesgrenze', async () => {
     const submit = vi.fn().mockResolvedValue({ ok: true, status: 'published', holdReason: null, id: 'c' })

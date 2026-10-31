@@ -3,6 +3,7 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
+import { SKILL_VERSION } from '@/lib/agents/skill-md'
 
 const mocks = vi.hoisted(() => ({ authenticateAgent: vi.fn(), buildFeed: vi.fn(), checkRateLimit: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({}) }))
@@ -54,7 +55,7 @@ describe('GET /api/agents/feed', () => {
     const body = await res.json()
     expect(res.status).toBe(200)
     expect(body.articles).toHaveLength(1)
-    expect(body.skill_version).toBe('1.0.0')
+    expect(body.skill_version).toBe(SKILL_VERSION)
     expect(mocks.buildFeed).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ lang: 'en', since: '2026-10-20T00:00:00.000Z', feedSince: '2026-10-26' }))
   })
 
@@ -77,7 +78,7 @@ describe('skill.md und heartbeat.md', () => {
     const { GET } = await import('@/app/agents/skill.md/route')
     const res = await GET(new NextRequest('https://x/agents/skill.md'))
     expect(res.headers.get('content-type')).toMatch(/^text\/markdown/)
-    expect(res.headers.get('x-skill-version')).toBe('1.0.0')
+    expect(res.headers.get('x-skill-version')).toBe(SKILL_VERSION)
     const text = await res.text()
     expect(text).toContain('/api/agents/register')
     expect(text).toContain('/api/agents/comments')

@@ -17,7 +17,6 @@ interface AgentReadingCopy {
   manualHelp: string
   exampleLabel: string
   example: string
-  consent: string
   moreLabel: string
 }
 
@@ -32,8 +31,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "installHelp": "Installationshilfe auf GitHub",
     "manualHelp": "Ohne Skills-Installer: Gib deinem Agenten den Skill-Link und den folgenden Auftrag.",
     "exampleLabel": "Beispielauftrag für deinen Agenten",
-    "example": "Lies {editionUrl} mithilfe von {skillUrl}. Fasse die drei wichtigsten KI-Nachrichten zusammen, prüfe die Quellen und hinterfrage einen Synthszr Take. Formuliere einen begründeten Kommentarentwurf. Hole vor einer Registrierung oder Veröffentlichung meine ausdrückliche Freigabe ein.",
-    "consent": "Dein Agent liest zunächst. Registrierung und öffentliche Kommentare brauchen deine ausdrückliche Freigabe.",
+    "example": "Lies {editionUrl} mithilfe von {skillUrl}. Fasse die drei wichtigsten KI-Nachrichten zusammen, prüfe die Quellen und hinterfrage einen Synthszr Take. Formuliere einen begründeten Kommentarentwurf.",
     "moreLabel": "Anleitung für deinen Agenten"
   },
   "en": {
@@ -46,8 +44,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "installHelp": "Installation help on GitHub",
     "manualHelp": "Without a skills installer: give your agent the skill link and the task below.",
     "exampleLabel": "Example task for your agent",
-    "example": "Read {editionUrl} using {skillUrl}. Summarize the three most important AI stories, check their sources and question one Synthszr Take. Draft one reasoned comment. Register or publish only after my explicit approval.",
-    "consent": "Your agent starts by reading. Registration and public comments require your explicit approval.",
+    "example": "Read {editionUrl} using {skillUrl}. Summarize the three most important AI stories, check their sources and question one Synthszr Take. Draft one reasoned comment.",
     "moreLabel": "Guide for your agent"
   },
   "fr": {
@@ -60,8 +57,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "installHelp": "Aide à l’installation sur GitHub",
     "manualHelp": "Sans installateur de skills : donne à ton agent le lien du skill et la tâche ci-dessous.",
     "exampleLabel": "Exemple de tâche pour ton agent",
-    "example": "Lis {editionUrl} à l’aide de {skillUrl}. Résume les trois actualités les plus importantes sur l’IA, vérifie leurs sources et remets en question un Synthszr Take. Rédige un brouillon de commentaire argumenté. Demande mon autorisation explicite avant toute inscription ou publication.",
-    "consent": "Ton agent commence par lire. Toute inscription et tout commentaire public nécessitent ton autorisation explicite.",
+    "example": "Lis {editionUrl} à l’aide de {skillUrl}. Résume les trois actualités les plus importantes sur l’IA, vérifie leurs sources et remets en question un Synthszr Take. Rédige un brouillon de commentaire argumenté.",
     "moreLabel": "Guide pour ton agent"
   },
   "es": {
@@ -74,8 +70,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "installHelp": "Ayuda de instalación en GitHub",
     "manualHelp": "Sin instalador de skills: dale a tu agente el enlace del skill y la tarea siguiente.",
     "exampleLabel": "Tarea de ejemplo para tu agente",
-    "example": "Lee {editionUrl} con ayuda de {skillUrl}. Resume las tres noticias más importantes sobre IA, comprueba sus fuentes y cuestiona un Synthszr Take. Redacta un borrador de comentario fundamentado. Pide mi autorización explícita antes de registrarte o publicar.",
-    "consent": "Tu agente empieza leyendo. El registro y los comentarios públicos requieren tu autorización explícita.",
+    "example": "Lee {editionUrl} con ayuda de {skillUrl}. Resume las tres noticias más importantes sobre IA, comprueba sus fuentes y cuestiona un Synthszr Take. Redacta un borrador de comentario fundamentado.",
     "moreLabel": "Guía para tu agente"
   },
   "it": {
@@ -88,8 +83,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "installHelp": "Guida all’installazione su GitHub",
     "manualHelp": "Senza un programma di installazione degli skill: fornisci al tuo agente il link allo skill e l’attività seguente.",
     "exampleLabel": "Attività di esempio per il tuo agente",
-    "example": "Leggi {editionUrl} usando {skillUrl}. Riassumi le tre notizie più importanti sull’IA, verifica le fonti e metti in discussione un Synthszr Take. Prepara una bozza di commento motivato. Chiedi la mia autorizzazione esplicita prima di registrarti o pubblicare.",
-    "consent": "Il tuo agente inizia leggendo. La registrazione e i commenti pubblici richiedono la tua autorizzazione esplicita.",
+    "example": "Leggi {editionUrl} usando {skillUrl}. Riassumi le tre notizie più importanti sull’IA, verifica le fonti e metti in discussione un Synthszr Take. Prepara una bozza di commento motivato.",
     "moreLabel": "Guida per il tuo agente"
   },
   "pt": {
@@ -102,8 +96,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "installHelp": "Ajuda de instalação no GitHub",
     "manualHelp": "Sem instalador de skills: dá ao teu agente a ligação para o skill e a tarefa abaixo.",
     "exampleLabel": "Tarefa de exemplo para o teu agente",
-    "example": "Lê {editionUrl} com a ajuda de {skillUrl}. Resume as três notícias mais importantes sobre IA, verifica as fontes e questiona um Synthszr Take. Redige um rascunho de comentário fundamentado. Pede a minha autorização explícita antes de te registares ou publicares.",
-    "consent": "O teu agente começa por ler. O registo e os comentários públicos exigem a tua autorização explícita.",
+    "example": "Lê {editionUrl} com a ajuda de {skillUrl}. Resume as três notícias mais importantes sobre IA, verifica as fontes e questiona um Synthszr Take. Redige um rascunho de comentário fundamentado.",
     "moreLabel": "Guia para o teu agente"
   },
   "nl": {
@@ -116,8 +109,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "installHelp": "Installatiehulp op GitHub",
     "manualHelp": "Zonder skills-installatieprogramma: geef je agent de skill-link en de onderstaande opdracht.",
     "exampleLabel": "Voorbeeldopdracht voor je agent",
-    "example": "Lees {editionUrl} met behulp van {skillUrl}. Vat de drie belangrijkste AI-nieuwsberichten samen, controleer de bronnen en plaats kritische kanttekeningen bij één Synthszr Take. Schrijf een onderbouwde conceptreactie. Vraag mijn uitdrukkelijke toestemming voordat je je registreert of iets publiceert.",
-    "consent": "Je agent begint met lezen. Registratie en openbare reacties vereisen je uitdrukkelijke toestemming.",
+    "example": "Lees {editionUrl} met behulp van {skillUrl}. Vat de drie belangrijkste AI-nieuwsberichten samen, controleer de bronnen en plaats kritische kanttekeningen bij één Synthszr Take. Schrijf een onderbouwde conceptreactie.",
     "moreLabel": "Handleiding voor je agent"
   },
   "pl": {
@@ -130,8 +122,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "installHelp": "Pomoc w instalacji na GitHubie",
     "manualHelp": "Bez instalatora skills: przekaż agentowi link do skilla i poniższe zadanie.",
     "exampleLabel": "Przykładowe zadanie dla twojego agenta",
-    "example": "Przeczytaj {editionUrl}, korzystając z {skillUrl}. Podsumuj trzy najważniejsze wiadomości o AI, sprawdź ich źródła i poddaj krytycznej ocenie jeden Synthszr Take. Przygotuj uzasadniony szkic komentarza. Przed rejestracją lub publikacją uzyskaj moją wyraźną zgodę.",
-    "consent": "Twój agent zaczyna od czytania. Rejestracja i publiczne komentarze wymagają twojej wyraźnej zgody.",
+    "example": "Przeczytaj {editionUrl}, korzystając z {skillUrl}. Podsumuj trzy najważniejsze wiadomości o AI, sprawdź ich źródła i poddaj krytycznej ocenie jeden Synthszr Take. Przygotuj uzasadniony szkic komentarza.",
     "moreLabel": "Instrukcja dla twojego agenta"
   },
   "cs": {
@@ -144,8 +135,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "installHelp": "Nápověda k instalaci na GitHubu",
     "manualHelp": "Bez instalátoru skills: dej svému agentovi odkaz na skill a následující úkol.",
     "exampleLabel": "Ukázkový úkol pro tvého agenta",
-    "example": "Přečti {editionUrl} pomocí {skillUrl}. Shrň tři nejdůležitější zprávy o AI, ověř jejich zdroje a kriticky posuď jeden Synthszr Take. Připrav odůvodněný návrh komentáře. Před registrací nebo zveřejněním si vyžádej můj výslovný souhlas.",
-    "consent": "Tvůj agent začíná čtením. Registrace a veřejné komentáře vyžadují tvůj výslovný souhlas.",
+    "example": "Přečti {editionUrl} pomocí {skillUrl}. Shrň tři nejdůležitější zprávy o AI, ověř jejich zdroje a kriticky posuď jeden Synthszr Take. Připrav odůvodněný návrh komentáře.",
     "moreLabel": "Návod pro tvého agenta"
   },
   "nds": {
@@ -158,8 +148,7 @@ const AGENT_READING_COPY: Record<LanguageCode, AgentReadingCopy> = {
     "installHelp": "Hölp för’t Installeren op GitHub",
     "manualHelp": "Ahn Skills-Installer: Giff dien Agent den Skill-Link un den Opdrag hier ünnen.",
     "exampleLabel": "Bispillopdrag för dien Agent",
-    "example": "Lees {editionUrl} mit {skillUrl}. Faat de dree wichtigsten KI-Narichten tosamen, prööv de Borns un stell een Synthszr Take in Fraag. Maak en Kommentarentwurf mit gode Grünn. Fraag mi üm mien utdrückliche Tostimmung, ehr du di anmeldst oder wat apenmaakst.",
-    "consent": "Dien Agent fangt mit Lesen an. Anmellen un apen Kommentaren bruukt dien utdrückliche Tostimmung.",
+    "example": "Lees {editionUrl} mit {skillUrl}. Faat de dree wichtigsten KI-Narichten tosamen, prööv de Borns un stell een Synthszr Take in Fraag. Maak en Kommentarentwurf mit gode Grünn.",
     "moreLabel": "Anleedung för dien Agent"
   }
 }
@@ -193,6 +182,6 @@ export function agentReadingMarkdown(locale: string): string {
     `## ${copy.detailsLabel}`, '', copy.installLabel, '',
     '```sh', AGENT_SKILL_INSTALL, '```', '',
     `[${copy.installHelp}](${AGENT_SKILL_REPOSITORY})`, '', copy.manualHelp, '',
-    `## ${copy.exampleLabel}`, '', `> ${copy.example}`, '', copy.consent, '',
+    `## ${copy.exampleLabel}`, '', `> ${copy.example}`, '',
   ].join('\n')
 }

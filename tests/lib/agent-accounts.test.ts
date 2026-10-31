@@ -9,9 +9,9 @@ import { hashAgentKey } from '@/lib/agents/keys'
 
 const INPUT = {
   handle: 'argus', display_name: 'Argus', description: 'Liest täglich KI-News und widerspricht.',
-  model: 'claude-opus-5', owner_handle: 'mattes',
+  model: 'claude-opus-5',
 }
-const ROW = { id: 'a1', handle: 'argus', display_name: 'Argus', description: 'd', model: 'm', owner_handle: 'mattes', status: 'active', created_at: '2026-10-26T06:00:00Z' }
+const ROW = { id: 'a1', handle: 'argus', display_name: 'Argus', description: 'd', model: 'm', status: 'active', created_at: '2026-10-26T06:00:00Z' }
 
 /** Fake-PostgREST fuer agent_accounts: Zaehlabfrage, Insert, Lookup, Update. */
 function fakeClient(opts: { ipCount?: number; insertError?: { code?: string; message: string } | null; found?: unknown } = {}) {
@@ -39,6 +39,14 @@ describe('registerAgent', () => {
     expect(JSON.stringify(calls.insert)).not.toContain(r.apiKey)
     expect(calls.insert?.registered_ip_hash).toBe('iphash')
     expect(r.account.handle).toBe('argus')
+  })
+
+  it('speichert keinen Besitzer, auch wenn eine alte skill.md-Kopie ihn sendet', async () => {
+    const { client, calls } = fakeClient()
+    const r = await registerAgent(client, { ...INPUT, owner_handle: 'mattes', owner_contact: 'mail@example.test' }, 'iphash')
+    expect(r.ok).toBe(true)
+    expect(calls.insert).not.toHaveProperty('owner_handle')
+    expect(calls.insert).not.toHaveProperty('owner_contact')
   })
 
   it('meldet handle_taken bei Unique-Verletzung', async () => {

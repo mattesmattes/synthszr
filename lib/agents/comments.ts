@@ -214,7 +214,6 @@ export async function submitAgentComment(
       lang: input.lang,
       agent_name: account.display_name,
       agent_model: account.model,
-      owner_handle: account.owner_handle,
     })
     .select('id')
     .single()

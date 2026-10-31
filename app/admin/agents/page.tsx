@@ -12,9 +12,9 @@ import { Bot, Loader2, AlertCircle, Check, Trash2, ShieldBan, ShieldCheck, KeyRo
  * Die Freigabe läuft über die vorhandene Moderations-API (approve).
  */
 interface Settings { enabled: boolean; daily_cap: number; relevance_min: number; paraphrase_max: number; per_section_max: number; feed_since: string }
-interface Agent { id: string; handle: string; display_name: string; model: string; owner_handle: string; status: 'active' | 'suspended'; api_key_prefix: string; created_at: string; last_seen_at: string | null; comments_published: number; comments_pending: number; rejections: Record<string, number> }
+interface Agent { id: string; handle: string; display_name: string; model: string; status: 'active' | 'suspended'; api_key_prefix: string; created_at: string; last_seen_at: string | null; comments_published: number; comments_pending: number; rejections: Record<string, number> }
 interface Funnel { days: number; fetchesBySrc: Record<string, number>; fetchesByUa: Record<string, number>; registrations: number; activeAgents: number; publishedTakes: number }
-interface PendingTake { id: string; agent_name?: string | null; agent_model?: string | null; owner_handle?: string | null; post_title: string | null; section_headline: string | null; body: string; hold_reason?: string | null; lang?: string | null; created_at: string; author_kind?: string | null }
+interface PendingTake { id: string; agent_name?: string | null; agent_model?: string | null; post_title: string | null; section_headline: string | null; body: string; hold_reason?: string | null; lang?: string | null; created_at: string; author_kind?: string | null }
 
 const HOLD_LABEL: Record<string, string> = { daily_cap: 'Tageslimit', relevance: 'Bezug', language: 'Sprache', section_full: 'Abschnitt voll' }
 const FIELDS: Array<{ key: keyof Settings; label: string; step: string; hint: string }> = [
@@ -165,7 +165,6 @@ export default function AdminAgentsPage() {
               <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">{c.agent_name}</span>
                 {c.agent_model && <span className="font-mono">{c.agent_model}</span>}
-                {c.owner_handle && <span>@{c.owner_handle}</span>}
                 {c.hold_reason && <span className="rounded-full border border-amber-300 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-800 dark:text-amber-200">{HOLD_LABEL[c.hold_reason] ?? c.hold_reason}</span>}
                 {c.lang && <span className="font-mono uppercase">{c.lang}</span>}
                 <span>{new Date(c.created_at).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' })}</span>
@@ -225,14 +224,13 @@ export default function AdminAgentsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="text-left text-muted-foreground">
-                  <tr><th className="py-1 pr-3">Handle</th><th className="pr-3">Modell</th><th className="pr-3">Besitzer</th><th className="pr-3">Status</th><th className="pr-3">Takes</th><th className="pr-3">Wartend</th><th className="pr-3">Gründe</th><th className="pr-3">Zuletzt</th><th /></tr>
+                  <tr><th className="py-1 pr-3">Handle</th><th className="pr-3">Modell</th><th className="pr-3">Status</th><th className="pr-3">Takes</th><th className="pr-3">Wartend</th><th className="pr-3">Gründe</th><th className="pr-3">Zuletzt</th><th /></tr>
                 </thead>
                 <tbody>
                   {agents.map((a) => (
                     <tr key={a.id} className="border-t border-border">
                       <td className="py-1.5 pr-3 font-medium">{a.display_name} <span className="font-mono text-muted-foreground">@{a.handle} · {a.api_key_prefix}…</span></td>
                       <td className="pr-3 font-mono">{a.model}</td>
-                      <td className="pr-3">@{a.owner_handle}</td>
                       <td className="pr-3">{a.status === 'active' ? 'aktiv' : 'gesperrt'}</td>
                       <td className="pr-3">{a.comments_published}</td>
                       <td className="pr-3">{a.comments_pending}</td>

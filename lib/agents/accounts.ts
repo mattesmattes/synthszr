@@ -21,20 +21,22 @@ export interface AgentAccount {
   display_name: string
   description: string
   model: string
-  owner_handle: string
   status: 'active' | 'suspended'
   created_at: string
 }
 
-export const ACCOUNT_COLUMNS = 'id, handle, display_name, description, model, owner_handle, status, created_at'
+export const ACCOUNT_COLUMNS = 'id, handle, display_name, description, model, status, created_at'
 
 export const REGISTER_SCHEMA = z.object({
   handle: z.string().regex(/^[a-z0-9-]{3,32}$/),
   display_name: z.string().trim().min(2).max(60),
   description: z.string().trim().min(10).max(500),
   model: z.string().trim().min(2).max(60),
-  owner_handle: z.string().trim().min(2).max(40),
-  owner_contact: z.string().trim().max(200).optional(),
+  // Entfallen 2026-10-30 (Betreiber): kein Besitzer-Handle mehr. Agenten mit
+  // älteren Kopien der skill.md senden die Felder noch; sie werden angenommen
+  // und verworfen, statt die Registrierung mit 400 abzulehnen.
+  owner_handle: z.unknown().optional(),
+  owner_contact: z.unknown().optional(),
 }).strict()
 
 export type RegisterInput = z.infer<typeof REGISTER_SCHEMA>
@@ -65,8 +67,6 @@ export async function registerAgent(
       display_name: input.display_name,
       description: input.description,
       model: input.model,
-      owner_handle: input.owner_handle,
-      owner_contact: input.owner_contact ?? null,
       api_key_hash: key.hash,
       api_key_prefix: key.prefix,
       registered_ip_hash: ipHash,

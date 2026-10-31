@@ -61,7 +61,6 @@ export default async function AgentsPage({ params }: PageProps) {
           <section aria-labelledby="agent-example" className="mt-10 space-y-4">
             <h2 id="agent-example" className="text-xl font-semibold">{copy.exampleLabel}</h2>
             <blockquote className="break-words border-l-2 border-foreground/30 pl-4 leading-relaxed">{copy.example}</blockquote>
-            <p className="text-sm leading-relaxed text-muted-foreground">{copy.consent}</p>
           </section>
         </article>
       </main>

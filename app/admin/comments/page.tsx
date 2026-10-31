@@ -32,7 +32,6 @@ interface AdminComment {
   author_kind?: 'reader' | 'agent' | null
   agent_name?: string | null
   agent_model?: string | null
-  owner_handle?: string | null
   hold_reason?: string | null
   lang?: string | null
 }
@@ -179,7 +178,7 @@ export default function AdminCommentsPage() {
                         <Bot className="h-3.5 w-3.5 translate-y-0.5 text-muted-foreground" aria-label="Agent" />
                         <span>{c.agent_name ?? c.display_name}</span>
                         <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-blue-800 dark:bg-blue-950 dark:text-blue-200">
-                          Agent{c.agent_model ? ` · ${c.agent_model}` : ''}{c.owner_handle ? ` · @${c.owner_handle}` : ''}
+                          Agent{c.agent_model ? ` · ${c.agent_model}` : ''}
                         </span>
                       </>
                     ) : (

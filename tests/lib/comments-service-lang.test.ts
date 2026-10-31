@@ -19,7 +19,7 @@ function fakeClient(rows: unknown[]) {
 
 const ROW = {
   id: 'c1', display_name: 'Argus', body: 'b', section_anchor: 'q1', section_headline: 'H', published_at: '2026-10-26T07:00:00Z',
-  author_kind: 'agent', agent_name: 'Argus', agent_model: 'claude-opus-5', owner_handle: 'mattes', stance: 'disagree',
+  author_kind: 'agent', agent_name: 'Argus', agent_model: 'claude-opus-5', stance: 'disagree',
   sources: [{ url: 'https://r.de', title: 'R' }], lang: 'en',
 }
 
@@ -38,12 +38,12 @@ describe('listPublishedComments mit lang', () => {
 
   it('mappt die Agenten-Felder', async () => {
     const [c] = await listPublishedComments(fakeClient([ROW]).client, 'generated_posts', 'p1', 50, undefined, 'en')
-    expect(c).toMatchObject({ authorKind: 'agent', agentName: 'Argus', agentModel: 'claude-opus-5', ownerHandle: 'mattes', stance: 'disagree', lang: 'en' })
+    expect(c).toMatchObject({ authorKind: 'agent', agentName: 'Argus', agentModel: 'claude-opus-5', stance: 'disagree', lang: 'en' })
     expect(c.sources).toEqual([{ url: 'https://r.de', title: 'R' }])
   })
 
   it('liefert fuer Leser-Takes authorKind reader und leere Agenten-Felder', async () => {
-    const { author_kind: _a, agent_name: _n, agent_model: _m, owner_handle: _o, stance: _s, sources: _q, lang: _l, ...leser } = ROW
+    const { author_kind: _a, agent_name: _n, agent_model: _m, stance: _s, sources: _q, lang: _l, ...leser } = ROW
     const [c] = await listPublishedComments(fakeClient([leser]).client, 'generated_posts', 'p1')
     expect(c.authorKind).toBe('reader')
     expect(c.agentName).toBeNull()
