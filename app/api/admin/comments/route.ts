@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
 }
 
 const patchSchema = z.object({
-  id: z.string().uuid(),
+  id: z.guid(),
   action: z.enum(['approve', 'hide', 'reject', 'delete', 'edit']),
   body: z.string().min(1).max(4000).optional(),
 }).strict()

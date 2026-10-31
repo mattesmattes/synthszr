@@ -27,7 +27,7 @@ const limiter = rateLimiters.relaxed()
 
 const voteSchema = z.object({
   postSource: z.enum(['posts', 'generated_posts']),
-  postId: z.string().uuid(),
+  postId: z.guid(),
   sectionAnchor: z.string().min(1).max(200),
   vote: z.enum(['agree', 'disagree']),
 }).strict()
@@ -139,7 +139,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const source = searchParams.get('source')
   const postId = searchParams.get('postId')
-  if ((source !== 'posts' && source !== 'generated_posts') || !postId || !z.string().uuid().safeParse(postId).success) {
+  if ((source !== 'posts' && source !== 'generated_posts') || !postId || !z.guid().safeParse(postId).success) {
     return NextResponse.json({ error: 'Ungültige Parameter' }, { status: 400 })
   }
   const counts = await aggregate(createAdminClient(), source, postId)
