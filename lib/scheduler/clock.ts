@@ -44,3 +44,26 @@ export function localDay(now: Date, tz: string): string {
 export function dayKeys(now: Date, tz: string): { digestDate: string; analysisDate: string } {
   return { digestDate: localDay(now, tz), analysisDate: now.toISOString().slice(0, 10) }
 }
+
+/**
+ * ISO-Zeitpunkt von 00:00 des lokalen Tages von `now` in der Zone `tz` —
+ * zonen- und sommerzeitbewusst, ohne Bibliothek: vom UTC-Mitternachtsschätzwert
+ * aus wird der lokale Versatz gemessen und abgezogen (konvergiert in ein bis
+ * zwei Schritten, auch über eine Zeitumstellung hinweg).
+ * Befund 2026-11-01: die Fetch-Ampel rechnete „heute" mit festem +02:00.
+ */
+export function localMidnightIso(now: Date, tz: string): string {
+  const day = localDay(now, tz)
+  const [y, m, d] = day.split('-').map(Number)
+  const dayUtcMs = Date.UTC(y, m - 1, d)
+  let guess = new Date(dayUtcMs)
+  for (let i = 0; i < 3; i++) {
+    const c = localClock(guess, tz)
+    const [cy, cm, cd] = c.day.split('-').map(Number)
+    const dayDiffMin = Math.round((Date.UTC(cy, cm - 1, cd) - dayUtcMs) / 60_000)
+    const diffMin = dayDiffMin + c.hour * 60 + c.minute
+    if (diffMin === 0) break
+    guess = new Date(guess.getTime() - diffMin * 60_000)
+  }
+  return guess.toISOString()
+}

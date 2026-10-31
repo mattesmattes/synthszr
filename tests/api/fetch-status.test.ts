@@ -63,4 +63,13 @@ describe('buildFetchStatus — Ampel nach verarbeiteten News', () => {
     const s = buildFetchStatus({ ...base, processedCount: 400, now: new Date('2026-08-23T06:00:00Z') })
     expect(s.lastFetchLabel).toMatch(/\d{2}:\d{2}/)
   })
+
+  it('rechnet „heute" in der Zeitplan-Zone, nicht fest in Berlin', () => {
+    // 1.11.2026, 04:11 Shanghai = 31.10. 20:11Z. Um 06:00 Shanghai (22:00Z) ist das heute.
+    const s = buildFetchStatus({ ...base, processedCount: 457, lastNewsletterFetch: '2026-10-31T20:11:00Z', now: new Date('2026-10-31T22:00:00Z'), tz: 'Asia/Shanghai' })
+    expect(s.lastFetchLabel).toBe('04:11')
+    // Ohne Zone bleibt Berlin: dort ist das noch der 31.10.
+    const b = buildFetchStatus({ ...base, processedCount: 457, lastNewsletterFetch: '2026-10-31T20:11:00Z', now: new Date('2026-10-31T23:30:00Z') })
+    expect(b.lastFetchLabel).toBe('noch kein Abruf heute')
+  })
 })

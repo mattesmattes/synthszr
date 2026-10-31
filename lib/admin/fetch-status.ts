@@ -17,6 +17,10 @@ export interface FetchStatusInput {
   lastNewsletterFetch: string | null
   lastWebcrawl: string | null
   now?: Date
+  /** Zeitzone des Zeitplans (schedule_config.timezone); Default Berlin.
+   *  Befund 2026-11-01: mit Zeitplan Asia/Shanghai lief der Abruf um 04:11
+   *  Ortszeit, die Ampel rechnete „heute" in Berlin und meldete „kein Abruf". */
+  tz?: string
 }
 
 export interface FetchStatus {
@@ -25,6 +29,7 @@ export interface FetchStatus {
   level: 'gruen' | 'gelb' | 'rot'
   lastFetchLabel: string
   lastWebcrawlLabel: string
+  tz: string
 }
 
 /**
@@ -42,19 +47,20 @@ export interface FetchStatus {
 const GRUEN_AB = 250
 const GELB_AB = 50
 
-const TZ = 'Europe/Berlin'
-const dayIn = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: TZ })
+const DEFAULT_TZ = 'Europe/Berlin'
+const dayIn = (d: Date, tz: string) => d.toLocaleDateString('en-CA', { timeZone: tz })
 
-/** „HH:MM" wenn der Zeitpunkt heute liegt, sonst der Hinweis auf das Fehlen. */
-function label(iso: string | null, now: Date): string {
+/** „HH:MM" wenn der Zeitpunkt heute (in der Zone) liegt, sonst der Hinweis auf das Fehlen. */
+function label(iso: string | null, now: Date, tz: string): string {
   if (!iso) return 'noch kein Abruf heute'
   const d = new Date(iso)
-  if (dayIn(d) !== dayIn(now)) return 'noch kein Abruf heute'
-  return d.toLocaleTimeString('de-DE', { timeZone: TZ, hour: '2-digit', minute: '2-digit' })
+  if (dayIn(d, tz) !== dayIn(now, tz)) return 'noch kein Abruf heute'
+  return d.toLocaleTimeString('de-DE', { timeZone: tz, hour: '2-digit', minute: '2-digit' })
 }
 
 export function buildFetchStatus(input: FetchStatusInput): FetchStatus {
   const now = input.now ?? new Date()
+  const tz = input.tz ?? DEFAULT_TZ
   // Ohne eingesammelte Artikel ist der Tag unabhaengig von allem anderen rot:
   // genau diese Null hat am 2026-08-23 den Artikel gekostet.
   const level: FetchStatus['level'] =
@@ -67,7 +73,8 @@ export function buildFetchStatus(input: FetchStatusInput): FetchStatus {
     articleCount: input.articleCount,
     processedCount: input.processedCount,
     level,
-    lastFetchLabel: label(input.lastNewsletterFetch, now),
-    lastWebcrawlLabel: label(input.lastWebcrawl, now),
+    lastFetchLabel: label(input.lastNewsletterFetch, now, tz),
+    lastWebcrawlLabel: label(input.lastWebcrawl, now, tz),
+    tz,
   }
 }

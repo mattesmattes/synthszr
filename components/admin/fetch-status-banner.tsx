@@ -9,6 +9,7 @@ interface FetchStatus {
   level: 'gruen' | 'gelb' | 'rot'
   lastFetchLabel: string
   lastWebcrawlLabel: string
+  tz?: string
 }
 
 /**
@@ -70,7 +71,7 @@ export function FetchStatusBanner() {
           aus {s.articleCount} eingesammelten Artikeln
         </span>
         <span className="ml-2 text-xs opacity-70">
-          · Newsletter-Abruf {s.lastFetchLabel} · WebCrawl {s.lastWebcrawlLabel}
+          · Newsletter-Abruf {s.lastFetchLabel} · WebCrawl {s.lastWebcrawlLabel}{s.tz && s.tz !== 'Europe/Berlin' ? ` · Tag nach ${s.tz}` : ''}
         </span>
         {s.level === 'rot' && (
           <div className="mt-0.5 text-xs opacity-90">
