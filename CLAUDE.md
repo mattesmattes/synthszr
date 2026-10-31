@@ -802,7 +802,11 @@ ungültigen Wert auf Berlin zurück.
   China-Nacht, Abruf und Crawl laufen trotzdem. US-Nachmittags-Newsletter
   liegen zur Laufzeit 20:30 UTC noch nicht vor und kommen einen Tag später.
 - Techmeme-Cron (`0 */4`, UTC) und Health-Check sind zonenunabhängig;
-  Anzeigen wie `lib/admin/fetch-status.ts` rechnen weiter in Berlin.
+  Die Fetch-Ampel (`lib/admin/fetch-status.ts`, Route `/api/admin/fetch-status`)
+  rechnet seit 2026-11-01 „heute“ in der Zeitplan-Zone (`localMidnightIso`,
+  zonen- und sommerzeitbewusst; vorher fest Berlin mit +02:00, meldete in China
+  „kein Abruf heute“, obwohl der Abruf um 04:11 Ortszeit lief). Andere Anzeigen
+  rechnen weiter in Berlin.
 
 ## Development
 
