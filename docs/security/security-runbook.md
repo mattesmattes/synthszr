@@ -176,13 +176,14 @@ Review-Datum. `tests/lib/repository-security.test.ts` schlägt fehl, wenn eine
 Ausnahme ohne Notiz hinzugefügt wird. Das Audit-Level selbst wird **nie**
 gesenkt.
 
-Aktuelle Ausnahme: `GHSA-jmr9-qjv8-65gv` (extract-zip über Remotion, kein
-Patch veröffentlicht). Review bis 2026-11-24. Die frühere sharp-Ausnahme
-`GHSA-f88m-g3jw-g9cj` ist seit 2026-10-30 durch sharp 0.35.5 erledigt;
-0.35.0 crashte damals auf Vercel-Lambda, 0.35.5 vor dem Merge im
-Vercel-Preview prüfen (Newsletter-Thumbnails). Nicht als Ausnahme
-eingetragen (Betreiber 2026-10-30): `GHSA-7pqw-9j4j-h8q3` (extract-zip, kein
-Patch) — der Audit-Check bleibt dafür rot.
+Aktuell keine Ausnahme (Stand 2026-11-01). Erledigt: `GHSA-f88m-g3jw-g9cj`
+(sharp) durch sharp 0.35.5 seit 2026-10-30; 0.35.0 crashte damals auf
+Vercel-Lambda, 0.35.5 läuft dort (in Produktion bestätigt am 2026-11-01:
+Testmail und Newsletter-Thumbnails). `GHSA-jmr9-qjv8-65gv` und
+`GHSA-7pqw-9j4j-h8q3` (extract-zip, nie gepatcht) durch Remotion 4.0.539, das
+extract-zip nicht mehr mitbringt. Offen, nicht blockierend (moderate, nur über
+Major-Sprünge fremder Abhängigkeiten): `uuid` in `svix` (über `resend`),
+`minimatch`/`glob` in `rimraf` (über `@google/genai`).
 
 ---
 

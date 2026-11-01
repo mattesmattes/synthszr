@@ -72,8 +72,8 @@
     "@radix-ui/react-toggle-group": "1.1.1",
     "@radix-ui/react-tooltip": "1.1.6",
     "@react-email/components": "^1.0.3",
-    "@remotion/cli": "^4.0.448",
-    "@remotion/lambda": "^4.0.448",
+    "@remotion/cli": "^4.0.539",
+    "@remotion/lambda": "^4.0.539",
     "@supabase/ssr": "0.8.0",
     "@supabase/supabase-js": "^2.89.0",
     "@tiptap/core": "^3.32.1",
@@ -120,9 +120,9 @@
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.4",
-    "remotion": "^4.0.448",
+    "remotion": "^4.0.539",
     "resend": "^6.6.0",
-    "sanitize-html": "^2.17.6",
+    "sanitize-html": "^2.18.1",
     "sharp": "^0.35.5",
     "sonner": "^1.7.4",
     "svix": "^1.85.0",
@@ -146,8 +146,8 @@
     "tw-animate-css": "1.3.3",
     "typescript": "^5",
     "vite": "7.3.7",
-    "vitest": "^4.1.10",
-    "yaml": "2.8.1"
+    "vitest": "^4.1.12",
+    "yaml": "2.8.4"
   },
   "pnpm": {
     "overrides": {
@@ -171,15 +171,14 @@
       "source-map-js@>=1.0.0 <1.2.2": "^1.2.2",
       "markdown-it@>=14.0.0 <14.3.3": "^14.3.3",
       "prosemirror-view@<1.42.3": "^1.42.3",
-      "zod@>=4.0.0 <4.6.6": "^4.6.6"
+      "zod@>=4.0.0 <4.6.6": "^4.6.6",
+      "qs@<6.16.1": "^6.16.1",
+      "fast-xml-parser@>=5.0.0 <5.7.0": "^5.7.0",
+      "baseline-browser-mapping@<2.11.0": "^2.11.0"
     },
     "auditConfig": {
-      "ignoreGhsas": [
-          "GHSA-jmr9-qjv8-65gv"
-      ]
+      "ignoreGhsas": []
     },
-    "auditExceptionNotes": {
-      "GHSA-jmr9-qjv8-65gv": "extract-zip <=2.0.1 (unvalidated symlink path traversal). Accepted risk: NO patched version exists - 2.0.1 is the latest published release and the advisory lists patched_versions '<0.0.0', so an override cannot fix it. Reaches us transitively via @remotion/renderer (also through @remotion/bundler, @remotion/studio, @remotion/lambda), the video-rendering chain. Exposure is bounded: Remotion uses extract-zip to unpack its own browser downloads, never archives from user input, and no endpoint of this app accepts ZIP uploads - exploiting it would require control over the Remotion download itself, at which point the supply chain is already compromised. Owner: Mattes. Re-evaluate when extract-zip ships a release beyond 2.0.1 (npm view extract-zip version) or Remotion switches unpacking libraries, at the latest on 2026-11-24."
-    }
+    "auditExceptionNotes": {}
   }
 }
