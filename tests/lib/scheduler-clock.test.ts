@@ -5,7 +5,7 @@
  * Tag des EU-Sommerzeit-Endes (01:00 UTC), und den 01.11.2026 (US-Ende).
  */
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SCHEDULE_TIMEZONE, dayKeys, isValidTimeZone, localClock, localDay, localMidnightIso } from '@/lib/scheduler/clock'
+import { DEFAULT_SCHEDULE_TIMEZONE, dayKeys, isValidTimeZone, localClock, localDay, localMidnightIso, utcOffsetLabel } from '@/lib/scheduler/clock'
 
 describe('localClock', () => {
   it('Berlin: Sommerzeit am 24.10., Normalzeit am 26.10.', () => {
@@ -67,5 +67,24 @@ describe('localMidnightIso', () => {
     expect(localMidnightIso(new Date('2026-10-31T23:30:00Z'), 'Europe/Berlin')).toBe('2026-10-31T23:00:00.000Z') // 1.11. MEZ
     expect(localMidnightIso(new Date('2026-08-23T05:10:00Z'), 'Europe/Berlin')).toBe('2026-08-22T22:00:00.000Z') // 23.8. MESZ
     expect(localMidnightIso(new Date('2026-10-31T22:00:00Z'), 'Asia/Shanghai')).toBe('2026-10-31T16:00:00.000Z') // 1.11. CST
+  })
+})
+
+// --- Betreiber-Wunsch 2026-11-01: im Zeitzonen-Pulldown den Abstand zu
+// Greenwich in Plus-/Minusstunden zeigen, sommerzeitbewusst zum Zeitpunkt `now`.
+describe('utcOffsetLabel', () => {
+  const nov = new Date('2026-11-02T12:00:00Z')
+  it('zeigt ganze Stunden mit Vorzeichen', () => {
+    expect(utcOffsetLabel('Asia/Shanghai', nov)).toBe('UTC+8')
+    expect(utcOffsetLabel('Europe/Berlin', nov)).toBe('UTC+1')
+    expect(utcOffsetLabel('America/New_York', nov)).toBe('UTC-5')
+  })
+  it('zeigt Sommerzeit und halbe Stunden', () => {
+    expect(utcOffsetLabel('Europe/Berlin', new Date('2026-08-23T12:00:00Z'))).toBe('UTC+2')
+    expect(utcOffsetLabel('Asia/Kolkata', nov)).toBe('UTC+5:30')
+  })
+  it('zeigt UTC als ±0 und liefert bei ungueltiger Zone einen leeren String', () => {
+    expect(utcOffsetLabel('UTC', nov)).toBe('UTC±0')
+    expect(utcOffsetLabel('Nirgendwo/Stadt', nov)).toBe('')
   })
 })

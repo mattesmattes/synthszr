@@ -67,3 +67,24 @@ export function localMidnightIso(now: Date, tz: string): string {
   }
   return guess.toISOString()
 }
+
+/**
+ * Abstand einer Zone zu UTC zum Zeitpunkt `now`, als Anzeige-Label:
+ * „UTC+8", „UTC-5", „UTC+5:30", „UTC±0"; bei ungültiger Zone ''.
+ * Betreiber-Wunsch 2026-11-01 für das Zeitzonen-Pulldown im Zeitplan.
+ */
+export function utcOffsetLabel(tz: string, now: Date = new Date()): string {
+  if (!isValidTimeZone(tz)) return ''
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(now)
+  const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value ?? '0')
+  const localAsUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'))
+  const offsetMin = Math.round((localAsUtc - Math.floor(now.getTime() / 1000) * 1000) / 60_000)
+  if (offsetMin === 0) return 'UTC±0'
+  const sign = offsetMin > 0 ? '+' : '-'
+  const abs = Math.abs(offsetMin)
+  const h = Math.floor(abs / 60)
+  const m = abs % 60
+  return `UTC${sign}${h}${m ? `:${String(m).padStart(2, '0')}` : ''}`
+}

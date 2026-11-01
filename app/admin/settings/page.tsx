@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { utcOffsetLabel } from '@/lib/scheduler/clock'
 import { Mail, Clock, Bell, CheckCircle, XCircle, Loader2, Save, Sparkles, Play, RefreshCw, Settings2, AlertTriangle, ExternalLink, Cpu, Download, Palette, Upload, ThumbsUp } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -1038,7 +1039,7 @@ function TimezoneRow({ value, onChange }: { value: string; onChange: (zone: stri
         <div>
           <Label className="text-base">Zeitzone des Zeitplans</Label>
           <p className="text-sm text-muted-foreground">
-            Alle Uhrzeiten unten gelten in dieser Zone. Jetzt dort: {timeIn(value)} Uhr.
+            Alle Uhrzeiten unten gelten in dieser Zone. Jetzt dort: {timeIn(value)} Uhr ({utcOffsetLabel(value) || 'Offset unbekannt'}).
             Auf Reisen umstellen, damit die Queue vor dem lokalen Morgen gefüllt ist.
           </p>
         </div>
@@ -1050,14 +1051,14 @@ function TimezoneRow({ value, onChange }: { value: string; onChange: (zone: stri
             {!known && (
               <SelectGroup>
                 <SelectLabel>Gespeichert</SelectLabel>
-                <SelectItem value={value}>{value}</SelectItem>
+                <SelectItem value={value}>{value} ({utcOffsetLabel(value) || '?'})</SelectItem>
               </SelectGroup>
             )}
             {groups.map((group) => (
               <SelectGroup key={group.region}>
                 <SelectLabel>{group.region}</SelectLabel>
                 {group.zones.map((zone) => (
-                  <SelectItem key={zone} value={zone}>{zone.replace(/_/g, ' ')}</SelectItem>
+                  <SelectItem key={zone} value={zone}>{zone.replace(/_/g, ' ')} ({utcOffsetLabel(zone)})</SelectItem>
                 ))}
               </SelectGroup>
             ))}
