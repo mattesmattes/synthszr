@@ -68,9 +68,14 @@ export interface MixingSettings {
   outro_dialog_envelope?: import('@/lib/audio/envelope').AudioEnvelope
 }
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+// Erst beim ersten Aufruf anlegen: `new OpenAI()` wirft ohne OPENAI_API_KEY
+// schon beim Import, und Next lädt das Modul beim Build (Seitendaten von
+// /api/admin/tts-settings). Ohne Schlüssel scheiterte so jeder Build.
+let client: OpenAI | null = null
+function openai(): OpenAI {
+  client ??= new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  return client
+}
 
 /**
  * Generate speech from text using OpenAI TTS API.
@@ -93,7 +98,7 @@ export async function generateSpeech(
   let lastErr: unknown
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      const response = await openai.audio.speech.create({
+      const response = await openai().audio.speech.create({
         model,
         voice,
         input: text,
