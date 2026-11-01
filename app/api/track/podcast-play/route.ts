@@ -11,7 +11,7 @@ const MAX_BODY_BYTES = 8 * 1024
 const relaxedLimiter = rateLimiters.relaxed()
 
 const podcastPlaySchema = z.object({
-  postId: z.string().uuid(),
+  postId: z.guid(),
   locale: z.enum(['de', 'en', 'cs', 'nds', 'fr']).default('de'),
 }).strict()
 

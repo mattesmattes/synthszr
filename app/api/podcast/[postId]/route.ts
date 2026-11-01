@@ -41,7 +41,7 @@ const LOCALE_TO_TTS_LANG: Record<string, 'de' | 'en'> = {
 
 // Supported podcast locales (SEC-013)
 const PODCAST_LOCALES = ['de', 'en', 'cs', 'nds'] as const
-const postIdSchema = z.string().uuid()
+const postIdSchema = z.guid()
 const localeSchema = z.enum(PODCAST_LOCALES)
 const postBodySchema = z
   .object({

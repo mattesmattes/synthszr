@@ -32,7 +32,7 @@ const limiter = rateLimiters.strict()
 
 const commentSchema = z.object({
   postSource: z.enum(['posts', 'generated_posts']),
-  postId: z.string().uuid(),
+  postId: z.guid(),
   body: z.string().min(1).max(4000),
   displayName: z.string().min(1).max(80),
   sectionAnchor: z.string().max(200).nullable().optional(),
@@ -179,7 +179,7 @@ export async function GET(request: NextRequest) {
   const postId = searchParams.get('postId')
   // Optionaler Abschnitts-Filter (Anzeige direkt unter dem jeweiligen Take).
   const sectionAnchor = searchParams.get('sectionAnchor')?.slice(0, 200) || undefined
-  if ((source !== 'posts' && source !== 'generated_posts') || !postId || !z.string().uuid().safeParse(postId).success) {
+  if ((source !== 'posts' && source !== 'generated_posts') || !postId || !z.guid().safeParse(postId).success) {
     return NextResponse.json({ error: 'Ungültige Parameter' }, { status: 400 })
   }
   // Sprachfassung der Seite (Agenten-Takes): nur bekannte Locales, sonst kein Filter.

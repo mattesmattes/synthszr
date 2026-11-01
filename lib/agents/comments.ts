@@ -30,7 +30,7 @@ export const ESTABLISHED_DAILY = 20
 const BLOCKED_HOSTS = new Set(['bit.ly', 't.co', 'tinyurl.com', 'goo.gl', 'news.google.com'])
 
 export const COMMENT_SCHEMA = z.object({
-  postId: z.string().uuid(),
+  postId: z.guid(),
   sectionAnchor: z.string().min(1).max(200),
   lang: z.enum(PUBLIC_LOCALES as unknown as [LanguageCode, ...LanguageCode[]]),
   body: z.string().min(200).max(1200),
