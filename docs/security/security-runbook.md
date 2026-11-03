@@ -181,9 +181,10 @@ Aktuell keine Ausnahme (Stand 2026-11-01). Erledigt: `GHSA-f88m-g3jw-g9cj`
 Vercel-Lambda, 0.35.5 läuft dort (in Produktion bestätigt am 2026-11-01:
 Testmail und Newsletter-Thumbnails). `GHSA-jmr9-qjv8-65gv` und
 `GHSA-7pqw-9j4j-h8q3` (extract-zip, nie gepatcht) durch Remotion 4.0.539, das
-extract-zip nicht mehr mitbringt. Offen, nicht blockierend (moderate, nur über
-Major-Sprünge fremder Abhängigkeiten): `uuid` in `svix` (über `resend`),
-`minimatch`/`glob` in `rimraf` (über `@google/genai`).
+extract-zip nicht mehr mitbringt. Seit 2026-11-01 auch keine moderate Meldung
+mehr: `uuid` in `svix` per Override auf 11.1.1 (svix bleibt 1.x, weil svix 2
+`verify()` ohne Rückgabewert und nur als ESM liefert; resend 6.37 bringt svix
+nicht mehr mit), `minimatch`/`glob` entfallen mit gaxios 7.3.1 (ohne `rimraf`).
 
 ---
 
