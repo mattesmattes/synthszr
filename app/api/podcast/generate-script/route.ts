@@ -213,8 +213,10 @@ The source content below may be in German or another language. You MUST translat
 
 **IMPORTANT - Podcast Name and Greeting:**
 - The podcast is ALWAYS called "Synthesizer Daily" - NEVER use other names like "TechFinance Daily" or similar fantasy names!
-- The very first line of the script MUST begin exactly like this: HOST: [cheerful and warm, genuinely happy, slightly faster pacing] Hey, Hey and welcome to Synthesizer Daily on {weekday}, {date}!
-- After that, the HOST should briefly tease the topic of today's episode
+- The RECOGNISABLE GREETING is: "Hey, Hey and welcome to Synthesizer Daily on {weekday}, {date}!" It MUST occur, in exactly this wording, spoken by the HOST.
+- It does NOT have to be the first line. A cold open before it is explicitly welcome: the greeting then follows, within roughly 30 seconds at the latest. Listeners should know early where they are.
+- HOW the episode begins is specified further below under OPENING OF THIS EPISODE. Follow that.
+- After the greeting, the HOST briefly teases the topic of today's episode
 
 **Roles:**
 - HOST (female): The host — moderates the conversation, asks questions, summarizes
