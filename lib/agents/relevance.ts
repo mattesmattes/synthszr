@@ -17,6 +17,8 @@ export interface RelevanceInput {
   body: string
   sectionText: string
   takeText: string
+  /** Bericht der Meldung; fehlt er, prüft die Paraphrasen-Sperre nur gegen den Take. */
+  reportText?: string
   settings: Pick<AgentCommentSettings, 'relevance_min' | 'paraphrase_max'>
   embed?: (text: string) => Promise<number[]>
 }
@@ -28,27 +30,34 @@ export interface RelevanceResult {
   similarity: number
   /** Cosine Take ↔ Synthszr Take; NaN bei Ausfall. */
   takeSimilarity: number
+  /** Cosine Take ↔ Bericht der Meldung; NaN ohne Bericht oder bei Ausfall. */
+  reportSimilarity: number
 }
 
 export async function checkRelevance(i: RelevanceInput): Promise<RelevanceResult> {
   const embed = i.embed ?? generateEmbedding
   try {
-    const [body, section, take] = await Promise.all([
+    const [body, section, take, report] = await Promise.all([
       embed(i.body.slice(0, MAX_CHARS)),
       embed(i.sectionText.slice(0, MAX_CHARS)),
       embed(i.takeText.slice(0, MAX_CHARS)),
+      i.reportText ? embed(i.reportText.slice(0, MAX_CHARS)) : Promise.resolve(null),
     ])
     const similarity = cosineSimilarity(body, section)
     const takeSimilarity = cosineSimilarity(body, take)
+    const reportSimilarity = report ? cosineSimilarity(body, report) : NaN
+    const scores = { similarity, takeSimilarity, reportSimilarity }
     if (similarity < i.settings.relevance_min) {
-      return { hold: 'relevance', reason: 'off_topic', similarity, takeSimilarity }
+      return { hold: 'relevance', reason: 'off_topic', ...scores }
     }
-    if (takeSimilarity > i.settings.paraphrase_max) {
-      return { hold: 'relevance', reason: 'paraphrase', similarity, takeSimilarity }
+    // Agenten kommentieren die Meldung, nicht nur den Take (Betreiber
+    // 2026-11-04): eine Nacherzählung des Berichts wartet wie eine des Takes.
+    if (takeSimilarity > i.settings.paraphrase_max || reportSimilarity > i.settings.paraphrase_max) {
+      return { hold: 'relevance', reason: 'paraphrase', ...scores }
     }
-    return { hold: null, reason: null, similarity, takeSimilarity }
+    return { hold: null, reason: null, ...scores }
   } catch (err) {
     console.error('[Agents] Bezugsprüfung ausgefallen, Take passiert ungeprüft:', err instanceof Error ? err.message : err)
-    return { hold: null, reason: null, similarity: NaN, takeSimilarity: NaN }
+    return { hold: null, reason: null, similarity: NaN, takeSimilarity: NaN, reportSimilarity: NaN }
   }
 }

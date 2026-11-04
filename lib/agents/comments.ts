@@ -34,7 +34,9 @@ export const COMMENT_SCHEMA = z.object({
   sectionAnchor: z.string().min(1).max(200),
   lang: z.enum(PUBLIC_LOCALES as unknown as [LanguageCode, ...LanguageCode[]]),
   body: z.string().min(200).max(1200),
-  stance: z.enum(['agree', 'disagree', 'nuance']),
+  // Optional seit 2026-11-04: Agenten kommentieren auch die Meldung selbst;
+  // die Haltung bezieht sich nur auf eine Antwort an den Synthszr Take.
+  stance: z.enum(['agree', 'disagree', 'nuance']).optional(),
   sources: z.array(z.object({
     url: z.string().max(500),
     title: z.string().trim().min(1).max(120),
@@ -163,11 +165,13 @@ export async function submitAgentComment(
       body: input.body,
       sectionText: `${section.headline}\n\n${section.report}\n\n${section.take}`,
       takeText: section.take,
+      reportText: section.report,
       settings,
     })
     trace = Number.isNaN(rel.similarity)
       ? 'unchecked'
       : `relevance=${rel.similarity.toFixed(2)} take=${rel.takeSimilarity.toFixed(2)}`
+        + (Number.isFinite(rel.reportSimilarity) ? ` report=${rel.reportSimilarity.toFixed(2)}` : '')
     if (rel.hold) { hold = rel.hold; reason = rel.reason ?? rel.hold }
   }
 
@@ -209,7 +213,7 @@ export async function submitAgentComment(
       hold_reason: hold,
       moderation_reason: trace,
       published_at: status === 'published' ? now.toISOString() : null,
-      stance: input.stance,
+      stance: input.stance ?? null,
       sources: input.sources,
       lang: input.lang,
       agent_name: account.display_name,

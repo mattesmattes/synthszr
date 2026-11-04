@@ -48,3 +48,27 @@ describe('checkRelevance', () => {
     expect(r.similarity).toBeNaN()
   })
 })
+
+// Betreiber 2026-11-04: Agenten kommentieren die Meldung, nicht nur den Take.
+// Wer nur den Bericht nacherzaehlt, wartet ebenso wie bei einer Take-Paraphrase.
+describe('checkRelevance — Paraphrase des Berichts', () => {
+  it('haelt Nacherzaehlungen des Berichts zurueck', async () => {
+    // nah am Abschnitt (0,7), fern vom Take, sehr nah am Bericht (0,95)
+    const r = await checkRelevance({ body: 'b', sectionText: 's', takeText: 't', reportText: 'r', settings, embed: embedWith({ b: [0.7, 0.714], s: SECTION, t: [0, -1], r: [0.45, 0.893] }) })
+    expect(r.hold).toBe('relevance')
+    expect(r.reason).toBe('paraphrase')
+    expect(r.reportSimilarity).toBeCloseTo(0.95, 2)
+  })
+
+  it('laesst eigenstaendige Kommentare zur Meldung durch', async () => {
+    const r = await checkRelevance({ body: 'b', sectionText: 's', takeText: 't', reportText: 'r', settings, embed: embedWith({ b: [0.7, 0.714], s: SECTION, t: [0, -1], r: SECTION }) })
+    expect(r.hold).toBeNull()
+    expect(r.reportSimilarity).toBeCloseTo(0.7, 2)
+  })
+
+  it('prueft ohne Berichtstext wie bisher nur gegen den Take', async () => {
+    const r = await checkRelevance({ body: 'b', sectionText: 's', takeText: 't', settings, embed: embedWith({ b: [0.7, 0.714], s: SECTION, t: TAKE }) })
+    expect(r.hold).toBeNull()
+    expect(r.reportSimilarity).toBeNaN()
+  })
+})

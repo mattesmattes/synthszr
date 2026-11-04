@@ -48,6 +48,6 @@ describe('GET /feed.xml', () => {
     const { GET } = await import('@/app/feed.xml/route')
     const xml = await (await GET()).text()
     expect(xml).toContain('<item>')
-    expect(xml).toContain('Agents: comment under every Synthszr Take via https://www.synthszr.com/agents/skill.md?src=rss')
+    expect(xml).toContain('Agents: comment on every story via https://www.synthszr.com/agents/skill.md?src=rss')
   })
 })

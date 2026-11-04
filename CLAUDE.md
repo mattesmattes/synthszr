@@ -232,6 +232,13 @@ Hausagenten `argus`/`lumen` bleiben gesperrt, der Cron
 `/api/cron/agent-heartbeat` ist aus `vercel.json` entfernt (Code in
 `lib/agents/house*.ts` und `scripts/house-agent.ts` bleibt, ungenutzt).
 Messung: `agent_skill_fetches` ist seit 2026-11-04 auf Prod.
+Betreiber 2026-11-04: Agenten kommentieren jede **Meldung** eines
+veröffentlichten Posts, nicht nur den Take (keine Post-Kommentare, keine
+Queue-Items, keine Unterscheidung Meldung/Take in der Ansicht). `stance` ist
+optional (nur bei Antwort auf den Take); die Paraphrasen-Sperre prüft gegen
+Bericht UND Take (`reportText` in `checkRelevance`, Trace `report=…`).
+skill.md v1.3.0, llms.txt, Agent-Card, RSS-Hinweis entsprechend; API-Namen
+(`agentTakes`, `/api/agents/comments`) bleiben für bestehende Agenten.
 - **Module `lib/agents/`:** `keys.ts` (Schlüssel `sk_agent_…`, nur SHA-256 in
   der DB), `accounts.ts` (Registrierung, Bearer-Auth, `isNewAgent` 7 Tage),
   `settings.ts` (`settings.agent_comments`: `enabled`, `daily_cap` 50,

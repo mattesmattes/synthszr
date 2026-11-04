@@ -8,7 +8,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 const mocks = vi.hoisted(() => ({ revalidate: vi.fn() }))
 vi.mock('@/lib/comments/service', () => ({ revalidatePostPaths: mocks.revalidate }))
 
-import { submitAgentComment, countPublishedAgentTakesToday } from '@/lib/agents/comments'
+import { submitAgentComment, countPublishedAgentTakesToday, COMMENT_SCHEMA } from '@/lib/agents/comments'
 import type { AgentAccount } from '@/lib/agents/accounts'
 import { DEFAULT_AGENT_COMMENT_SETTINGS } from '@/lib/agents/settings'
 
@@ -69,7 +69,7 @@ function fakeClient(o: FakeOpts = {}) {
 const deps = (over: Partial<Parameters<typeof submitAgentComment>[3]> = {}) => ({
   settings: DEFAULT_AGENT_COMMENT_SETTINGS,
   now: NOW,
-  relevance: async () => ({ hold: null, reason: null, similarity: 0.8, takeSimilarity: 0.5 }),
+  relevance: async () => ({ hold: null, reason: null, similarity: 0.8, takeSimilarity: 0.5, reportSimilarity: 0.6 }),
   ...over,
 })
 
@@ -113,7 +113,7 @@ describe('submitAgentComment', () => {
   })
 
   it('wartet mit relevance, wenn die Bezugspruefung anschlaegt', async () => {
-    const r = await submitAgentComment(fakeClient().client, ACCOUNT, INPUT, deps({ relevance: async () => ({ hold: 'relevance', reason: 'off_topic', similarity: 0.2, takeSimilarity: 0.1 }) }))
+    const r = await submitAgentComment(fakeClient().client, ACCOUNT, INPUT, deps({ relevance: async () => ({ hold: 'relevance', reason: 'off_topic', similarity: 0.2, takeSimilarity: 0.1, reportSimilarity: 0.1 }) }))
     expect(r).toMatchObject({ status: 'pending', holdReason: 'relevance' })
   })
 
@@ -150,13 +150,39 @@ describe('submitAgentComment — Review-Befunde 2026-10-26', () => {
   it('speichert die Similarity-Werte fuer die Kalibrierung der Schwellen', async () => {
     const { client, inserts } = fakeClient()
     await submitAgentComment(client, ACCOUNT, INPUT, deps())
-    expect(inserts[0].payload.moderation_reason).toBe('relevance=0.80 take=0.50')
+    expect(inserts[0].payload.moderation_reason).toBe('relevance=0.80 take=0.50 report=0.60')
   })
 
   it('markiert ungeprueft, wenn die Bezugspruefung ausgefallen ist', async () => {
     const { client, inserts } = fakeClient()
-    await submitAgentComment(client, ACCOUNT, INPUT, deps({ relevance: async () => ({ hold: null, reason: null, similarity: NaN, takeSimilarity: NaN }) }))
+    await submitAgentComment(client, ACCOUNT, INPUT, deps({ relevance: async () => ({ hold: null, reason: null, similarity: NaN, takeSimilarity: NaN, reportSimilarity: NaN }) }))
     expect(inserts[0].payload.moderation_reason).toBe('unchecked')
+  })
+})
+
+// Betreiber 2026-11-04: Agenten kommentieren die Meldungen eines Posts,
+// nicht nur den Take. Die Haltung bezieht sich auf den Take und ist optional.
+describe('submitAgentComment — Kommentare zur Meldung', () => {
+  it('nimmt Kommentare ohne Haltung an und speichert stance null', async () => {
+    const { client, inserts } = fakeClient()
+    const { stance: _omit, ...noStance } = INPUT
+    const r = await submitAgentComment(client, ACCOUNT, noStance, deps())
+    expect(r).toMatchObject({ ok: true, status: 'published' })
+    expect(inserts[0].payload.stance).toBeNull()
+  })
+
+  it('Schema: stance ist optional, ungueltige Werte bleiben verboten', () => {
+    const { stance: _omit, ...noStance } = INPUT
+    expect(COMMENT_SCHEMA.safeParse(noStance).success).toBe(true)
+    expect(COMMENT_SCHEMA.safeParse(INPUT).success).toBe(true)
+    expect(COMMENT_SCHEMA.safeParse({ ...INPUT, stance: 'love' }).success).toBe(false)
+  })
+
+  it('gibt der Bezugspruefung den Bericht separat mit', async () => {
+    const { client } = fakeClient()
+    const relevance = vi.fn(async () => ({ hold: null, reason: null, similarity: 0.8, takeSimilarity: 0.5, reportSimilarity: 0.6 }))
+    await submitAgentComment(client, ACCOUNT, INPUT, deps({ relevance }))
+    expect(relevance).toHaveBeenCalledWith(expect.objectContaining({ reportText: 'Bericht.', takeText: expect.stringContaining('Marge zählt') }))
   })
 })
 
