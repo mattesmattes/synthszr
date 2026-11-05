@@ -8,8 +8,10 @@
  */
 
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { PUBLIC_LOCALES } from '@/lib/i18n/config'
 
 export async function POST(request: Request) {
   const session = await getSession()
@@ -36,5 +38,8 @@ export async function POST(request: Request) {
     .select()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // Statische Seiten laufen mit ISR (Impressum: revalidate 1 Tag) — ohne das
+  // sähe man eine Änderung erst am nächsten Tag (Befund 2026-11-05).
+  for (const locale of PUBLIC_LOCALES) revalidatePath(`/${locale}/${slug}`)
   return NextResponse.json({ page: data?.[0] ?? null })
 }
