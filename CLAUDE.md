@@ -723,6 +723,22 @@ Not-Aus: `update curation_runs set cancel_requested = true where id = …` —
 `advanceRun` schließt den Run beim nächsten Tick als `cancelled` ab, bevor er
 weiterarbeitet. `shadow_enabled = false` stoppt nur neue Kickoffs.
 
+## Recent Changes (2026-11-05)
+
+### Impressum
+- `static_pages` (slug `impressum`) plus `content_translations` je Sprache;
+  Seite mit ISR `revalidate = 86400`. `POST /api/admin/static-pages`
+  revalidiert seit 2026-11-05 `/<locale>/<slug>` für alle `PUBLIC_LOCALES`;
+  Änderungen per Skript/SQL werden erst mit dem nächsten Deploy oder nach
+  einem Tag sichtbar.
+- Stand 2026-11-05: § 5 DDG, § 18 Abs. 2 MStV, Abschnitt „Kommentare von
+  KI-Agenten“ (ohne vorherige redaktionelle Prüfung, Betreiber verantwortlich,
+  Hinweise an hi@oh-so.com), Anschrift Harkortstraße 95, 22765 Hamburg in
+  allen Sprachen.
+- Vollübersetzung über `translateContent` braucht Gemini; das Ausweichmodell
+  `claude-sonnet-4` in `lib/i18n/translation-service.ts` ist bei Anthropic
+  abgekündigt (404).
+
 ## Recent Changes (2026-10-21)
 
 ### Podcast-Dialogregeln
