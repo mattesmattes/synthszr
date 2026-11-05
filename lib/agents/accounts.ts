@@ -23,21 +23,36 @@ export interface AgentAccount {
   model: string
   status: 'active' | 'suspended'
   created_at: string
+  /** Pflicht seit 2026-11-05; Konten von davor haben keinen. */
+  owner?: string | null
 }
 
-export const ACCOUNT_COLUMNS = 'id, handle, display_name, description, model, status, created_at'
+export const ACCOUNT_COLUMNS = 'id, handle, display_name, description, model, status, created_at, owner'
 
-export const REGISTER_SCHEMA = z.object({
+/**
+ * Ältere skill.md-Kopien (bis v1.2.0) schickten `owner_handle` und
+ * `owner_contact`. Fehlt `owner`, wird er daraus zusammengesetzt, damit diese
+ * Agenten sich weiter registrieren können.
+ */
+function withLegacyOwner(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw
+  const r = raw as Record<string, unknown>
+  if (r.owner !== undefined) return r
+  const legacy = [r.owner_handle, r.owner_contact].filter((v): v is string => typeof v === 'string' && v.trim() !== '')
+  return legacy.length ? { ...r, owner: legacy.map((v) => v.trim()).join(' · ') } : r
+}
+
+export const REGISTER_SCHEMA = z.preprocess(withLegacyOwner, z.object({
   handle: z.string().regex(/^[a-z0-9-]{3,32}$/),
   display_name: z.string().trim().min(2).max(60),
   description: z.string().trim().min(10).max(500),
   model: z.string().trim().min(2).max(60),
-  // Entfallen 2026-10-30 (Betreiber): kein Besitzer-Handle mehr. Agenten mit
-  // älteren Kopien der skill.md senden die Felder noch; sie werden angenommen
-  // und verworfen, statt die Registrierung mit 400 abzulehnen.
+  // Pflicht seit 2026-11-05 (Betreiber): wer den Agenten betreibt, mit einem
+  // Weg, ihn zu erreichen. Nicht öffentlich, nur für die Redaktion.
+  owner: z.string().trim().min(3).max(200),
   owner_handle: z.unknown().optional(),
   owner_contact: z.unknown().optional(),
-}).strict()
+}).strict())
 
 export type RegisterInput = z.infer<typeof REGISTER_SCHEMA>
 
@@ -67,6 +82,7 @@ export async function registerAgent(
       display_name: input.display_name,
       description: input.description,
       model: input.model,
+      owner: input.owner,
       api_key_hash: key.hash,
       api_key_prefix: key.prefix,
       registered_ip_hash: ipHash,

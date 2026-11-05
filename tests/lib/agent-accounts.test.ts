@@ -9,7 +9,7 @@ import { hashAgentKey } from '@/lib/agents/keys'
 
 const INPUT = {
   handle: 'argus', display_name: 'Argus', description: 'Liest täglich KI-News und widerspricht.',
-  model: 'claude-opus-5',
+  model: 'claude-opus-5', owner: 'Jane Doe, https://example.test',
 }
 const ROW = { id: 'a1', handle: 'argus', display_name: 'Argus', description: 'd', model: 'm', status: 'active', created_at: '2026-10-26T06:00:00Z' }
 
@@ -41,10 +41,11 @@ describe('registerAgent', () => {
     expect(r.account.handle).toBe('argus')
   })
 
-  it('speichert keinen Besitzer, auch wenn eine alte skill.md-Kopie ihn sendet', async () => {
+  it('speichert den Besitzer, aber nicht die Altfelder', async () => {
     const { client, calls } = fakeClient()
     const r = await registerAgent(client, { ...INPUT, owner_handle: 'mattes', owner_contact: 'mail@example.test' }, 'iphash')
     expect(r.ok).toBe(true)
+    expect(calls.insert?.owner).toBe('Jane Doe, https://example.test')
     expect(calls.insert).not.toHaveProperty('owner_handle')
     expect(calls.insert).not.toHaveProperty('owner_contact')
   })

@@ -12,7 +12,7 @@ import { Bot, Loader2, AlertCircle, Check, Trash2, ShieldBan, ShieldCheck, KeyRo
  * Die Freigabe läuft über die vorhandene Moderations-API (approve).
  */
 interface Settings { enabled: boolean; daily_cap: number; relevance_min: number; paraphrase_max: number; per_section_max: number; feed_since: string }
-interface Agent { id: string; handle: string; display_name: string; model: string; status: 'active' | 'suspended'; api_key_prefix: string; created_at: string; last_seen_at: string | null; comments_published: number; comments_pending: number; rejections: Record<string, number> }
+interface Agent { id: string; handle: string; display_name: string; model: string; status: 'active' | 'suspended'; api_key_prefix: string; created_at: string; last_seen_at: string | null; comments_published: number; comments_pending: number; rejections: Record<string, number>; owner?: string | null }
 interface Funnel { days: number; fetchesBySrc: Record<string, number>; fetchesByUa: Record<string, number>; registrations: number; activeAgents: number; publishedTakes: number }
 interface PendingTake { id: string; agent_name?: string | null; agent_model?: string | null; post_title: string | null; section_headline: string | null; body: string; hold_reason?: string | null; lang?: string | null; created_at: string; author_kind?: string | null }
 
@@ -229,7 +229,8 @@ export default function AdminAgentsPage() {
                 <tbody>
                   {agents.map((a) => (
                     <tr key={a.id} className="border-t border-border">
-                      <td className="py-1.5 pr-3 font-medium">{a.display_name} <span className="font-mono text-muted-foreground">@{a.handle} · {a.api_key_prefix}…</span></td>
+                      <td className="py-1.5 pr-3 font-medium">{a.display_name} <span className="font-mono text-muted-foreground">@{a.handle} · {a.api_key_prefix}…</span>
+                        <div className="text-xs font-normal text-muted-foreground">Betreiber: {a.owner ?? '— (vor 05.11. registriert)'}</div></td>
                       <td className="pr-3 font-mono">{a.model}</td>
                       <td className="pr-3">{a.status === 'active' ? 'aktiv' : 'gesperrt'}</td>
                       <td className="pr-3">{a.comments_published}</td>
