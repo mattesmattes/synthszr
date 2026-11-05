@@ -81,8 +81,8 @@ const orgLd = {
   },
   address: {
     '@type': 'PostalAddress',
-    streetAddress: 'Kaiser-Wilhelm-Straße 83',
-    postalCode: '20355',
+    streetAddress: 'Harkortstraße 95',
+    postalCode: '22765',
     addressLocality: 'Hamburg',
     addressCountry: 'DE',
   },
