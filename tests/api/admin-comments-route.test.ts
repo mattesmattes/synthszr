@@ -11,6 +11,8 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  after: vi.fn(),
+  translate: vi.fn(),
   getSession: vi.fn(),
   requireValidOrigin: vi.fn(),
   del: vi.fn(),
@@ -21,6 +23,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/auth/session', () => ({ getSession: mocks.getSession }))
 vi.mock('@/lib/security/origin-check', () => ({ requireValidOrigin: mocks.requireValidOrigin }))
 vi.mock('@/lib/comments/service', () => ({ revalidatePostPaths: mocks.revalidate }))
+vi.mock('next/server', async () => {
+  const actual = await vi.importActual<typeof import('next/server')>('next/server')
+  return { ...actual, after: (cb: () => unknown) => { mocks.after(cb) } }
+})
+vi.mock('@/lib/agents/translate', () => ({ translateAgentComment: mocks.translate }))
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from() {
@@ -81,6 +88,8 @@ describe('PATCH /api/admin/comments', () => {
     expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'published', hold_reason: null }))
     expect(mocks.update).toHaveBeenCalled()
     expect(mocks.del).not.toHaveBeenCalled()
+    // Freigabe stößt die Übersetzung in die übrigen Sprachfassungen an.
+    expect(mocks.after).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -97,7 +106,8 @@ describe('PATCH /api/admin/comments — Sichtbarkeit & Bearbeiten', () => {
     const { PATCH } = await import('@/app/api/admin/comments/route')
     const res = await PATCH(patch({ id: '11111111-1111-1111-1111-111111111111', action: 'edit', body: 'Korrigierter Take' }))
     expect(res.status).toBe(200)
-    expect(mocks.update).toHaveBeenCalledWith({ body: 'Korrigierter Take' })
+    expect(mocks.update).toHaveBeenCalledWith({ body: 'Korrigierter Take', translations: null })
+    expect(mocks.after).toHaveBeenCalledTimes(1)
   })
 
   it('edit ohne body wird abgewiesen (400)', async () => {

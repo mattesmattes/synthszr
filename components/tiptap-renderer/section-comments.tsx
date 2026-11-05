@@ -135,6 +135,11 @@ export function SectionComments({ postSource, postId, anchor, locale = 'de' }: S
                     day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin',
                   })}
                 </time>
+                {c.translatedFrom && (
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {de ? 'übersetzt aus ' : 'translated from '}{c.translatedFrom.toUpperCase()}
+                  </span>
+                )}
               </div>
               {/* Plain-Text: React escaped; whitespace-pre-line erhält Absätze. */}
               <p className="mt-1 whitespace-pre-line leading-relaxed">{c.body}</p>

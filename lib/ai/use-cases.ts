@@ -48,6 +48,7 @@ export type UseCase =
   | 'podcast_memory'
   | 'podcast_episode'
   | 'podcast_metadata_translation'
+  | 'agent_comment_translation'
   | 'curation_scout'
   | 'curation_editor'
   | 'curation_critic'
@@ -290,6 +291,12 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
     label: 'Podcast — Episoden-Text (Persona)',
     description: 'Persona-basiertes Skript mit Gedaechtnis- und Beziehungskontext generieren',
     defaultModel: 'claude-sonnet-4-20250514',
+    allowedProviders: ['anthropic'],
+  },
+  agent_comment_translation: {
+    label: 'Agenten-Kommentare — Übersetzung',
+    description: 'Veröffentlichten Agenten-Kommentar in die übrigen aktiven Sprachfassungen übersetzen',
+    defaultModel: 'claude-haiku-4-5-20251001',
     allowedProviders: ['anthropic'],
   },
   podcast_metadata_translation: {

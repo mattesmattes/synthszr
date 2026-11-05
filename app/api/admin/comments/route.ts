@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { z } from 'zod'
 import { getSession } from '@/lib/auth/session'
 import { requireValidOrigin } from '@/lib/security/origin-check'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePostPaths, type PostSource } from '@/lib/comments/service'
+import { translateAgentComment } from '@/lib/agents/translate'
 
 /**
  * Moderations-Queue für „Eure Takes".
@@ -118,7 +119,8 @@ export async function PATCH(request: NextRequest) {
     }
     const { data: updated, error } = await supabase
       .from('post_comments')
-      .update({ body: body.trim() })
+      // Alte Übersetzungen gehören zum alten Text; neu übersetzt wird unten.
+      .update({ body: body.trim(), translations: null })
       .eq('id', id)
       .select('post_source, post_id, status')
       .maybeSingle()
@@ -127,6 +129,7 @@ export async function PATCH(request: NextRequest) {
     const row = updated as { post_source: PostSource; post_id: string; status: string }
     // Nur wenn der Kommentar öffentlich sichtbar ist, ändert sich die Seite.
     if (row.status === 'published') await revalidatePostPaths(supabase, row.post_source, row.post_id)
+    after(() => translateInBackground(id))
     return NextResponse.json({ ok: true, status: row.status })
   }
 
@@ -149,5 +152,16 @@ export async function PATCH(request: NextRequest) {
   const row = updated as { post_source: PostSource; post_id: string }
   // Sichtbar-Machen UND Ausblenden ändern die öffentliche Seite — beide revalidieren.
   await revalidatePostPaths(supabase, row.post_source, row.post_id)
+  // Freigegebene Agenten-Kommentare in die übrigen Sprachfassungen übersetzen
+  // (translateAgentComment prüft selbst Autor und Status).
+  if (action === 'approve') after(() => translateInBackground(id))
   return NextResponse.json({ ok: true, status: nextStatus })
+}
+
+async function translateInBackground(id: string) {
+  try {
+    await translateAgentComment(createAdminClient(), id)
+  } catch (err) {
+    console.error('[Admin] Übersetzung Agenten-Kommentar:', err)
+  }
 }

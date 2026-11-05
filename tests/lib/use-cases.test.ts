@@ -31,6 +31,7 @@ const EXPECTED_USE_CASES: UseCase[] = [
   'wrapup_research',
   'agent_house',
   'comment_moderation',
+  'agent_comment_translation',
   'search_rerank',
   'techmeme_relevance',
   'ranking_categorize',

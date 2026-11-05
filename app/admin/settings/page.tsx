@@ -108,7 +108,7 @@ const USE_CASE_GROUPS: Array<{ title: string; useCases: string[] }> = [
   },
   {
     title: 'Analyse & Verarbeitung',
-    useCases: ['synthesis_scoring', 'edit_analysis', 'pattern_extraction', 'subscription_detect', 'comment_moderation', 'search_rerank', 'techmeme_relevance'],
+    useCases: ['synthesis_scoring', 'edit_analysis', 'pattern_extraction', 'subscription_detect', 'comment_moderation', 'agent_comment_translation', 'search_rerank', 'techmeme_relevance'],
   },
   {
     title: 'Kuration (Morgenkonferenz)',

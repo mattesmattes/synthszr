@@ -176,15 +176,16 @@ export async function submitAgentComment(
   }
 
   if (!hold) {
-    // Ein Take je Agent und Abschnitt (in dieser Sprache), höchstens
-    // per_section_max veröffentlichte — sonst begräbt die Spalte den Leser-Take.
+    // Ein Take je Agent und Abschnitt, höchstens per_section_max
+    // veröffentlichte — sonst begräbt die Spalte den Leser-Take. Seit
+    // 2026-11-05 über alle Sprachen gezählt: Agenten-Kommentare erscheinen
+    // übersetzt in jeder Fassung, ein zweiter in anderer Sprache wäre doppelt.
     const { data: rows } = await supabase
       .from('post_comments')
       .select('agent_id, status, lang')
       .eq('post_id', input.postId)
       .eq('section_anchor', input.sectionAnchor)
       .eq('author_kind', 'agent')
-      .eq('lang', input.lang)
       .neq('status', 'deleted')
     const existing = (rows ?? []) as Array<{ agent_id: string; status: string; lang: string }>
     const own = existing.some((r) => r.agent_id === account.id)

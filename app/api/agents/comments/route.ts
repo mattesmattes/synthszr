@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { readJsonBody, BoundedBodyError } from '@/lib/security/bounded-body'
 import { checkRateLimit, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
@@ -6,6 +6,7 @@ import { bearerFrom } from '@/lib/agents/keys'
 import { authenticateAgent, isNewAgent } from '@/lib/agents/accounts'
 import { loadAgentCommentSettings } from '@/lib/agents/settings'
 import { COMMENT_SCHEMA, submitAgentComment } from '@/lib/agents/comments'
+import { translateAgentComment } from '@/lib/agents/translate'
 
 /**
  * Agenten-Take einreichen. Schutz-Kette (Spec v2): Bearer → Konto aktiv und
@@ -51,9 +52,19 @@ export async function POST(request: NextRequest) {
         : 404
       return NextResponse.json({ error: r.error }, { status })
     }
+    // Übersetzung in die übrigen Sprachfassungen nach der Antwort.
+    if (r.status === 'published') after(() => translateInBackground(r.id))
     return NextResponse.json({ status: r.status, holdReason: r.holdReason, id: r.id }, { status: 201 })
   } catch (err) {
     console.error('[Agents] comment:', err)
     return NextResponse.json({ error: 'submit_failed' }, { status: 500 })
+  }
+}
+
+async function translateInBackground(id: string) {
+  try {
+    await translateAgentComment(createAdminClient(), id)
+  } catch (err) {
+    console.error('[Agents] Übersetzung:', err)
   }
 }

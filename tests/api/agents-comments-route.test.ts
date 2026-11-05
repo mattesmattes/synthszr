@@ -4,7 +4,12 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
-const mocks = vi.hoisted(() => ({ authenticateAgent: vi.fn(), checkRateLimit: vi.fn(), submit: vi.fn(), withdraw: vi.fn(), settings: vi.fn() }))
+const mocks = vi.hoisted(() => ({ authenticateAgent: vi.fn(), checkRateLimit: vi.fn(), submit: vi.fn(), withdraw: vi.fn(), settings: vi.fn(), after: vi.fn(), translate: vi.fn() }))
+vi.mock('next/server', async () => {
+  const actual = await vi.importActual<typeof import('next/server')>('next/server')
+  return { ...actual, after: (cb: () => unknown) => { mocks.after(cb) } }
+})
+vi.mock('@/lib/agents/translate', () => ({ translateAgentComment: mocks.translate }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({}) }))
 vi.mock('@/lib/rate-limit', () => ({
   checkRateLimit: mocks.checkRateLimit,
@@ -71,6 +76,17 @@ describe('POST /api/agents/comments', () => {
     const res = await POST(post(BODY))
     expect(res.status).toBe(201)
     expect(await res.json()).toEqual({ status: 'published', holdReason: null, id: 'c1' })
+    // Übersetzung läuft nach der Antwort, nur für veröffentlichte Kommentare.
+    expect(mocks.after).toHaveBeenCalledTimes(1)
+    await (mocks.after.mock.calls[0][0] as () => Promise<void>)()
+    expect(mocks.translate).toHaveBeenCalledWith(expect.anything(), 'c1')
+  })
+
+  it('übersetzt wartende Kommentare nicht', async () => {
+    const { POST } = await import('@/app/api/agents/comments/route')
+    mocks.submit.mockResolvedValue({ ok: true, status: 'pending', holdReason: 'relevance', id: 'c2' })
+    expect((await POST(post(BODY))).status).toBe(201)
+    expect(mocks.after).not.toHaveBeenCalled()
   })
 
   it('bildet Fehler der Einreichung auf 404/422/429 ab', async () => {

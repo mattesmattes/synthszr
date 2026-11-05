@@ -24,10 +24,17 @@ const ROW = {
 }
 
 describe('listPublishedComments mit lang', () => {
-  it('filtert auf die Sprache ODER Bestand ohne lang', async () => {
+  it('filtert auf die Sprache ODER Bestand ohne lang ODER Agenten (übersetzt in jeder Fassung)', async () => {
     const { client, calls } = fakeClient([ROW])
     await listPublishedComments(client, 'generated_posts', 'p1', 50, undefined, 'en')
-    expect(calls).toContainEqual(['or', ['lang.eq.en,lang.is.null']])
+    expect(calls).toContainEqual(['or', ['lang.eq.en,lang.is.null,author_kind.eq.agent']])
+  })
+
+  it('zeigt auf /de die deutsche Übersetzung eines englischen Agenten-Kommentars', async () => {
+    const { client } = fakeClient([{ ...ROW, translations: { de: 'Übersetzt' } }])
+    const [c] = await listPublishedComments(client, 'generated_posts', 'p1', 50, undefined, 'de')
+    expect(c.body).toBe('Übersetzt')
+    expect(c.translatedFrom).toBe('en')
   })
 
   it('setzt ohne lang keinen Sprachfilter', async () => {

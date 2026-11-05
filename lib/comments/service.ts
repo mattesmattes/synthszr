@@ -66,6 +66,8 @@ export interface PublicComment {
   sources: Array<{ url: string; title: string }>
   /** Sprache der kommentierten Fassung; null = Bestand, auf allen Seiten. */
   lang: string | null
+  /** Gesetzt, wenn `body` eine Übersetzung ist: Sprache des Originals. */
+  translatedFrom: string | null
 }
 
 /** Titel des Artikels für den Moderations-Kontext. Fehlschlag ist unkritisch —
@@ -361,7 +363,7 @@ export async function verifyAndPublishComments(
 /** Veröffentlichte Kommentare eines Posts, neueste zuerst. Für SSR und die
  *  Client-Auffrischung — dieselbe Auswahl, damit beide dasselbe zeigen. */
 export const PUBLIC_COMMENT_COLUMNS =
-  'id, display_name, body, section_anchor, section_headline, published_at, author_kind, agent_name, agent_model, stance, sources, lang'
+  'id, display_name, body, section_anchor, section_headline, published_at, author_kind, agent_name, agent_model, stance, sources, lang, translations'
 
 export async function listPublishedComments(
   supabase: AdminClient,
@@ -382,9 +384,11 @@ export async function listPublishedComments(
   if (sectionAnchor) query = query.eq('section_anchor', sectionAnchor)
   // Sprachfassung der Seite: Takes dieser Sprache plus Bestand ohne lang
   // (Leser-Takes von vor den Agenten-Takes erscheinen weiter überall).
-  if (lang) query = query.or(`lang.eq.${lang},lang.is.null`)
+  // Agenten-Kommentare erscheinen seit 2026-11-05 in jeder Fassung, übersetzt
+  // über `translations` (lib/agents/translate.ts), sonst im Original.
+  if (lang) query = query.or(`lang.eq.${lang},lang.is.null,author_kind.eq.agent`)
   const { data } = await query.order('published_at', { ascending: false }).limit(limit)
-  return ((data ?? []) as Array<Record<string, unknown>>).map(toPublicComment)
+  return ((data ?? []) as Array<Record<string, unknown>>).map((r) => toPublicComment(r, lang))
 }
 
 /** Für Schema-Markup und Zähler nach außen: nur Leser-Takes. Agenten-Takes
@@ -394,7 +398,26 @@ export function readerCommentsOnly<T extends { authorKind: 'reader' | 'agent' }>
   return list.filter((c) => c.authorKind !== 'agent')
 }
 
-function toPublicComment(r: Record<string, unknown>): PublicComment {
+/** Text für die Sprachfassung `locale`: Übersetzung, wenn vorhanden, sonst
+ *  das Original. Exportiert für Tests. */
+export function localizedBody(
+  r: { body: string; lang: string | null; translations?: unknown },
+  locale?: string,
+): { body: string; translatedFrom: string | null } {
+  if (!locale || !r.lang || r.lang === locale) return { body: r.body, translatedFrom: null }
+  const t = r.translations && typeof r.translations === 'object'
+    ? (r.translations as Record<string, unknown>)[locale]
+    : undefined
+  return typeof t === 'string' && t.trim()
+    ? { body: t, translatedFrom: r.lang }
+    : { body: r.body, translatedFrom: null }
+}
+
+function toPublicComment(r: Record<string, unknown>, locale?: string): PublicComment {
+  const localized = localizedBody(
+    { body: r.body as string, lang: (r.lang as string | null) ?? null, translations: r.translations },
+    locale,
+  )
   const sources = Array.isArray(r.sources)
     ? (r.sources as Array<{ url?: unknown; title?: unknown }>)
       .filter((x) => typeof x?.url === 'string')
@@ -403,7 +426,7 @@ function toPublicComment(r: Record<string, unknown>): PublicComment {
   return {
     id: r.id as string,
     displayName: r.display_name as string,
-    body: r.body as string,
+    body: localized.body,
     sectionAnchor: (r.section_anchor as string | null) ?? null,
     sectionHeadline: (r.section_headline as string | null) ?? null,
     publishedAt: r.published_at as string,
@@ -413,6 +436,7 @@ function toPublicComment(r: Record<string, unknown>): PublicComment {
     stance: (r.stance as PublicComment['stance']) ?? null,
     sources,
     lang: (r.lang as string | null) ?? null,
+    translatedFrom: localized.translatedFrom,
   }
 }
 
