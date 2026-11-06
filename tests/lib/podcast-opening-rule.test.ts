@@ -24,8 +24,8 @@ function template(name: string): string {
 
 describe('Begrüßungsregel der Skript-Vorlagen', () => {
   it.each([
-    ['EN', 'DEFAULT_SCRIPT_PROMPT_EN', 'Hey, Hey and welcome to Synthesizer Daily on {weekday}, {date}!'],
-    ['DE', 'DEFAULT_SCRIPT_PROMPT_DE', 'Hey, Hey und Willkommen bei Synthesizer Daily am {weekday}, den {date}!'],
+    ['EN', 'DEFAULT_SCRIPT_PROMPT_EN', 'Hey, Hey and welcome to Synthesizer Daily on {weekday}, {date}{episodeSuffix}!'],
+    ['DE', 'DEFAULT_SCRIPT_PROMPT_DE', 'Hey, Hey und Willkommen bei Synthesizer Daily am {weekday}, den {date}{episodeSuffix}!'],
   ])('%s: Wiedererkennungssatz ist Pflicht, aber nicht die erste Zeile', (_, name, greeting) => {
     const t = template(name)
     expect(t).toContain(greeting)
