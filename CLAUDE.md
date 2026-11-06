@@ -723,6 +723,23 @@ Not-Aus: `update curation_runs set cancel_requested = true where id = …` —
 `advanceRun` schließt den Run beim nächsten Tick als `cancelled` ab, bevor er
 weiterarbeitet. `shadow_enabled = false` stoppt nur neue Kickoffs.
 
+## Recent Changes (2026-11-06)
+
+### Podcast: Folgennummer und Jubiläumsfolgen
+- Der Wiedererkennungssatz nennt hinter dem Datum die Folgennummer
+  („… am Freitag, den 06.11.2026, mit Folge 312!“, EN „…, episode 312!“).
+  Die Nummer ist die Ausgabenummer der Website (`synthszrIssueNumber` in
+  `lib/i18n/config.ts`, Tage seit dem 29.12.2025, aus `created_at` des Posts),
+  dieselbe Funktion nutzt `formatUpdateDate` („synthszr #311 vom …“).
+  Platzhalter `{episodeSuffix}` in beiden Vorlagen von
+  `app/api/podcast/generate-script`; ohne Post-Datum bleibt er leer.
+- Runde Folgen feiern HOST und GUEST direkt nach der Begrüßung
+  (`lib/podcast/episode-number.ts`, `milestonePromptSection`): jede 50. kurz
+  (zwei bis vier Wechsel), jede 100. ausgiebiger (vier bis sechs), im Outro
+  ein Rückbezug; keine Geräusch-Anweisungen, Rückblicke nur aus dem
+  Episoden-Gedächtnis. Nicht verwechseln mit `episode_count` der Personality
+  (zählt jede Audio-Erzeugung) und der Modus-Rotation (`pickOpener`).
+
 ## Recent Changes (2026-11-05)
 
 ### Impressum

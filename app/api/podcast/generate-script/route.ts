@@ -33,6 +33,8 @@ import { isWeekWrapup, wrapupPromptSection } from '@/lib/podcast/wrapup-mode'
 import { retrieveMemory, buildMemoryBrief, shouldAnnounceMemoryAwakening } from '@/lib/podcast/memory'
 import { ensureIntermezzoMarker } from '@/lib/podcast/intermezzo'
 import { resolveDialogueRules } from '@/lib/podcast/dialogue-style'
+import { episodeGreetingSuffix, milestoneOf, milestonePromptSection } from '@/lib/podcast/episode-number'
+import { synthszrIssueNumber } from '@/lib/i18n/config'
 import Anthropic from '@anthropic-ai/sdk'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { withUsageLogging } from '@/lib/ai/usage-log'
@@ -51,7 +53,7 @@ const DEFAULT_SCRIPT_PROMPT_DE = `Du bist ein erfahrener Podcast-Skriptautor. Er
 
 **WICHTIG - Podcast-Name und Begrüßung:**
 - Der Podcast heißt IMMER "Synthesizer Daily" - NIEMALS andere Namen wie "TechFinance Daily" oder ähnliche Fantasienamen verwenden!
-- Der WIEDERERKENNUNGSSATZ lautet: "Hey, Hey und Willkommen bei Synthesizer Daily am {weekday}, den {date}!" Er MUSS vorkommen, in dieser Formulierung, gesprochen vom HOST.
+- Der WIEDERERKENNUNGSSATZ lautet: "Hey, Hey und Willkommen bei Synthesizer Daily am {weekday}, den {date}{episodeSuffix}!" Er MUSS vorkommen, in dieser Formulierung, gesprochen vom HOST.
 - Er muss aber NICHT die erste Zeile sein. Ein Cold Open davor ist ausdrücklich erwünscht — die Begrüßung wird dann nachgeschoben, spätestens nach etwa 30 Sekunden. Der Hörer soll früh wissen, wo er ist.
 - WIE die Folge beginnt, steht weiter unten unter EINSTIEG DIESER FOLGE. Halte dich daran.
 - Nach der Begrüßung reißt der HOST das Thema der heutigen Folge kurz an.
@@ -213,7 +215,7 @@ The source content below may be in German or another language. You MUST translat
 
 **IMPORTANT - Podcast Name and Greeting:**
 - The podcast is ALWAYS called "Synthesizer Daily" - NEVER use other names like "TechFinance Daily" or similar fantasy names!
-- The RECOGNISABLE GREETING is: "Hey, Hey and welcome to Synthesizer Daily on {weekday}, {date}!" It MUST occur, in exactly this wording, spoken by the HOST.
+- The RECOGNISABLE GREETING is: "Hey, Hey and welcome to Synthesizer Daily on {weekday}, {date}{episodeSuffix}!" It MUST occur, in exactly this wording, spoken by the HOST.
 - It does NOT have to be the first line. A cold open before it is explicitly welcome: the greeting then follows, within roughly 30 seconds at the latest. Listeners should know early where they are.
 - HOW the episode begins is specified further below under OPENING OF THIS EPISODE. Follow that.
 - After the greeting, the HOST briefly teases the topic of today's episode
@@ -495,6 +497,12 @@ export async function POST(request: NextRequest) {
       ? postDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
       : postDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
+    // Folgennummer für die Begrüßung (Betreiber 2026-11-06): dieselbe
+    // Ausgabenummer, die die Website über dem Artikel zeigt („synthszr #311“).
+    // Ohne Datum des Posts keine Nummer, die Begrüßung bleibt dann wie bisher.
+    const publicEpisode = postCreatedAt ? synthszrIssueNumber(postDate) : null
+    const episodeSuffix = episodeGreetingSuffix(publicEpisode, ttsLang)
+
     let prompt = (body.customPrompt || defaultPrompt)
       .replaceAll('{duration}', String(durationMinutes))
       .replaceAll('{wordCount}', String(wordCount))
@@ -504,6 +512,7 @@ export async function POST(request: NextRequest) {
       .replaceAll('{content}', postContent)
       .replaceAll('{weekday}', weekday)
       .replaceAll('{date}', date)
+      .replaceAll('{episodeSuffix}', episodeSuffix)
       // Dialogregeln zur Laufzeit: Admin-Override (nur EN) oder Code-Default.
       // Funktions-Ersetzung, damit „$" im Regeltext nicht als Muster gilt.
       .replaceAll('{dialogueRules}', () => resolveDialogueRules(ttsLang, settings.podcast_dialogue_rules_en))
@@ -528,8 +537,14 @@ export async function POST(request: NextRequest) {
     const opener = pickOpener(episodeNo, modeSet.openers)
     const closer = pickCloser(episodeNo, modeSet.closers)
     prompt = prompt + (ttsLang === 'de'
-      ? `\n\n**EINSTIEG DIESER FOLGE (verbindlich):**\n${opener.instruction}\nDer Wiedererkennungssatz ("Hey, Hey und Willkommen bei Synthesizer Daily am ${weekday}, den ${date}!") folgt DANACH — spätestens nach etwa 30 Sekunden.\n\n**SCHLUSS DIESER FOLGE (verbindlich):**\n${closer.instruction}\nDie beiden Pflicht-Elemente (morgen wieder, Weiterempfehlung) gehören hinein, aber NEU formuliert — keine der oben genannten verbrauchten Wendungen.`
+      ? `\n\n**EINSTIEG DIESER FOLGE (verbindlich):**\n${opener.instruction}\nDer Wiedererkennungssatz ("Hey, Hey und Willkommen bei Synthesizer Daily am ${weekday}, den ${date}${episodeSuffix}!") folgt DANACH — spätestens nach etwa 30 Sekunden.\n\n**SCHLUSS DIESER FOLGE (verbindlich):**\n${closer.instruction}\nDie beiden Pflicht-Elemente (morgen wieder, Weiterempfehlung) gehören hinein, aber NEU formuliert — keine der oben genannten verbrauchten Wendungen.`
       : `\n\n**OPENING OF THIS EPISODE (mandatory):**\n${opener.instruction}\nThe recognisable greeting follows AFTER that — within roughly 30 seconds.\n\n**CLOSING OF THIS EPISODE (mandatory):**\n${closer.instruction}\nBoth mandatory elements (see you tomorrow, please recommend us) must be there, but freshly worded.`)
+    // Runde Folgen (350, 400, 450 …) werden gefeiert. Angehängt wie Einstieg
+    // und Smalltalk, damit auch ein eigener customPrompt es bekommt.
+    prompt = prompt + milestonePromptSection(publicEpisode, ttsLang)
+    if (publicEpisode) {
+      console.log(`[Podcast Script] Folgennummer ${publicEpisode}${milestoneOf(publicEpisode) !== 'none' ? ' — Jubiläumsfolge' : ''}`)
+    }
     console.log(`[Podcast Script] Folge ${episodeNo}: Einstieg "${opener.key}", Schluss "${closer.key}" (Satz: ${modesFallback ? 'eingebaut' : modeSet.week})`)
 
     // Was zuletzt lief, im Wortlaut — damit sich innerhalb eines Modus nicht

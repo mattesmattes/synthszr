@@ -80,6 +80,18 @@ export const LOCALE_STRINGS: Record<LanguageCode, string> = {
 }
 
 /**
+ * Ausgabenummer („synthszr #311“) = ganze Kalendertage seit dem 29.12.2025.
+ * Aus den lokalen Kalenderteilen des Datums, UTC-normiert, damit sie zum
+ * angezeigten Datum passt, egal in welcher Zeitzone der Server läuft. Die
+ * Website zeigt sie über dem Artikel, der Podcast nennt sie in der Begrüßung.
+ */
+export function synthszrIssueNumber(date: string | Date): number {
+  const d = typeof date === 'string' ? new Date(date) : date
+  const SYNTHSZR_EPOCH_UTC = Date.UTC(2025, 11, 29) // month is 0-indexed → 11 = December
+  return Math.max(0, Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - SYNTHSZR_EPOCH_UTC) / 86_400_000))
+}
+
+/**
  * Format a date with weekday for the "Update from..." display
  * Each language has its own natural pattern
  */
@@ -99,12 +111,7 @@ export function formatUpdateDate(date: string | Date, locale: LanguageCode): str
     year: 'numeric'
   })
 
-  // Issue number = whole calendar days since the synthszr epoch (29 Dec 2025).
-  // Computed from UTC-normalized calendar parts so it matches the displayed date
-  // regardless of server timezone (the displayed day/month/year above is local).
-  const SYNTHSZR_EPOCH_UTC = Date.UTC(2025, 11, 29) // month is 0-indexed → 11 = December
-  const issue = Math.max(0, Math.round((Date.UTC(year, d.getMonth(), d.getDate()) - SYNTHSZR_EPOCH_UTC) / 86_400_000))
-  const prefix = `synthszr #${issue}`
+  const prefix = `synthszr #${synthszrIssueNumber(d)}`
 
   switch (locale) {
     case 'de':
