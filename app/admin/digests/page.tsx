@@ -258,7 +258,8 @@ export default function DigestsPage() {
       }
     } catch (error) {
       console.error('Save error:', error)
-      alert('Fehler beim Speichern')
+      // Meldung durchreichen: z. B. die 409 „gibt es bereits einen Digest" (Unique-Index ab 2026-11-07)
+      alert(error instanceof Error && error.message ? error.message : 'Fehler beim Speichern')
       setSaving(false)
     }
   }
