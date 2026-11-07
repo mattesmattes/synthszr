@@ -14,7 +14,7 @@
  * Sonst bleibt er offen und wird beim naechsten Tick wiederholt.
  */
 import { describe, expect, it } from 'vitest'
-import { isStepComplete, dependencyGate, analysisGate } from '@/lib/scheduler/gating'
+import { isStepComplete, dependencyGate, analysisGate, digestInsertOutcome } from '@/lib/scheduler/gating'
 
 describe('isStepComplete', () => {
   it('gilt NICHT als erledigt, wenn nichts eingesammelt wurde', () => {
@@ -73,5 +73,26 @@ describe('analysisGate', () => {
 
   it('haengt nicht am Abruf, wenn der abgeschaltet ist', () => {
     expect(analysisGate({ fetchEnabled: false, fetchState: undefined })).toBe('ready')
+  })
+})
+
+/**
+ * Seit 2026-11-07 gilt ein Unique-Index auf daily_digests.digest_date. Laufen
+ * zwei Tagesanalysen parallel, scheitert der Insert der spaeteren mit 23505 —
+ * das ist KEIN Fehler: der andere Lauf hat den Digest gespeichert und fuehrt
+ * die Synthese aus.
+ */
+describe('digestInsertOutcome', () => {
+  it('meldet gespeichert, wenn der Insert durchging', () => {
+    expect(digestInsertOutcome(null)).toBe('saved')
+  })
+
+  it('erkennt den parallelen Lauf an der Unique-Verletzung', () => {
+    expect(digestInsertOutcome({ code: '23505', message: 'duplicate key value' })).toBe('parallel_run')
+  })
+
+  it('behandelt alles andere als Fehler', () => {
+    expect(digestInsertOutcome({ code: '42P01', message: 'relation does not exist' })).toBe('error')
+    expect(digestInsertOutcome({ message: 'network' })).toBe('error')
   })
 })

@@ -8,7 +8,7 @@ import { expireOldItems as expireOldQueueItems, resetStuckSelectedItems, syncPub
 import { MAX_DIGEST_SECTIONS, MIN_ANALYSIS_LENGTH } from '@/lib/constants/thresholds'
 import { verifyCronAuth } from '@/lib/security/cron-auth'
 import { getModelForUseCase } from '@/lib/ai/model-config'
-import { isStepComplete, dependencyGate, analysisGate } from '@/lib/scheduler/gating'
+import { isStepComplete, dependencyGate, analysisGate, digestInsertOutcome } from '@/lib/scheduler/gating'
 import { DEFAULT_SCHEDULE_TIMEZONE, dayKeys, isValidTimeZone, localClock, localDay } from '@/lib/scheduler/clock'
 
 export const runtime = 'nodejs'
@@ -608,6 +608,13 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
     })
     .select('id')
     .single()
+
+  if (digestInsertOutcome(insertError) === 'parallel_run') {
+    // Unique-Index (seit 2026-11-07): ein paralleler Lauf war schneller und
+    // fuehrt die Synthese selbst aus — hier nichts doppelt anstossen.
+    console.log(`[DailyAnalysis] Digest fuer ${digestDate} hat ein paralleler Lauf schon gespeichert — uebernommen`)
+    return { success: true }
+  }
 
   if (insertError || !newDigest) {
     console.error('[DailyAnalysis] Failed to save digest:', insertError)

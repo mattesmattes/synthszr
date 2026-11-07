@@ -49,3 +49,16 @@ export function dependencyGate(previousState: string | undefined): 'ready' | 'wa
 export function analysisGate(opts: { fetchEnabled: boolean; fetchState: string | undefined }): 'ready' | 'waiting' {
   return opts.fetchEnabled ? dependencyGate(opts.fetchState) : 'ready'
 }
+
+/**
+ * Was bedeutet das Ergebnis des Digest-Inserts fuer die Tageskette?
+ *
+ * Seit 2026-11-07 gilt ein Unique-Index auf daily_digests.digest_date
+ * (Migration 20261107090000). Scheitert der Insert mit 23505, hat ein
+ * paralleler Lauf den Digest schon gespeichert und fuehrt die Synthese aus —
+ * dieser Lauf ist dann erledigt, nicht gestoert.
+ */
+export function digestInsertOutcome(error: { code?: string; message?: string } | null): 'saved' | 'parallel_run' | 'error' {
+  if (!error) return 'saved'
+  return error.code === '23505' ? 'parallel_run' : 'error'
+}
