@@ -36,3 +36,16 @@ export function isStepComplete(result: { success: boolean; produced?: number }):
 export function dependencyGate(previousState: string | undefined): 'ready' | 'waiting' {
   return previousState === 'completed' || previousState === 'already_ran' ? 'ready' : 'waiting'
 }
+
+/**
+ * Darf die Tagesanalyse loslaufen?
+ *
+ * BEFUND 2026-11-07: Der Abruf hing bis 06:46 (Gmail-Token ungueltig), die
+ * Analyse lief trotzdem um 04:16 — das 28h-Fenster enthielt noch Material vom
+ * Vortag, also gab es kein „keine Quellen". Damit galt der Tag als analysiert,
+ * und alles, was danach eintraf, erreichte die Queue nie. Die Analyse wartet
+ * deshalb, bis der Abruf HEUTE erledigt ist.
+ */
+export function analysisGate(opts: { fetchEnabled: boolean; fetchState: string | undefined }): 'ready' | 'waiting' {
+  return opts.fetchEnabled ? dependencyGate(opts.fetchState) : 'ready'
+}

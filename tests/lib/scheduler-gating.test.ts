@@ -14,7 +14,7 @@
  * Sonst bleibt er offen und wird beim naechsten Tick wiederholt.
  */
 import { describe, expect, it } from 'vitest'
-import { isStepComplete, dependencyGate } from '@/lib/scheduler/gating'
+import { isStepComplete, dependencyGate, analysisGate } from '@/lib/scheduler/gating'
 
 describe('isStepComplete', () => {
   it('gilt NICHT als erledigt, wenn nichts eingesammelt wurde', () => {
@@ -50,5 +50,28 @@ describe('dependencyGate', () => {
     expect(dependencyGate('error')).toBe('waiting')
     expect(dependencyGate(undefined)).toBe('waiting')
     expect(dependencyGate('not_scheduled')).toBe('waiting')
+  })
+})
+
+/**
+ * PROD-BEFUND 2026-11-07: Der Abruf hing bis 06:46 (Gmail-Token ungueltig),
+ * die Tagesanalyse lief trotzdem um 04:16 — mit altem Material aus dem
+ * 28h-Fenster. Damit galt die Analyse als erledigt, und die 1.508 Items, die
+ * um 06:46 kamen, erreichten die Queue nie.
+ */
+describe('analysisGate', () => {
+  it('WARTET, solange der Newsletter-Abruf heute nicht erledigt ist', () => {
+    expect(analysisGate({ fetchEnabled: true, fetchState: 'waiting_for_mail' })).toBe('waiting')
+    expect(analysisGate({ fetchEnabled: true, fetchState: 'error' })).toBe('waiting')
+    expect(analysisGate({ fetchEnabled: true, fetchState: 'not_scheduled' })).toBe('waiting')
+  })
+
+  it('laesst durch, sobald der Abruf erledigt ist', () => {
+    expect(analysisGate({ fetchEnabled: true, fetchState: 'completed' })).toBe('ready')
+    expect(analysisGate({ fetchEnabled: true, fetchState: 'already_ran' })).toBe('ready')
+  })
+
+  it('haengt nicht am Abruf, wenn der abgeschaltet ist', () => {
+    expect(analysisGate({ fetchEnabled: false, fetchState: undefined })).toBe('ready')
   })
 })
