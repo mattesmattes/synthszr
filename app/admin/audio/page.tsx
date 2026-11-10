@@ -603,6 +603,12 @@ function AudioPage() {
   const [dialogueRules, setDialogueRules] = useState('')
   const [dialogueRulesDefault, setDialogueRulesDefault] = useState('')
   const [scriptGenerated, setScriptGenerated] = useState(false)
+  // Solange ein Script oder Audio entsteht, ist kein zweiter Start möglich
+  // (Betreiber 2026-11-10: „Podcast generieren" war während der
+  // Script-Erzeugung klickbar). Der State sperrt die Buttons, der Ref fängt
+  // einen Doppelklick ab, bevor React neu gerendert hat.
+  const podcastBusy = scriptGenerating || podcastGenerating
+  const podcastBusyRef = useRef(false)
   const [scriptModified, setScriptModified] = useState(false)
 
   // Mixing state
@@ -1011,10 +1017,12 @@ function AudioPage() {
   }
 
   async function generateScriptFromPost() {
+    if (podcastBusyRef.current) return
     if (!selectedPostId) {
       setPodcastError('Bitte wähle einen Post aus')
       return
     }
+    podcastBusyRef.current = true
     setScriptGenerating(true)
     setPodcastError(null)
     try {
@@ -1038,14 +1046,17 @@ function AudioPage() {
       setPodcastError(describeScriptError(error))
     } finally {
       setScriptGenerating(false)
+      podcastBusyRef.current = false
     }
   }
 
   async function generateScriptAndPodcast() {
+    if (podcastBusyRef.current) return
     if (!selectedPostId) {
       setPodcastError('Bitte wähle einen Post aus')
       return
     }
+    podcastBusyRef.current = true
     setScriptGenerating(true)
     setPodcastError(null)
     let generatedScript: string
@@ -1070,19 +1081,24 @@ function AudioPage() {
       console.error('Script generation error:', error)
       setPodcastError(describeScriptError(error))
       setScriptGenerating(false)
+      podcastBusyRef.current = false
       return
     }
     setScriptGenerating(false)
-    // Automatically proceed to audio generation with the freshly generated script
-    generatePodcast(generatedScript)
+    // Automatically proceed to audio generation with the freshly generated script.
+    // Die Sperre bleibt gehalten und geht an die Audio-Erzeugung über.
+    generatePodcast(generatedScript, { lockHeld: true })
   }
 
-  async function generatePodcast(scriptOverride?: string) {
+  async function generatePodcast(scriptOverride?: string, opts: { lockHeld?: boolean } = {}) {
+    if (podcastBusyRef.current && !opts.lockHeld) return
     const script = scriptOverride || podcastScript
     if (!script.trim()) {
       setPodcastError('Bitte gib ein Script ein')
+      podcastBusyRef.current = false
       return
     }
+    podcastBusyRef.current = true
     setPodcastGenerating(true)
     setPodcastError(null)
     setPodcastAudioUrl(null)
@@ -1153,6 +1169,7 @@ function AudioPage() {
     } finally {
       setPodcastGenerating(false)
       setPodcastJobId(null)
+      podcastBusyRef.current = false
     }
   }
 
@@ -1255,7 +1272,7 @@ function AudioPage() {
                     </SelectContent>
                   </Select>
 
-                  <Button onClick={generateScriptAndPodcast} disabled={scriptGenerating || podcastGenerating || !selectedPostId}>
+                  <Button onClick={generateScriptAndPodcast} disabled={podcastBusy || !selectedPostId}>
                     {scriptGenerating ? (
                       <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Script wird generiert...</>
                     ) : podcastGenerating ? (
@@ -1264,7 +1281,7 @@ function AudioPage() {
                       <><Sparkles className="mr-2 h-4 w-4" />Script + Audio generieren</>
                     )}
                   </Button>
-                  <Button onClick={generateScriptFromPost} disabled={scriptGenerating || !selectedPostId} variant="outline" size="sm">
+                  <Button onClick={generateScriptFromPost} disabled={podcastBusy || !selectedPostId} variant="outline" size="sm">
                     Nur Script
                   </Button>
                 </div>
@@ -1343,9 +1360,11 @@ function AudioPage() {
 
               {/* Generate Button & Status */}
               <div className="flex items-center gap-4">
-                <Button onClick={() => generatePodcast()} disabled={podcastGenerating || !podcastScript.trim()} className="min-w-[180px]">
+                <Button onClick={() => generatePodcast()} disabled={podcastBusy || !podcastScript.trim()} className="min-w-[180px]">
                   {podcastGenerating ? (
                     <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generiere...</>
+                  ) : scriptGenerating ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Script entsteht...</>
                   ) : (
                     <><Sparkles className="mr-2 h-4 w-4" />Podcast generieren</>
                   )}
