@@ -19,6 +19,34 @@ const EXTRACT_VERSION = '1b-i'
 // ranking_jobs.budget_extract überschreibbar; bei Cap stoppt extract sauber.
 const EXTRACT_TOKEN_BUDGET_DEFAULT = 2_000_000
 
+/** Jobs, die ihre Versuche aufgebraucht haben, aber noch als aktiv gelten.
+ *  claim_ranking_job überspringt sie (attempts < max_attempts), schließt sie
+ *  aber nie ab: Befund 2026-11-11, vier daily-Jobs vom Juli standen noch auf
+ *  `processing`, und die Admin-Seite zeigte den jüngsten davon als „aktiven
+ *  Lauf“ statt des heutigen. */
+export function isExhaustedJob(j: { status: string; attempts: number | null; max_attempts: number | null }): boolean {
+  if (j.status !== 'pending' && j.status !== 'processing') return false
+  return (j.attempts ?? 0) >= (j.max_attempts ?? Infinity)
+}
+
+/** Schließt erschöpfte Jobs mit status='error'. Best-effort: ein Fehler hier
+ *  blockiert den Lauf nicht. */
+async function closeExhaustedJobs(supabase: ReturnType<typeof createAdminClient>): Promise<number> {
+  const { data, error } = await supabase
+    .from('ranking_jobs').select('id, status, attempts, max_attempts')
+    .in('status', ['pending', 'processing'])
+  if (error || !data) return 0
+  const ids = data.filter(isExhaustedJob).map((j) => j.id)
+  if (ids.length === 0) return 0
+  const { error: upErr } = await supabase.from('ranking_jobs').update({
+    status: 'error', completed_at: new Date().toISOString(),
+    error_message: 'Abgebrochen: maximale Versuche erreicht, ohne Abschluss',
+  }).in('id', ids)
+  if (upErr) { console.error('[RankingJobs] close exhausted failed:', upErr.message); return 0 }
+  console.log(`[RankingJobs] ${ids.length} erschöpfte Jobs geschlossen`)
+  return ids.length
+}
+
 /** Legt einen Ranking-Job an. Täglich idempotent via UNIQUE(mode, run_date) WHERE mode='daily'.
  *  Bei 23505 (Duplikat) → {created:false, reason:'already_created_today'}.
  */
@@ -39,6 +67,7 @@ export async function createRankingJob(opts: { mode?: 'daily' | 'backfill' } = {
  */
 export async function advanceRankingJob(_jobId?: string): Promise<string> {
   const supabase = createAdminClient()
+  await closeExhaustedJobs(supabase)
   const { data: job, error } = await supabase
     .rpc('claim_ranking_job', { stale_before: staleBeforeIso(Date.now()) })
     .maybeSingle()
@@ -168,15 +197,18 @@ export async function advanceRankingJob(_jobId?: string): Promise<string> {
 export async function getRankingExtractStatus() {
   const supabase = createAdminClient()
   const head = { count: 'exact' as const, head: true }
-  const sel = 'id, mode, phase, status, spend_tokens, budget_extract, run_date, last_advanced_at, error_message'
+  const sel = 'id, mode, phase, status, spend_tokens, budget_extract, run_date, last_advanced_at, error_message, attempts, max_attempts'
 
   // Aktiver Job (egal Modus) hat Vorrang — sonst sieht man bei laufendem Backfill
   // nur den abgeschlossenen daily-Job. Fallback: jüngster Job überhaupt.
-  let { data: job } = await supabase
+  // Erschöpfte Jobs (Versuche aufgebraucht, nie abgeschlossen) zählen nicht
+  // als aktiv; der Vergleich zweier Spalten geht in PostgREST nicht, daher hier.
+  const { data: active } = await supabase
     .from('ranking_jobs').select(sel)
     .in('status', ['pending', 'processing'])
     .order('last_advanced_at', { ascending: false, nullsFirst: false })
-    .limit(1).maybeSingle()
+    .limit(20)
+  let job = (active ?? []).find((j) => !isExhaustedJob(j)) ?? null
   if (!job) {
     // Kein aktiver Lauf → den täglichen Stand zeigen (nicht einen alten Backfill).
     const r = await supabase.from('ranking_jobs').select(sel).eq('mode', 'daily').order('created_at', { ascending: false }).limit(1).maybeSingle()

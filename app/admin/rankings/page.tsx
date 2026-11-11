@@ -27,6 +27,7 @@ export default function RankingsAdminPage() {
   const [running, setRunning] = useState(false)
   const [lastResult, setLastResult] = useState<string>('')
   const [error, setError] = useState<string>('')
+  const [notice, setNotice] = useState<string>('')
   const stopRef = useRef(false)
   const [qa, setQa] = useState<{ counts: Record<string, number>; recent: Array<{ slug: string; current_vendor: string; action: string; merged_into_slug: string | null; suggested_company: string | null; confidence: number | null; reasoning: string }> } | null>(null)
 
@@ -45,16 +46,24 @@ export default function RankingsAdminPage() {
 
   // Browser-getriebener Lauf: Job anlegen, dann Batch für Batch advancen bis fertig.
   const runOnce = async () => {
-    setError(''); setRunning(true); stopRef.current = false
+    setError(''); setNotice(''); setRunning(true); stopRef.current = false
     try {
-      await fetch('/api/admin/product-extract-job', { method: 'POST' }) // create (idempotent)
+      const created = await fetch('/api/admin/product-extract-job', { method: 'POST' }).then((r) => r.json()).catch(() => null) // create (idempotent)
       while (!stopRef.current) {
         const r = await fetch('/api/admin/product-extract-job?advance=1', { method: 'POST' })
         if (!r.ok) throw new Error((await r.json()).error ?? r.statusText)
         const data = await r.json()
         setStatus(data)
         setLastResult(data.result ?? '')
-        if (['extract_done', 'extract_empty', 'no_job', 'extract_budget_exhausted'].includes(data.result) || String(data.result).startsWith('claim_error')) break
+        if (data.result === 'no_job') {
+          // Kein Abbruch: der tägliche Job ist schon gelaufen (Cron 05:00 UTC),
+          // ein zweiter am selben Tag wird bewusst nicht angelegt.
+          setNotice(created?.reason === 'already_created_today'
+            ? `Heute schon gelaufen${data.job?.status === 'done' ? ' und abgeschlossen' : ''}. ${data.windowRemaining > 0 ? `${fmt(data.windowRemaining)} News im Fenster sind noch offen.` : 'Im Fenster ist nichts mehr offen.'}`
+            : 'Kein Job zu bearbeiten.')
+          break
+        }
+        if (['extract_done', 'extract_empty', 'extract_budget_exhausted'].includes(data.result) || String(data.result).startsWith('claim_error')) break
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -117,6 +126,7 @@ export default function RankingsAdminPage() {
       <div className="text-sm text-gray-700 space-y-1">
         <div>Job: <b>{s?.job?.mode ?? '—'}</b> · <b>{s?.job?.status ?? '—'}</b> · Phase {s?.job?.phase ?? '—'} · {s?.job?.run_date ?? '—'}</div>
         {lastResult && <div>Letzter Schritt: <code>{lastResult}</code></div>}
+        {notice && <div className="text-gray-900">{notice}</div>}
         {s?.job?.error_message && <div className="text-red-600">Fehler: {s.job.error_message}</div>}
         {error && <div className="text-red-600">Fehler: {error}</div>}
       </div>
