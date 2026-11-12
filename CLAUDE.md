@@ -723,6 +723,19 @@ Not-Aus: `update curation_runs set cancel_requested = true where id = …` —
 `advanceRun` schließt den Run beim nächsten Tick als `cancelled` ab, bevor er
 weiterarbeitet. `shadow_enabled = false` stoppt nur neue Kickoffs.
 
+## Recent Changes (2026-11-12)
+
+### Admin: Top sources
+- Admin → News & Synthese → „Top sources“ (`app/admin/top-sources/page.tsx`,
+  `GET /api/admin/top-sources?days=30|90|365|0`): die 50 Domains, auf die die
+  veröffentlichten Posts am häufigsten verlinken, nach Zahl der Links; dazu
+  Posts mit der Domain, Anteil der Posts und letzte Nutzung. Zeitraum 30/90/365
+  Tage oder Gesamt (Default 90).
+- Rechnung in `lib/admin/top-sources.ts`: link-Marks aus dem TipTap-Inhalt,
+  Domain ohne „www.“ (Subdomains wie autor.substack.com getrennt), jede URL
+  einmal je Post, interne (synthszr.com) und relative Links zählen nicht.
+  Kein Cache, keine Tabelle: die Route lädt die Post-Inhalte seitenweise.
+
 ## Recent Changes (2026-11-06)
 
 ### Podcast: Folgennummer und Jubiläumsfolgen
