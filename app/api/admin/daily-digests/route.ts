@@ -72,6 +72,13 @@ export async function POST(request: NextRequest) {
     .select('id')
     .single()
 
+  // Unique-Index ab 2026-11-07 (Migration 20261107090000): ein Digest pro Tag.
+  if (error?.code === '23505') {
+    return NextResponse.json(
+      { error: `Für ${digestDate} gibt es bereits einen Digest. Bitte den bestehenden erst löschen.` },
+      { status: 409 },
+    )
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }
