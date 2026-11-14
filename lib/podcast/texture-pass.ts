@@ -196,7 +196,7 @@ DO:
 1. Thin out the punchlines: at most one crafted punchline or wordplay per story, not counting today's devices; turn the rest into plain talk or a pivot, or simply let the exchange stop.
 2. Replace worn wording: the phrases and lines listed under WORN OUT, and any phrase, hand-off, transition or joke shape that appears more than twice in this script (today's devices excepted).
 3. Insert three to six plain backchannel lines (one to three words, no joke) inside explanations of 40 to 100 words: split such a line into two lines of the same speaker and put the other speaker's short line in between, mid-thought.
-4. In about one long line out of five, add a natural stumble: a restart, "I mean,", "look,", a trailing ... (never inside a number or a name).
+4. Give most lines over 50 words one spoken mark: a restart, a self-correction, an aside, or a filler ("I mean,", "you know,", "look,", "like"); no filler more than five times in the script, never inside a number or a name. Never leave three balanced, finished sentences in a row.
 5. Language today: ${opts.coarseness}
 6. Vary voice directions that repeat more than three times; keep them as speech instructions (affect, tone, pacing).
 7. Where a speaker labels their own move or stance instead of just making it (announcing a verdict, a crusade, a takeover, a tally or scoreboard), cut the label and keep the act. A game or segment may keep its name.
