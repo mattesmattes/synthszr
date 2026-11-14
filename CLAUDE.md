@@ -800,6 +800,20 @@ das Skript jeden Tag neu ausrichtet). Ablauf in
   `texture: {applied, problems}`; Admin → Audio zeigt darunter die Zeile
   „Regie: … — Textur übernommen/verworfen“. Modelle für Regisseur und
   Textur: Admin → Einstellungen → Podcast.
+- **Karte „Tagesregie“** im Podcast Studio (Tab Episode, unter „Episode
+  Script“; Betreiber 2026-11-15: die Logik soll transparent sein):
+  `components/admin/podcast-regie-panel.tsx`, Daten aus
+  `GET /api/admin/podcast-regie?lang=en|de&postId=` (Admin, nur lesend;
+  `buildRegieOverview` in `lib/podcast/regie/overview.ts`). Zeigt die
+  Vorschau der Ziehung für den ausgewählten Post (speichert nichts), die
+  letzten Folgen (bis 21, zunächst fünf) mit allen sieben Werten,
+  Regisseur ja/nein und Texturergebnis, aufklappbar den Plan des Regisseurs,
+  die „verbraucht“-Liste, die Artikel-Echos und den Verwurf-Grund, dazu den
+  Katalog mit Nutzung in den letzten 14 Folgen und Sperren
+  (`regieAxisStates`, dieselbe Rechnung wie `sampleRegie`). Die Details
+  schreibt die Skript-Route seit 2026-11-15 mit in die Historie
+  (`title`, `createdAt`, `directed`, `fill`, `worn`, `texture`, `echoes`);
+  ältere Einträge haben nur die gezogenen Werte.
 - Persönlichkeits-Brief: je Folge nur ein erlaubter Callback aus den
   gemeinsamen Erinnerungen (`todaysCallback`, rotiert über die
   Ausgabenummer), Verabschiedung frisch formuliert, die Reflexion am Schluss

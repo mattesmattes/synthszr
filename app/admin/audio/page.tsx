@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { AudioFileManager, type AudioFile } from '@/components/admin/audio-file-manager'
 import { PodcastTimeMachine } from '@/components/admin/podcast-time-machine'
+import { PodcastRegiePanel } from '@/components/admin/podcast-regie-panel'
 import { EnvelopeEditor } from '@/components/admin/envelope-editor'
 import type { AudioEnvelope } from '@/lib/audio/envelope'
 import { legacyIntroToEnvelopes, legacyOutroToEnvelopes, legacyIntermezzoToEnvelopes } from '@/lib/audio/envelope'
@@ -624,6 +625,8 @@ function AudioPage() {
   const [dialogueRulesDefault, setDialogueRulesDefault] = useState('')
   const [scriptGenerated, setScriptGenerated] = useState(false)
   const [scriptRunInfo, setScriptRunInfo] = useState<ScriptRunInfo | null>(null)
+  // Zählt Skript-Erzeugungen, damit die Karte „Tagesregie“ danach neu lädt.
+  const [regieRefresh, setRegieRefresh] = useState(0)
   // Solange ein Script oder Audio entsteht, ist kein zweiter Start möglich
   // (Betreiber 2026-11-10: „Podcast generieren" war während der
   // Script-Erzeugung klickbar). Der State sperrt die Buttons, der Ref fängt
@@ -1060,6 +1063,7 @@ function AudioPage() {
       const data = await readScriptResponse(res)
       setPodcastScript(data.script)
       setScriptRunInfo(data)
+      setRegieRefresh((n) => n + 1)
       setScriptGenerated(true)
       setScriptModified(false)
       setPodcastAudioUrl(null)
@@ -1097,6 +1101,7 @@ function AudioPage() {
       generatedScript = data.script
       setPodcastScript(generatedScript)
       setScriptRunInfo(data)
+      setRegieRefresh((n) => n + 1)
       setScriptGenerated(true)
       setScriptModified(false)
       setPodcastAudioUrl(null)
@@ -1499,6 +1504,9 @@ function AudioPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Tagesregie: was sich je Folge ändert (Historie, Vorschau, Katalog) */}
+          <PodcastRegiePanel postId={selectedPostId || undefined} locale={selectedLocale} refreshKey={regieRefresh} />
 
           {/* Dialogregeln (EN) — Setting podcast_dialogue_rules_en, leer = Code-Default */}
           <Card>

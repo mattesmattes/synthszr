@@ -12,6 +12,8 @@
  *   die konkrete Ausgestaltung durch den Regisseur kann anders ausfallen.
  */
 import { REGIE_AXES, type AxisId } from '@/lib/podcast/regie/catalog'
+import type { RegieFill } from '@/lib/podcast/regie/director'
+import type { WornOut } from '@/lib/podcast/fingerprint'
 
 export type RegiePicks = Record<AxisId, string[]>
 
@@ -20,6 +22,18 @@ export interface RegieHistoryEntry {
   date: string
   postId: string
   picks: RegiePicks
+  // Ab 2026-11-15 für die Karte „Tagesregie“ im Podcast Studio. Die Ziehung
+  // liest nur `picks`; ältere Einträge haben diese Felder nicht.
+  title?: string
+  /** Zeitpunkt der Skript-Erzeugung (ISO). */
+  createdAt?: string
+  /** Ob der Regisseur-Aufruf einen Plan geliefert hat. */
+  directed?: boolean
+  fill?: RegieFill | null
+  worn?: WornOut
+  texture?: { applied: boolean; problems: string[] }
+  /** Stellen, die den Artikel wörtlich nachsprachen und umformuliert werden sollten. */
+  echoes?: string[]
 }
 
 export interface RegieCoordinates {
@@ -29,6 +43,38 @@ export interface RegieCoordinates {
 }
 
 const WINDOW = 14
+
+export interface AxisState {
+  id: AxisId
+  pick: number
+  cooldown: number
+  /** Je Option: wie oft in den letzten 14 Folgen und ob für die nächste Folge gesperrt. */
+  options: Array<{ id: string; uses: number; blocked: boolean }>
+}
+
+/**
+ * Was die nächste Ziehung sieht: Nutzung je Option im Fenster und die Sperren.
+ * Dieselbe Rechnung wie `sampleRegie`; reichen die freien Optionen nicht,
+ * gibt die Ziehung alle frei (dann ist hier keine gesperrt).
+ */
+export function regieAxisStates(history: RegieHistoryEntry[], postId?: string): AxisState[] {
+  const past = history.filter((h) => h.postId !== postId).slice(0, WINDOW)
+  return REGIE_AXES.map((ax) => {
+    const blocked = new Set(past.slice(0, ax.cooldown).flatMap((h) => h.picks?.[ax.id] ?? []))
+    const freeCount = ax.options.filter((opt) => !blocked.has(opt.id)).length
+    const effective = freeCount < ax.pick ? new Set<string>() : blocked
+    return {
+      id: ax.id,
+      pick: ax.pick,
+      cooldown: ax.cooldown,
+      options: ax.options.map((opt) => ({
+        id: opt.id,
+        uses: past.filter((h) => (h.picks?.[ax.id] ?? []).includes(opt.id)).length,
+        blocked: effective.has(opt.id),
+      })),
+    }
+  })
+}
 
 function hash(s: string): number {
   let h = 2166136261
