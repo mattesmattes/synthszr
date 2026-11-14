@@ -36,11 +36,11 @@ export const DIALOGUE_STYLE_RULES_EN = `**DIALOGUE STYLE (how it sounds; every r
 11. Studio moments happen in speech, not in tags: "Hold on, I marked that passage...", "Let me check that real quick...", "I'm just grabbing my coffee." At most two per episode, placed where someone genuinely looks something up or stalls. There are no sound effects in the mix, so a sip or a rustle is only real when it is said.
 
 Example (mid-episode, handing over a news item; invented, for rhythm only):
-HOST: [dry, clipped, unimpressed] Next. Nvidia is lending money to the very companies that buy its chips. Which, to me, is a store financing its own customers so the sales numbers look great. Synthesizer, is this a bank or a Ponzi scheme with a logo?
+HOST: [indignant, emphatic, fast] Next. Nvidia is lending money to the very companies that buy its chips. I mean, come on. That's not demand, that's Nvidia paying people to buy from Nvidia, and somebody on that board should say so out loud. Defend it, I dare you.
 GUEST: [booming, emphatic, building] Neither. This isn't about lending, it's about the next quarter. Every idle GPU at a neocloud is an order that never comes back, so Nvidia rents out its own balance sheet to keep demand breathing. It's the oldest move in hardware: you finance the buyer, you book the sale, and you hope the music doesn't stop before your options vest. And here's my prediction: within twelve months one of those renters defaults and the chips come home with an invoice stapled to them.
-HOST (overlapping): [sharp, fast, cutting in] With a bow on top.
-GUEST: [conspiratorial, amused] A very expensive bow.
-HOST: [deadpan, flat] Yeah. I've seen this movie. It ends in a bankruptcy court in Delaware.
+HOST (overlapping): [sharp, fast, cutting in] And the investors eat it.
+GUEST: [conspiratorial, amused] The investors always eat it.
+HOST: [scoffing, amused, quick] Yeah. They're lying to themselves. They're lying to themselves, and they know it.
 GUEST: [indignant, fast] It ends in a stock buyback, Emma.
 HOST: [exasperated, amused] Same thing, better lighting. Moving on.`
 
@@ -59,11 +59,11 @@ export const DIALOGUE_STYLE_RULES_DE = `**DIALOG-STIL (so klingt es; jede Regel 
 11. Studio-Momente passieren im Sprechen, nicht in Tags: „Moment, das hab ich mir markiert...", „Warte, ich schau kurz nach...", „Ich hol mir eben meinen Kaffee." Höchstens zwei pro Folge, dort, wo jemand wirklich nachschlägt oder Zeit braucht. Geräusche gibt es im Mix nicht, ein Schluck oder Papier ist nur echt, wenn es gesagt wird.
 
 Beispiel (mitten in der Folge, Übergabe einer News; erfunden, nur für den Rhythmus):
-HOST: [dry, clipped, unimpressed] Nächste. Nvidia leiht genau den Firmen Geld, die seine Chips kaufen. Für mich ist das ein Laden, der seine eigenen Kunden finanziert, damit die Umsatzzahlen gut aussehen. Synthesizer, ist das eine Bank oder ein Schneeballsystem mit Logo?
+HOST: [indignant, emphatic, fast] Nächste. Nvidia leiht genau den Firmen Geld, die seine Chips kaufen. Ich meine, ernsthaft. Das ist keine Nachfrage, das ist Nvidia, das Leute dafür bezahlt, bei Nvidia zu kaufen, und irgendwer im Aufsichtsrat sollte das laut sagen. Verteidige das, ich warte.
 GUEST: [booming, emphatic, building] Weder noch. Es geht hier nicht ums Verleihen, es geht ums nächste Quartal. Jede GPU, die bei einem Neocloud leer läuft, ist eine Bestellung, die nie wiederkommt, also vermietet Nvidia seine eigene Bilanz, damit die Nachfrage weiteratmet. Der älteste Trick der Hardware: Du finanzierst den Käufer, verbuchst den Verkauf und hoffst, dass die Musik nicht aufhört, bevor deine Optionen fällig sind. Meine Prognose: Innerhalb von zwölf Monaten fällt einer dieser Mieter aus, und die Chips kommen mit angehefteter Rechnung zurück.
-HOST (overlapping): [sharp, fast, cutting in] Mit Schleife drum.
-GUEST: [conspiratorial, amused] Einer sehr teuren Schleife.
-HOST: [deadpan, flat] Ja. Den Film kenn ich. Der endet vor einem Insolvenzgericht in Delaware.
+HOST (overlapping): [sharp, fast, cutting in] Und die Anleger fressen es.
+GUEST: [conspiratorial, amused] Die Anleger fressen es immer.
+HOST: [scoffing, amused, quick] Ja. Die belügen sich selbst. Die belügen sich selbst, und sie wissen es.
 GUEST: [indignant, fast] Der endet mit einem Aktienrückkauf, Emma.
 HOST: [exasperated, amused] Gleiche Sache, besseres Licht. Weiter.`
 
