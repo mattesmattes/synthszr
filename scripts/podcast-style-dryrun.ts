@@ -36,7 +36,7 @@ import { buildPersonalityBrief, type PersonalityState } from '@/lib/podcast/pers
 import { computeWornOut, wornSection } from '@/lib/podcast/fingerprint'
 import { sampleRegie, type RegieCoordinates, type RegieHistoryEntry } from '@/lib/podcast/regie/sampler'
 import { buildDirectorPrompt, parseRegieFill, runDirector, summarizeCoordinates, type RegieFill } from '@/lib/podcast/regie/director'
-import { coarsenessInstruction, renderRegieSection } from '@/lib/podcast/regie/render'
+import { coarsenessInstruction, renderRegieSection, textureDeviceNotes } from '@/lib/podcast/regie/render'
 import { withEntry } from '@/lib/podcast/regie/history'
 import { buildTexturePrompt, quotesFromMoments, splitMomentsSection, stripPreamble, validateTexture } from '@/lib/podcast/texture-pass'
 
@@ -58,6 +58,13 @@ function readPost() {
 const readJson = <T>(file: string, fallback: T): T => (existsSync(file) ? JSON.parse(readFileSync(file, 'utf-8')) as T : fallback)
 const recentScripts = () => (arg('recent') ? arg('recent')!.split(',').filter(Boolean).map((f) => readFileSync(f, 'utf-8')) : [])
 const coordsFile = join(out, 'coords.json')
+
+/** regie-fill.json: Rohausgabe des Regisseurs (snake_case, wird geprüft) oder schon geprüfte RegieFill. */
+function readFill(content: string, coords: RegieCoordinates): RegieFill | null {
+  const raw = readJson<unknown>(join(out, 'regie-fill.json'), null)
+  if (!raw) return null
+  return (raw as { devicePlans?: unknown }).devicePlans ? (raw as RegieFill) : parseRegieFill(raw, { content, coords })
+}
 
 async function main() {
   if (stage === 'director') {
@@ -82,10 +89,7 @@ async function main() {
     if (!state) throw new Error('--state fehlt')
     const coords = readJson<RegieCoordinates | null>(coordsFile, null)
     if (!coords) throw new Error(`${coordsFile} fehlt (erst Stufe director)`)
-    const rawFill = readJson<unknown>(join(out, 'regie-fill.json'), null)
-    const fill: RegieFill | null = rawFill && (rawFill as { rants?: unknown }).rants && !(rawFill as { devicePlans?: unknown }).devicePlans
-      ? parseRegieFill(rawFill, { content: post.content, coords })
-      : (rawFill as RegieFill | null)
+    const fill = readFill(post.content, coords)
     const postDate = new Date(arg('date') ?? Date.now())
     const minutes = Number(arg('minutes') ?? 15)
     const wordCount = Math.round(minutes * 150)
@@ -141,7 +145,11 @@ async function main() {
     const script = readFileSync(join(out, 'script.txt'), 'utf-8')
     const { body, moments } = splitMomentsSection(script)
     const worn = readJson(join(out, 'worn.json'), computeWornOut(recentScripts()))
-    const opts = { lang: 'en' as const, worn, coarseness: coarsenessInstruction(coords, 'en'), protectedQuotes: quotesFromMoments(moments) }
+    const fill = arg('post') ? readFill(readPost().content, coords) : null
+    const opts = {
+      lang: 'en' as const, worn, coarseness: coarsenessInstruction(coords, 'en'), protectedQuotes: quotesFromMoments(moments),
+      devices: textureDeviceNotes(coords, fill, 'en'),
+    }
     const { system, user } = buildTexturePrompt(body, opts)
     writeFileSync(join(out, 'texture-system.txt'), system)
     writeFileSync(join(out, 'texture-user.txt'), user)

@@ -29,7 +29,7 @@ export function renderRegieSection(coords: RegieCoordinates, fill: RegieFill | n
     let s = `\n\n**REGIE DIESER FOLGE (gilt nur heute; geht den allgemeinen Vorgaben oben vor, wo sie sich unterscheiden):**
 - Form der Folge: ${texts(coords, 'dramaturgy', lang).join(' ')}
 - Temperatur: ${texts(coords, 'temperature', lang).join(' ')}
-- Stilmittel heute (genau diese, jedes einmal):
+- Stilmittel heute (genau diese, jedes einmal, außer die Beschreibung sagt etwas anderes):
 ${deviceLines}
 - Heute NICHT: ${notToday.join(', ')}.
 - Vergleiche kommen heute aus ${imagery.join(' und ')}.
@@ -50,7 +50,7 @@ ${deviceLines}
   let s = `\n\n**TODAY'S DIRECTION (applies to this episode only; it overrides the general guidance above where they differ):**
 - Shape of the episode: ${texts(coords, 'dramaturgy', lang).join(' ')}
 - Temperature: ${texts(coords, 'temperature', lang).join(' ')}
-- Devices today (exactly these, each once):
+- Devices today (exactly these, each once unless its description says otherwise):
 ${deviceLines}
 - NOT today: ${notToday.join(', ')}.
 - Comparisons today come from ${imagery.join(' and ')}.
@@ -66,6 +66,20 @@ ${deviceLines}
   }
   s += `\nThese are directions, not lines: write fresh dialogue and never copy these words.`
   return s
+}
+
+/**
+ * Die heutigen Stilmittel für den Texturdurchgang, mit dem Plan des
+ * Regisseurs: Der Durchgang soll sie weder als Pointe ausdünnen noch als
+ * Wiederholung ersetzen (ein Spitzname läuft absichtlich durch die Folge).
+ */
+export function textureDeviceNotes(coords: RegieCoordinates, fill: RegieFill | null, lang: Lang): string[] {
+  return coords.picks.devices.map((pid) => {
+    const opt = option('devices', pid)
+    const base = opt ? `${opt.label[lang]}: ${opt.text[lang]}` : pid
+    const plan = fill?.devicePlans.find((d) => d.device === pid)
+    return plan ? `${base} (${lang === 'de' ? 'heute' : 'today'}: ${plan.idea})` : base
+  })
 }
 
 /** Alle Achsen-IDs, für Tests und die Admin-Anzeige. */

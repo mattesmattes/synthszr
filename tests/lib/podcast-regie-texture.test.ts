@@ -8,9 +8,9 @@ import { REGIE_AXES } from '@/lib/podcast/regie/catalog'
 import { sampleRegie, type RegieHistoryEntry } from '@/lib/podcast/regie/sampler'
 import { withEntry } from '@/lib/podcast/regie/history'
 import { buildDirectorPrompt, parseRegieFill } from '@/lib/podcast/regie/director'
-import { coarsenessInstruction, renderRegieSection } from '@/lib/podcast/regie/render'
+import { coarsenessInstruction, renderRegieSection, textureDeviceNotes } from '@/lib/podcast/regie/render'
 import { computeWornOut, wornSection } from '@/lib/podcast/fingerprint'
-import { buildTexturePrompt, numbersIn, quotesFromMoments, splitMomentsSection, stripPreamble, validateTexture } from '@/lib/podcast/texture-pass'
+import { buildTexturePrompt, numbersIn, quotesFromMoments, recurringNames, splitMomentsSection, stripPreamble, validateTexture } from '@/lib/podcast/texture-pass'
 import { containsExplicitLanguage } from '@/lib/podcast/explicit'
 
 function run(days: number): RegieHistoryEntry[] {
@@ -177,6 +177,44 @@ GUEST: [conspiratorial] Fine.`
     expect(quotesFromMoments(moments)).toEqual(['the board slept through it'])
     expect(stripPreamble(`Here is the revised script:\n\n${original}\n\nLet me know!`)).toBe(original)
     expect(numbersIn('1,385 and 12,000 and 2.5')).toEqual(new Set(['1385', '12000', '2.5']))
+  })
+
+  it('verwirft eine Fassung, die einen durchlaufenden Spitznamen streicht (Fünf-Folgen-Test 2026-11-14)', () => {
+    const withNick = `HOST: [indignant, fast] And Speed-Dial Tim reportedly called the export chief.
+GUEST: [booming] So Speed-Dial Tim is the story now?
+HOST: [dry] Ask Speed-Dial Tim, like I said about Steve Jobs once.`
+    const nickGone = `HOST: [indignant, fast] And the general counsel reportedly called the export chief.
+GUEST: [booming] So the lawyer is the story now?
+HOST: [dry] Ask him, like I said about Steve Jobs once.`
+    expect(validateTexture(withNick, nickGone, 'en').problems.join()).toMatch(/Namen fehlen: Speed-Dial, Tim/)
+    // ein einmaliger Name aus einem ausgedünnten Vergleich darf gehen
+    const analogyGone = withNick.replace(', like I said about Steve Jobs once', '')
+    expect(validateTexture(withNick, analogyGone, 'en').problems.join()).not.toMatch(/Namen/)
+  })
+
+  it('recurringNames zählt nur Namen mitten im Satz, die mehrfach vorkommen', () => {
+    const text = 'Look, we asked Nvidia twice and Nvidia said no.\nLook again, I\'m sure I\'m right about Apple.\nThe board met.'
+    expect(recurringNames(text)).toEqual(['Nvidia'])
+  })
+
+  it('der Prompt schützt die Stilmittel des Tages', () => {
+    const coords = sampleRegie([], { date: '2026-11-10', postId: 'x' })
+    coords.picks.devices = ['nicknames', 'quiz', 'scene']
+    const notes = textureDeviceNotes(coords, {
+      fight: null, rants: [], quickStories: [], segmentPlan: null,
+      devicePlans: [{ device: 'nicknames', story: 'Nvidia', idea: 'Emma coins nicknames and reuses them' }],
+    }, 'en')
+    expect(notes[0]).toMatch(/^nicknames: .*keeps using them all episode.*today: Emma coins nicknames/)
+    expect(notes).toHaveLength(3)
+    const { system, user } = buildTexturePrompt(original, {
+      lang: 'en', worn: { phrases: [], shortLines: [], directions: [] }, coarseness: 'Clean.', devices: notes,
+    })
+    expect(system).toMatch(/A nickname or running gag that recurs on purpose is one of them, not worn wording/)
+    expect(system).toMatch(/not counting today's devices/)
+    expect(user).toContain("TODAY'S DEVICES")
+    expect(user).toContain('Emma coins nicknames')
+    const plain = buildTexturePrompt(original, { lang: 'en', worn: { phrases: [], shortLines: [], directions: [] }, coarseness: 'Clean.' })
+    expect(plain.user).not.toContain("TODAY'S DEVICES")
   })
 
   it('der Prompt verlangt Texturarbeit und schützt Fakten', () => {

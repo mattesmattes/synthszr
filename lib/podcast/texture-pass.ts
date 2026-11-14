@@ -24,6 +24,13 @@ export interface TextureOptions {
   coarseness: string
   /** Zeilen, die wörtlich bleiben müssen (Zitate aus ---MOMENTS---). */
   protectedQuotes?: string[]
+  /**
+   * Die Stilmittel der Tagesregie (`textureDeviceNotes`). Ohne diese Liste
+   * hielt der Durchgang einen durchlaufenden Spitznamen für eine verbrauchte
+   * Wendung und eine Pointe zu viel und strich ihn (Fünf-Folgen-Test
+   * 2026-11-14: 13 von 15 Spitznamen weg).
+   */
+  devices?: string[]
 }
 
 export interface TextureResult {
@@ -52,13 +59,13 @@ export function quotesFromMoments(moments: string | null): string[] {
   return [...moments.matchAll(/"([^"]{8,})"/g)].map((m) => m[1].trim()).slice(0, 5)
 }
 
-function spokenText(body: string): string {
+function spokenText(body: string, joiner = ' '): string {
   return body
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => /^(HOST|GUEST)\b/i.test(l))
     .map((l) => l.replace(/^(HOST|GUEST)(?:\s*\(overlapping\))?\s*:\s*(?:\[[^\]]*\]\s*)?/i, ''))
-    .join(' ')
+    .join(joiner)
 }
 
 const wordCount = (s: string) => s.split(/\s+/).filter(Boolean).length
@@ -95,6 +102,25 @@ export function stripPreamble(text: string): string {
   return kept.slice(0, last + 1).join('\n').trim()
 }
 
+/**
+ * Namen, die im Original mindestens zweimal mitten im Satz groß geschrieben
+ * stehen (Personen, Firmen, Spitznamen der Tagesregie). Einmalige Namen, etwa
+ * aus einem ausgedünnten Vergleich, zählen nicht. Nur Englisch: im Deutschen
+ * steht jedes Substantiv groß.
+ */
+export function recurringNames(text: string): string[] {
+  const counts = new Map<string, number>()
+  // Zeilen getrennt halten: ein Zeilenanfang ist ein Satzanfang.
+  for (const m of text.matchAll(/(?<=[\p{Ll}\d,;)'’-][ \t]+)(\p{Lu}[\p{L}'’-]*)/gu)) {
+    const w = m[1].replace(/['’]s$/, '').replace(/[-'’]+$/, '')
+    if (w.length < 3 || /^I['’]/.test(w)) continue
+    counts.set(w, (counts.get(w) ?? 0) + 1)
+  }
+  return [...counts].filter(([, n]) => n >= 2).map(([w]) => w)
+}
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 /** Harte Prüfung der überarbeiteten Fassung gegen das Original. */
 export function validateTexture(original: string, revised: string, lang: TextureLang, protectedQuotes: string[] = []): { ok: boolean; problems: string[] } {
   const problems: string[] = []
@@ -115,6 +141,12 @@ export function validateTexture(original: string, revised: string, lang: Texture
   const no = numbersIn(spokenText(original)), nr = numbersIn(spokenText(revised))
   const lost = [...no].filter((n) => !nr.has(n)), added = [...nr].filter((n) => !no.has(n))
   if (lost.length || added.length) problems.push(`Zahlen geändert (fehlen: ${lost.slice(0, 4).join(', ') || '-'}; neu: ${added.slice(0, 4).join(', ') || '-'})`)
+
+  if (lang === 'en') {
+    const revisedText = spokenText(revised)
+    const lostNames = recurringNames(spokenText(original, '\n')).filter((n) => !new RegExp(`(?<![\\p{L}])${escapeRe(n)}(?![\\p{L}])`, 'iu').test(revisedText))
+    if (lostNames.length) problems.push(`Namen fehlen: ${lostNames.slice(0, 4).join(', ')}`)
+  }
 
   const wo = wordCount(spokenText(original)), wr = wordCount(spokenText(revised))
   if (wo > 0 && (wr < wo * 0.88 || wr > wo * 1.12)) problems.push(`Länge ${wr} statt ${wo} Wörter (±12 % erlaubt)`)
@@ -147,13 +179,13 @@ KEEP EXACTLY (any change here makes your edit unusable):
 - The language of the script (${language}), the speaker of every existing line, and the order of lines and stories.
 - Every [ARTICLE N] marker line, unchanged and in place.${greeting ? `\n- The greeting sentence, verbatim: ${greeting}` : ''}
 - Every fact, name and number: do not add, drop or change a single digit; keep every prediction and its date.
-- The protected lines listed below, verbatim.
+- The protected lines listed below, verbatim.${opts.devices?.length ? `\n- Today's deliberate devices (listed under TODAY'S DEVICES) and every line that carries them. A nickname or running gag that recurs on purpose is one of them, not worn wording; keep it every time it appears.` : ''}
 - The format: every spoken line is \`HOST: [direction] text\` or \`GUEST: [direction] text\`, optionally with \` (overlapping)\` right after the speaker; exactly one bracket per line, at the start, in English.
 - The total length, within ten percent.
 
 DO:
-1. Thin out the punchlines: at most one crafted punchline or wordplay per story; turn the rest into plain talk or a pivot, or simply let the exchange stop.
-2. Replace worn wording: the phrases and lines listed under WORN OUT, and any phrase, hand-off, transition or joke shape that appears more than twice in this script.
+1. Thin out the punchlines: at most one crafted punchline or wordplay per story, not counting today's devices; turn the rest into plain talk or a pivot, or simply let the exchange stop.
+2. Replace worn wording: the phrases and lines listed under WORN OUT, and any phrase, hand-off, transition or joke shape that appears more than twice in this script (today's devices excepted).
 3. Insert three to six plain backchannel lines (one to three words, no joke) inside long explanations: split a long line into two lines of the same speaker and put the other speaker's short line in between, mid-thought.
 4. In about one long line out of five, add a natural stumble: a restart, "I mean,", "look,", a trailing ... (never inside a number or a name).
 5. Language today: ${opts.coarseness}
@@ -167,6 +199,7 @@ DO NOT add new jokes, topics, facts or sincere moments, and do not explain your 
   if (w.phrases.length || w.shortLines.length || w.directions.length) {
     parts.push(`WORN OUT (recur across recent episodes, replace them):\n${q([...w.phrases, ...w.shortLines, ...w.directions])}`)
   }
+  if (opts.devices?.length) parts.push(`TODAY'S DEVICES (deliberate; keep them and every line that carries them):\n${q(opts.devices)}`)
   if (opts.protectedQuotes?.length) parts.push(`PROTECTED LINES (keep verbatim):\n${q(opts.protectedQuotes)}`)
   parts.push(`SCRIPT:\n${script}`)
   return { system, user: parts.join('\n\n') }
