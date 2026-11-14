@@ -723,6 +723,27 @@ Not-Aus: `update curation_runs set cancel_requested = true where id = …` —
 `advanceRun` schließt den Run beim nächsten Tick als `cancelled` ab, bevor er
 weiterarbeitet. `shadow_enabled = false` stoppt nur neue Kickoffs.
 
+## Recent Changes (2026-11-14)
+
+### Podcast-Tonalität v2
+- HOST (Emma) spricht wie eine scharfzüngige, hitzige Tech-Journalistin
+  (Urteil zuerst, Ausbrüche gegen Mächtige, holt ihn runter, korrigiert),
+  GUEST (Synthesizer) wie ein provokanter Business-Professor (Umdeutung,
+  große Riffs von 120-200 Wörtern, datierte Prognosen, derbe Vergleiche,
+  Selbstironie über Eitelkeit). Vorbild war ein bekannter US-Tech-Podcast;
+  im Prompt stehen nur Merkmale, keine Namen oder Schlagworte.
+- Stimmen und Folgenaufbau: `lib/podcast/voice-style.ts` (Platzhalter
+  `{voiceStyle}`, `{episodeShape}`); Vorlagen ausgelagert nach
+  `lib/podcast/script-templates.ts`; Dialogregeln 4/7/8/9 in
+  `lib/podcast/dialogue-style.ts`; Persönlichkeits-Brief klingt wie
+  Co-Hosts statt Melodram (`personality.ts`, Klang-Regel); Intermezzo-Ton
+  angepasst. Quoten-Realismus und 4-Block-Struktur von v1 sind gestrichen.
+- Archiv v1: `docs/podcast/tonality/v1-archive-2026-11-14.md`. Bericht mit
+  Noten und Messwerten: `docs/podcast/tonality/v2-style-report.md`
+  (Prüfer-Mittel v1 3,4, v2 stabil um 7 von 10).
+- Trockenlauf: `npx tsx scripts/podcast-style-dryrun.ts --post post.txt
+  --state state.json --date <ISO> --out dir [--call]`.
+
 ## Recent Changes (2026-11-12)
 
 ### Admin: Top sources
