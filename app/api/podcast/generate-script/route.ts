@@ -365,13 +365,14 @@ export async function POST(request: NextRequest) {
     // Fakten, Zahlen, Marker und Reihenfolge prüft validateTexture. Der
     // MOMENTS-Abschnitt bleibt unangetastet und wird wieder angehängt.
     const { body: scriptBody, moments } = splitMomentsSection(scriptContent)
+    const echoes = articleEchoes(scriptBody, postContent)
     const texture = await applyTexturePass(scriptBody, {
       lang: ttsLang,
       worn,
       coarseness: coarsenessInstruction(regieCoords, ttsLang),
       protectedQuotes: quotesFromMoments(moments),
       devices: textureDeviceNotes(regieCoords, regieFill, ttsLang),
-      echoes: articleEchoes(scriptBody, postContent),
+      echoes,
     })
     console.log(`[Podcast Script] Texturdurchgang: ${texture.applied ? 'übernommen' : `nicht übernommen (${texture.problems.join('; ')})`}`)
     const texturedScript = moments ? `${texture.script}\n\n${moments}` : texture.script
@@ -380,7 +381,20 @@ export async function POST(request: NextRequest) {
 
     // Regie für die Rotation der nächsten Folgen merken (auch bei reinen
     // Test-Skripten: dann hat die Rotation eben eine Folge weiter gedreht).
-    await saveRegieEntry(regieSupabase, ttsLang, { date: regieDate, postId: body.postId, picks: regieCoords.picks })
+    // Dazu Plan, Fingerabdruck, Texturergebnis und Artikel-Echos für die Karte
+    // „Tagesregie“ im Podcast Studio (die Ziehung liest nur `picks`).
+    await saveRegieEntry(regieSupabase, ttsLang, {
+      date: regieDate,
+      postId: body.postId,
+      picks: regieCoords.picks,
+      title: postTitle || undefined,
+      createdAt: new Date().toISOString(),
+      directed: Boolean(regieFill),
+      fill: regieFill,
+      worn,
+      texture: { applied: texture.applied, problems: texture.problems.slice(0, 5) },
+      echoes,
+    })
 
     // NOTE: Personality evolution (advanceState) happens in jobs/process/route.ts
     // AFTER the podcast audio is successfully generated — not here at script generation time.
