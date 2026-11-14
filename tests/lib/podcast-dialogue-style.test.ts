@@ -12,7 +12,8 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { DIALOGUE_STYLE_RULES_DE, DIALOGUE_STYLE_RULES_EN, resolveDialogueRules } from '@/lib/podcast/dialogue-style'
 
-const ROUTE = readFileSync('app/api/podcast/generate-script/route.ts', 'utf-8')
+// Seit 2026-11-14 liegen die Vorlagen in lib/podcast/script-templates.ts, die Ersetzung bleibt in der Route.
+const ROUTE = readFileSync('app/api/podcast/generate-script/route.ts', 'utf-8') + '\n' + readFileSync('lib/podcast/script-templates.ts', 'utf-8')
 const ADMIN_PAGE = readFileSync('app/admin/audio/page.tsx', 'utf-8')
 const SETTINGS_API = readFileSync('app/api/admin/tts-settings/route.ts', 'utf-8')
 const SETTINGS_LOADER = readFileSync('lib/tts/openai-tts.ts', 'utf-8')
@@ -76,11 +77,13 @@ describe('generate-script Route — eingebaute Prompts', () => {
     expect(ROUTE).not.toMatch(/\[beat\] — brief thinking pause|\[beat\] — kurze Denkpause/)
   })
 
-  it('behaelt Struktur-Regeln: Intermezzo, Artikel-Marker, Missverstaendnisse, Meinungsverschiedenheiten', () => {
+  it('behaelt Struktur-Regeln: Intermezzo, Artikel-Marker, Stimmen und Folgenaufbau (Tonalitaet v2)', () => {
     expect(ROUTE).toMatch(/\[INTERMEZZO\]/)
     expect(ROUTE).toMatch(/\[ARTICLE N\]/)
-    expect(ROUTE).toMatch(/Exactly 3 misunderstandings/)
-    expect(ROUTE).toMatch(/Exakt 2 echte Meinungsverschiedenheiten/)
+    // v2 (2026-11-14): Stimmen und Folgenaufbau statt Quoten (3 Missverstaendnisse, 2 Meinungsverschiedenheiten)
+    expect(ROUTE.match(/\{voiceStyle\}/g)).toHaveLength(3) // zwei Vorlagen + eine Ersetzung
+    expect(ROUTE.match(/\{episodeShape\}/g)).toHaveLength(3)
+    expect(ROUTE).not.toMatch(/Exactly 3 misunderstandings|Exakt 3 Missverständnisse/)
   })
 })
 
