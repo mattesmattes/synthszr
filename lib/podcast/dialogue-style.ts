@@ -37,7 +37,7 @@ export const DIALOGUE_STYLE_RULES_EN = `**DIALOGUE STYLE (how it sounds; every r
 
 Example (mid-episode; invented, for rhythm and texture only, never reuse its wording):
 HOST: [indignant, emphatic, fast] Next. Nvidia is lending money to the companies that buy its chips. I mean, come on. That's Nvidia paying people to buy from Nvidia, and Mister Trillion-Dollar Margin should say so out loud. Talk me out of it.
-GUEST: [booming, emphatic, building, gaining speed] I'll do better than defend it, I'll tell you why it's genius and why it ends in tears. Look, every idle GPU at one of these neoclouds is an order that never comes back. So Nvidia rents out its own balance sheet. Customer can't pay? Lend them the money. Lend them the money, book the sale, report the quarter, and by the way, this is exactly what the telecom equipment guys did in the late nineties, they financed their own customers, the customers bought more gear, everybody's revenue went up and to the right, and then the customers went bust and the gear came home in boxes. Same movie. Better chips, same movie. And when this one ends, it's not a hangover, it's a crime scene in a server farm.
+GUEST: [booming, emphatic, building, gaining speed] I'll do better than defend it, I'll tell you why it's genius and why it ends in tears. Look, every idle GPU at one of these neoclouds is an order that never comes back. So Nvidia rents out its own balance sheet. Customer can't pay? Lend them the money. Lend them the money, book the sale, report the quarter, and by the way, this is exactly what the telecom equipment guys did in the late nineties, they financed their own customers, the customers bought more gear, everybody's revenue went up and to the right, and then the customers went bust and the gear came home in boxes. Same movie. Better chips, same movie. It's co-signing your brother-in-law's car loan so he buys his gas at your station.
 HOST: [scoffing, amused, quick] Yeah. That's what I said, with fewer words.
 GUEST: [conspiratorial, amused, leaning in] I charge by the word.
 HOST: [worked up, talking fast, rolling] No, but here's what bugs me. The board knows this. Like, they know it. Somebody on that board has seen this movie, and nobody says anything because the stock is up. That's not governance. That's a fan club.
@@ -58,14 +58,14 @@ export const DIALOGUE_STYLE_RULES_DE = `**DIALOG-STIL (so klingt es; jede Regel 
 10. Gesprochener Text ist reiner Text: keine Sternchen, kein Fettdruck, keine Emojis, keine ausgeschriebenen Regieanweisungen („lacht", „seufzt"); die gehören in die Klammer-Anweisung ([laughing]).
 11. Studio-Momente passieren im Sprechen, nicht in Tags: „Moment, das hab ich mir markiert...", „Warte, ich schau kurz nach...", „Ich hol mir eben meinen Kaffee." Höchstens zwei pro Folge, dort, wo jemand wirklich nachschlägt oder Zeit braucht. Geräusche gibt es im Mix nicht, ein Schluck oder Papier ist nur echt, wenn es gesagt wird.
 
-Beispiel (mitten in der Folge, Übergabe einer News; erfunden, nur für den Rhythmus):
-HOST: [indignant, emphatic, fast] Nächste. Nvidia leiht genau den Firmen Geld, die seine Chips kaufen. Ich meine, ernsthaft. Das ist keine Nachfrage, das ist Nvidia, das Leute dafür bezahlt, bei Nvidia zu kaufen, und irgendwer im Aufsichtsrat sollte das laut sagen. Verteidige das, ich warte.
-GUEST: [booming, emphatic, building] Weder noch. Es geht hier nicht ums Verleihen, es geht ums nächste Quartal. Jede GPU, die bei einem Neocloud leer läuft, ist eine Bestellung, die nie wiederkommt, also vermietet Nvidia seine eigene Bilanz, damit die Nachfrage weiteratmet. Der älteste Trick der Hardware: Du finanzierst den Käufer, verbuchst den Verkauf und hoffst, dass die Musik nicht aufhört, bevor deine Optionen fällig sind. Meine Prognose: Innerhalb von zwölf Monaten fällt einer dieser Mieter aus, und die Chips kommen mit angehefteter Rechnung zurück.
-HOST (overlapping): [sharp, fast, cutting in] Und die Anleger fressen es.
-GUEST: [conspiratorial, amused] Die Anleger fressen es immer.
-HOST: [scoffing, amused, quick] Ja. Die belügen sich selbst. Die belügen sich selbst, und sie wissen es.
-GUEST: [indignant, fast] Der endet mit einem Aktienrückkauf, Emma.
-HOST: [exasperated, amused] Gleiche Sache, besseres Licht. Weiter.`
+Beispiel (mitten in der Folge; erfunden, nur für Rhythmus und Textur, Wortlaut nie übernehmen):
+HOST: [indignant, emphatic, fast] Nächste. Nvidia leiht genau den Firmen Geld, die seine Chips kaufen. Ich meine, ernsthaft. Das ist Nvidia, das Leute dafür bezahlt, bei Nvidia zu kaufen, und Herr Billionen-Marge sollte das laut sagen. Red mir das aus.
+GUEST: [booming, emphatic, building, gaining speed] Ich red's dir nicht aus, ich sag dir, warum es genial ist und warum es in Tränen endet. Schau, jede GPU, die bei einem dieser Neoclouds leer läuft, ist eine Bestellung, die nie wiederkommt. Also vermietet Nvidia seine eigene Bilanz. Der Kunde kann nicht zahlen? Leih ihm das Geld. Leih ihm das Geld, verbuch den Verkauf, meld das Quartal, und übrigens, genau das haben die Telekom-Ausrüster Ende der Neunziger gemacht, die haben ihre eigenen Kunden finanziert, die Kunden haben mehr Technik gekauft, alle Umsätze gingen nach oben rechts, und dann sind die Kunden pleitegegangen und die Technik kam in Kartons zurück. Derselbe Film. Bessere Chips, derselbe Film. Das ist wie dem Schwager das Auto finanzieren, damit er bei dir tankt.
+HOST: [scoffing, amused, quick] Ja. Hab ich gesagt, nur kürzer.
+GUEST: [conspiratorial, amused, leaning in] Ich werde nach Wörtern bezahlt.
+HOST: [worked up, talking fast, rolling] Nein, aber was mich ärgert: Der Aufsichtsrat weiß das. Also, die wissen das. Da sitzt jemand, der diesen Film kennt, und keiner sagt was, weil die Aktie steigt. Das ist keine Aufsicht. Das ist ein Fanclub.
+GUEST: [earnest, slower] Okay, das ist fair. Das ist fair.
+HOST: [sharp, fast] Gut. Was Dümmeres.`
 
 /**
  * Regeln für die Vorlage einer Sprache: für das englische Skript der in
