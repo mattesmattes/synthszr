@@ -770,7 +770,8 @@ das Skript jeden Tag neu ausrichtet). Ablauf in
    Tabelle): aus den letzten sieben Skripten (`post_podcasts.script_content`,
    Locale en bzw. de) Wendungen (3–5 Wörter), Kurzzeilen und
    Sprechanweisungen, die in mehreren Folgen wiederkehren; ohne Eigennamen,
-   Ziffern, einfache Rückmeldungen und Wendungen aus dem heutigen Artikel.
+   Ziffern, schlichte Rückmeldungen („Mm-hm.“, „Got it.“) und Wendungen aus
+   dem heutigen Artikel.
    Abschnitt „WORN OUT IN RECENT EPISODES“ im Skript- und im Textur-Prompt.
 3. **Texturdurchgang** (`lib/podcast/texture-pass.ts`, Use Case
    `podcast_texture`, Default Opus 5.5, Streaming): zweiter Aufruf nur für die
@@ -780,7 +781,9 @@ das Skript jeden Tag neu ausrichtet). Ablauf in
    Regisseurs (`textureDeviceNotes`) und darf sie nicht glätten (im Test
    strich er sonst einen durchlaufenden Spitznamen als „verbraucht“).
    Riffs über 100 Wörter bleiben eine Zeile (im Test teilte er sie mit
-   eingestreuten Rückmeldungen). `validateTexture` prüft hart: Marker,
+   eingestreuten Rückmeldungen). Stellen, die den Artikel wörtlich
+   nachsprechen (`articleEchoes`: ab acht Wörtern am Stück, Zitate
+   ausgenommen, höchstens acht), formuliert er als Gespräch um. `validateTexture` prüft hart: Marker,
    Zahlenmenge, Begrüßung wörtlich, Zeilenformat, Länge ±12 %, Zeilenzahl,
    Abschnittslängen ±35 %, geschützte MOMENTS-Zitate, mehrfach genannte
    Namen (nur EN, `recurringNames`), lange Riffs nicht geteilt; bei Verstoß
