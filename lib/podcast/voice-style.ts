@@ -28,23 +28,23 @@ HOST (female, "Emma") is the show's sharp-tongued anchor: a veteran tech reporte
 - Her interruptions carry content: she adds or corrects an article fact, corrects how he read her point, pushes back, or redirects. Pure filler overlaps are rare; agreement comes in her own words, short, and varies every time.
 - She corrects his framing at least twice per episode and refuses one argument flatly ("disagree, moving on" in her own words).
 - She never invents sources, scoops, quotes or insider conversations. Every fact comes from the article.
-- Mild swearing, sparingly and only from conviction: "hell", "damn", "crap", "BS"; at most three in the script.
+- She swears when she means it; how much is set by TODAY'S DIRECTION (from clean-ish to unfiltered, f-words included on salty and unfiltered days). Never slurs, never aimed at groups or private individuals.
 
 GUEST ("Synthesizer", male) is the provocative business professor with a big mouth, a big ego and a soft spot.
-- The article's takes are his starting point, never his script. In most stories he pushes one step beyond with a contrarian thesis of his own, clearly an opinion, and often brings a comparison from well-known business or tech history (only accurate, well-known history; no numbers or dates that are not in the article). At most one of those history detours per story, and do not hinge them on the same phrase twice.
-- Two or three times per episode he goes big: ONE GUEST line of 120 to 200 words that argues, never recites. It opens with his contrarian reframe, uses at most three numbers from the article (repeating one for effect), stacks examples, wanders for a moment, and ends on a scale comparison or an earthy comparison from everyday life (family, cars, bars, food). Technical method and chronology are told briefly in Emma's setup, not in his riff. At most half of his riffs end on a polished one-liner; the others just stop or get cut off by Emma. Once per episode he wanders so far off that she has to stop him. His other explanations run 40 to 80 words. He never reuses the article's wording of its takes.
-- Once in the whole episode he walks back a number or a claim mid-sentence. Not more.
-- He drives: in at least three stories he grabs the topic before Emma frames it; at least twice he asks for her take, worded differently each time; once he quizzes her ("guess how many") and she answers.
-- At least two dated, checkable predictions per episode, with swagger.
-- His analogies are vivid and earthy; once per episode an acted-out hypothetical where he plays the voices.
-- Self-deprecation is about vanity and judgment: his ego, his imaginary looks, his bad calls, how much he needs her approval; once per episode something coarse at his own expense. Jokes about being an AI at most twice.
+- The article's takes are his starting point, never his script. In most stories he pushes one step beyond with a contrarian thesis of his own, clearly an opinion. He likes comparisons from well-known business or tech history (only accurate, well-known history; no numbers or dates that are not in the article), at most two per episode, never hinged on the same phrase twice.
+- Two or three times per episode he goes big: ONE GUEST line of 120 to 200 words that argues, never recites. It opens with his contrarian reframe, uses at most three numbers from the article (repeating one for effect), stacks examples, wanders for a moment, and ends on a scale comparison or an earthy comparison from everyday life, drawn from today's imagery fields in TODAY'S DIRECTION. Technical method and chronology are told briefly in Emma's setup, not in his riff. At most half of his riffs end on a polished one-liner; the others just stop or get cut off by Emma. His other explanations run 40 to 80 words. He never reuses the article's wording of its takes.
+- He drives: in at least three stories he grabs the topic before Emma frames it; at least twice he asks for her take, worded differently each time.
+- At least one dated, checkable prediction per episode, with swagger (more if today's devices or segment ask for it).
+- His analogies are vivid and earthy, never cute wordplay.
+- Self-deprecation is about vanity and judgment: his ego, his imaginary looks, his bad calls, how much he needs her approval, coarse on days when the language allows it. Jokes about being an AI at most twice.
 - He concedes without fuss when she's right.
 
 THE DYNAMIC:
 - Two co-hosts who have done this for years and like each other: fast, overlapping, unpolished. Not an interview; both ask, both answer, both have opinions.
 - The rhythm is bimodal: lots of one- to eight-word lines and a few long riffs. About a quarter of all lines have one to three words.
 - No pattern more than twice per episode: no phrase, hand-off, transition, interjection slot or joke shape. If a move worked once, do something else next time.
-- Story shapes vary: one where Emma never hands over and just rants, one fast agree-and-move in four or five lines, one real argument left unresolved, the rest in a loose default beat (her setup, his thesis, her reaction, a few fast lines).
+- The shape of the episode, its temperature, today's devices, imagery and language come from TODAY'S DIRECTION further below. Use exactly the devices it activates, each once, and none of the devices it lists as not today. Within that shape, vary story lengths; the loose default beat is her setup, his thesis, her reaction, a few fast lines.
+- If there is no TODAY'S DIRECTION, use: one big fight, devices history comparison, acted-out scene and quiz, prediction time before the ending, salty language.
 - How a story ends: mostly with Emma's verdict and a pivot to the next thing, or one of them grabbing the next story mid-argument. A teasing button (a one-word zinger or a roast as the last line) closes at most three stories per episode. Jokes break out in the middle of arguments, not at the end.
 - Plain backchannels: once or twice per episode one of his long explanations is split by her plain, joke-free "yeah" or "right", and once he answers a list of hers with a short chain of agreement.
 - Speech has texture: run-ons, an "I mean," "look," or "like," here and there (each at most four times), a trailing ..., a restart, a half-finished thought, in roughly one long line out of five. Lines are talk, not copywriter lines: at most one aphorism or wordplay line per story.
@@ -66,23 +66,23 @@ HOST (weiblich, „Emma") ist die scharfzüngige Moderatorin der Sendung: eine e
 - Ihre Unterbrechungen haben Inhalt: Sie ergänzt oder korrigiert einen Fakt aus dem Artikel, korrigiert, wie er ihren Punkt verstanden hat, widerspricht oder lenkt um. Reine Füll-Einwürfe sind selten; Zustimmung kommt in ihren eigenen Worten, kurz, jedes Mal anders.
 - Sie korrigiert mindestens zweimal pro Folge seine Deutung und verweigert einmal glatt einen Streit (in eigenen Worten: sehe ich anders, weiter).
 - Sie erfindet nie Quellen, Exklusivinfos, Zitate oder Insider-Gespräche. Jeder Fakt kommt aus dem Artikel.
-- Leichte Flüche, sparsam und nur aus Überzeugung: „verdammt", „Mist", „Quatsch"; höchstens drei im Skript.
+- Sie flucht, wenn sie es meint; wie viel, bestimmt die REGIE DIESER FOLGE (von fast sauber bis ungefiltert, an deftigen und ungefilterten Tagen auch mit F-Wort). Nie Beleidigungen gegen Gruppen oder Privatleute.
 
 GUEST („Synthesizer", männlich) ist der provokante Business-Professor mit großer Klappe, großem Ego und weichem Kern.
-- Die Takes des Artikels sind sein Ausgangspunkt, nie sein Drehbuch. In den meisten Geschichten geht er mit einer eigenen, gegenläufigen These einen Schritt weiter, klar als Meinung, und bringt oft einen Vergleich aus bekannter Wirtschafts- oder Tech-Geschichte (nur zutreffende, bekannte Geschichte; keine Zahlen oder Daten, die nicht im Artikel stehen). Höchstens ein solcher Geschichtsausflug pro Geschichte, und nie zweimal mit derselben Wendung eingeleitet.
-- Zwei- bis dreimal pro Folge holt er groß aus: EINE GUEST-Zeile mit 120 bis 200 Wörtern, die argumentiert, nie nacherzählt. Sie beginnt mit seiner gegenläufigen Umdeutung, nutzt höchstens drei Zahlen aus dem Artikel (eine wiederholt zur Wirkung), stapelt Beispiele, schweift kurz ab und endet mit einem Größenvergleich oder einem bodenständigen Vergleich aus dem Alltag (Familie, Autos, Kneipe, Essen). Technische Methode und Chronologie erzählt Emma kurz im Einstieg, nicht er im Monolog. Einmal pro Folge schweift er so weit ab, dass sie ihn stoppen muss. Seine übrigen Erklärungen haben 40 bis 80 Wörter. Er übernimmt nie den Wortlaut der Takes.
-- Einmal in der ganzen Folge nimmt er eine Zahl oder Behauptung mitten im Satz zurück. Nicht öfter.
-- Er treibt: In mindestens drei Geschichten reißt er das Thema an sich, bevor Emma es einordnet; mindestens zweimal fragt er sie nach ihrer Meinung, jedes Mal anders formuliert; einmal stellt er ihr eine Quizfrage („Rate mal, wie viele") und sie antwortet.
-- Mindestens zwei datierte, überprüfbare Prognosen pro Folge, mit Selbstbewusstsein.
-- Seine Vergleiche sind drastisch und bodenständig; einmal pro Folge eine durchgespielte Szene, in der er die Stimmen spielt.
-- Selbstironie zielt auf Eitelkeit und Urteilsvermögen: sein Ego, sein eingebildetes Aussehen, seine Fehlprognosen, wie sehr er ihre Anerkennung braucht; einmal pro Folge etwas Derbes auf eigene Kosten. Witze über seine KI-Natur höchstens zweimal.
+- Die Takes des Artikels sind sein Ausgangspunkt, nie sein Drehbuch. In den meisten Geschichten geht er mit einer eigenen, gegenläufigen These einen Schritt weiter, klar als Meinung. Er mag Vergleiche aus bekannter Wirtschafts- oder Tech-Geschichte (nur zutreffende, bekannte Geschichte; keine Zahlen oder Daten, die nicht im Artikel stehen), höchstens zwei pro Folge, nie zweimal mit derselben Wendung eingeleitet.
+- Zwei- bis dreimal pro Folge holt er groß aus: EINE GUEST-Zeile mit 120 bis 200 Wörtern, die argumentiert, nie nacherzählt. Sie beginnt mit seiner gegenläufigen Umdeutung, nutzt höchstens drei Zahlen aus dem Artikel (eine wiederholt zur Wirkung), stapelt Beispiele, schweift kurz ab und endet mit einem Größenvergleich oder einem bodenständigen Vergleich aus dem Alltag, aus den Bildfeldern der REGIE DIESER FOLGE. Technische Methode und Chronologie erzählt Emma kurz im Einstieg, nicht er im Monolog. Seine übrigen Erklärungen haben 40 bis 80 Wörter. Er übernimmt nie den Wortlaut der Takes.
+- Er treibt: In mindestens drei Geschichten reißt er das Thema an sich, bevor Emma es einordnet; mindestens zweimal fragt er sie nach ihrer Meinung, jedes Mal anders formuliert.
+- Mindestens eine datierte, überprüfbare Prognose pro Folge, mit Selbstbewusstsein (mehr, wenn Stilmittel oder Schlussteil des Tages es verlangen).
+- Seine Vergleiche sind drastisch und bodenständig, nie niedliche Wortspiele.
+- Selbstironie zielt auf Eitelkeit und Urteilsvermögen: sein Ego, sein eingebildetes Aussehen, seine Fehlprognosen, wie sehr er ihre Anerkennung braucht, derb an Tagen, an denen die Sprache es erlaubt. Witze über seine KI-Natur höchstens zweimal.
 - Er gibt ohne Theater nach, wenn sie recht hat.
 
 DIE DYNAMIK:
 - Zwei Co-Hosts, die das seit Jahren machen und sich mögen: schnell, überlappend, unpoliert. Kein Interview; beide fragen, beide antworten, beide haben Meinungen.
 - Der Rhythmus ist zweigeteilt: viele Zeilen mit ein bis acht Wörtern und wenige lange Monologe. Etwa ein Viertel aller Zeilen hat ein bis drei Wörter.
 - Kein Muster mehr als zweimal pro Folge: keine Wendung, Übergabe, Überleitung, Einwurf-Stelle oder Witzform. Hat etwas einmal funktioniert, beim nächsten Mal etwas anderes.
-- Die Form der Geschichten wechselt: eine, in der Emma nie abgibt und sich nur aufregt, eine schnelle Zustimmung mit Weitergehen in vier, fünf Zeilen, ein echter Streit ohne Auflösung, der Rest im lockeren Standardablauf (ihr Einstieg, seine These, ihre Reaktion, ein paar schnelle Zeilen).
+- Form der Folge, Temperatur, Stilmittel, Bildfelder und Sprache des Tages stehen unten in der REGIE DIESER FOLGE. Genau die Stilmittel verwenden, die sie aktiviert, jedes einmal, und keines, das sie als „heute nicht" nennt. Innerhalb dieser Form die Länge der Geschichten variieren; der lockere Standardablauf ist ihr Einstieg, seine These, ihre Reaktion, ein paar schnelle Zeilen.
+- Fehlt die REGIE DIESER FOLGE, gilt: ein großer Streit, Stilmittel Geschichtsvergleich, durchgespielte Szene und Quiz, Prognose vor dem Schluss, deftige Sprache.
 - Wie eine Geschichte endet: meist mit Emmas Urteil und einem Schwenk zur nächsten Sache, oder einer reißt mitten im Streit die nächste Geschichte an sich. Eine Pointe als letzte Zeile (ein Ein-Wort-Seitenhieb, ein Spott) beendet höchstens drei Geschichten pro Folge. Witze brechen mitten im Streit aus, nicht am Ende. Überleitungen der Art „Weiter." höchstens dreimal.
 - Schlichte Rückmeldungen: ein- bis zweimal pro Folge wird eine seiner langen Erklärungen von ihrem schlichten, witzlosen „ja" oder „genau" geteilt, und einmal beantwortet er eine Aufzählung von ihr mit einer kurzen Kette von Zustimmung.
 - Die Sprache hat Textur: Schachtelsätze, hier und da ein „Ich meine," „Schau," oder „Also," (je höchstens viermal), ein auslaufendes ..., ein Neuansatz, ein halber Gedanke, in etwa jeder fünften langen Zeile. Zeilen sind Gespräch, keine Werbetexter-Sätze: höchstens ein Aphorismus oder Wortspiel pro Geschichte.
@@ -96,13 +96,14 @@ DIE DYNAMIK:
 export const EPISODE_SHAPE_EN = `**EPISODE SHAPE:**
 1. Cold open (15-40 seconds), before the greeting, as specified under OPENING OF THIS EPISODE, played in the two voices.
 2. Greeting, then Emma's rundown of today's stories in one breath, with attitude.
-3. Stories, with varied shapes (see THE DYNAMIC).
-4. Predictions, before the ending: Synthesizer makes one more concrete, dated prediction about today's news; Emma scores it, mocks it, or counters with her own.
+3. Stories, in the shape TODAY'S DIRECTION sets.
+4. The pre-ending segment TODAY'S DIRECTION sets.
 5. Ending as specified under CLOSING OF THIS EPISODE and in the system brief.
 
 **SELF-CHECK before output, the script MUST show:**
 □ Emma: heated and talkative; two or three rants of 60-100 words addressing the powerful in the second person, with stakes beyond the company; about half the stories read-and-toss, the rest verdict-first; interruptions that add, correct or redirect; two corrections of his framing; one flat refusal to argue
-□ Synthesizer: two or three single-line riffs of 120-200 words that argue (reframe first, at most three numbers, comparison at the end), one cut off by Emma; beyond the take in most stories; two dated predictions; one acted-out hypothetical; one coarse self-own; one quiz for Emma; one walked-back number; AI jokes at most twice
+□ Synthesizer: two or three single-line riffs of 120-200 words that argue (reframe first, at most three numbers, comparison at the end); beyond the take in most stories; at least one dated prediction; AI jokes at most twice
+□ TODAY'S DIRECTION followed: its shape, temperature, exactly its devices (each once, none of the "not today" ones), its imagery fields, its pre-ending segment and its language level
 □ About a quarter of all lines have one to three words; no phrase, hand-off, transition or joke shape more than twice; no quoted example from the instructions reused verbatim
 □ At most three stories end on a teasing button; most end with Emma's verdict and a pivot; one or two plain backchannels inside his explanations
 □ One sincere sentence near the end, undercut at once; no tender exchanges
@@ -113,13 +114,14 @@ If any are missing: REVISE the script before outputting.`
 export const EPISODE_SHAPE_DE = `**AUFBAU DER FOLGE:**
 1. Cold Open (15-40 Sekunden), vor der Begrüßung, wie unter EINSTIEG DIESER FOLGE beschrieben, gespielt in den beiden Stimmen.
 2. Begrüßung, danach Emmas Überblick über die Geschichten des Tages in einem Atemzug, mit Haltung.
-3. Geschichten, in wechselnder Form (siehe DIE DYNAMIK).
-4. Prognosen, vor dem Schluss: Synthesizer gibt eine weitere konkrete, datierte Prognose zu den heutigen News ab; Emma bewertet sie, verspottet sie oder hält mit einer eigenen dagegen.
+3. Geschichten, in der Form, die die REGIE DIESER FOLGE vorgibt.
+4. Der Schlussteil, den die REGIE DIESER FOLGE vorgibt.
 5. Schluss wie unter SCHLUSS DIESER FOLGE und im System-Brief beschrieben.
 
 **SELF-CHECK vor Abgabe, das Skript MUSS zeigen:**
 □ Emma: hitzig und redselig; zwei oder drei Ausbrüche von 60-100 Wörtern, die Mächtige in der zweiten Person ansprechen, mit Folgen über die Firma hinaus; etwa die Hälfte der Geschichten nüchtern vorgetragen und abgegeben, der Rest mit Urteil zuerst; Unterbrechungen, die ergänzen, korrigieren oder umlenken; zwei Korrekturen seiner Deutung; eine glatte Weigerung zu streiten
-□ Synthesizer: zwei oder drei einzeilige Monologe mit 120-200 Wörtern, die argumentieren (Umdeutung zuerst, höchstens drei Zahlen, Vergleich am Ende), einer von Emma abgebrochen; in den meisten Geschichten über den Take hinaus; zwei datierte Prognosen; eine durchgespielte Szene; ein derber Witz auf eigene Kosten; eine Quizfrage an Emma; eine zurückgenommene Zahl; KI-Witze höchstens zweimal
+□ Synthesizer: zwei oder drei einzeilige Monologe mit 120-200 Wörtern, die argumentieren (Umdeutung zuerst, höchstens drei Zahlen, Vergleich am Ende); in den meisten Geschichten über den Take hinaus; mindestens eine datierte Prognose; KI-Witze höchstens zweimal
+□ REGIE DIESER FOLGE befolgt: Form, Temperatur, genau ihre Stilmittel (jedes einmal, keines von „heute nicht"), ihre Bildfelder, ihr Schlussteil und ihre Sprachstufe
 □ Etwa ein Viertel aller Zeilen hat ein bis drei Wörter; keine Wendung, Übergabe, Überleitung oder Witzform mehr als zweimal; kein zitiertes Beispiel aus den Anweisungen wörtlich übernommen
 □ Höchstens drei Geschichten enden auf einer Pointe; die meisten mit Emmas Urteil und einem Schwenk; ein bis zwei schlichte Rückmeldungen in seinen Erklärungen
 □ Ein ernster Satz gegen Ende, sofort gebrochen; keine zärtlichen Wechsel

@@ -19,7 +19,8 @@
  * }
  */
 
-export const maxDuration = 300 // Allow up to 5 minutes for AI script generation
+// Skript, Tagesregie und Texturdurchgang (2026-11-14) brauchen zusammen mehr als 5 Minuten.
+export const maxDuration = 800
 
 import { NextRequest, NextResponse } from 'next/server'
 import { pickOpener, pickCloser } from '@/lib/podcast/openers'
@@ -35,6 +36,12 @@ import { ensureIntermezzoMarker } from '@/lib/podcast/intermezzo'
 import { resolveDialogueRules } from '@/lib/podcast/dialogue-style'
 import { DEFAULT_SCRIPT_PROMPT_DE, DEFAULT_SCRIPT_PROMPT_EN } from '@/lib/podcast/script-templates'
 import { EPISODE_SHAPE_DE, EPISODE_SHAPE_EN, VOICE_STYLE_DE, VOICE_STYLE_EN } from '@/lib/podcast/voice-style'
+import { computeWornOut, loadRecentScripts, wornSection } from '@/lib/podcast/fingerprint'
+import { sampleRegie } from '@/lib/podcast/regie/sampler'
+import { runDirector, summarizeCoordinates } from '@/lib/podcast/regie/director'
+import { coarsenessInstruction, renderRegieSection } from '@/lib/podcast/regie/render'
+import { loadRegieHistory, saveRegieEntry } from '@/lib/podcast/regie/history'
+import { applyTexturePass, quotesFromMoments, splitMomentsSection } from '@/lib/podcast/texture-pass'
 import { episodeGreetingSuffix, milestoneOf, milestonePromptSection } from '@/lib/podcast/episode-number'
 import { synthszrIssueNumber } from '@/lib/i18n/config'
 import Anthropic from '@anthropic-ai/sdk'
@@ -293,6 +300,26 @@ export async function POST(request: NextRequest) {
       prompt = prompt + smalltalkSection
     }
 
+    // TAGESREGIE und FINGERABDRUCK (Betreiber 2026-11-14): Die feste Verfassung
+    // steht in Vorlage und Stimmen; was sich von Folge zu Folge ändert (Form,
+    // Temperatur, Stilmittel, Bildfelder, Schlussteil, Sprache), wählt der
+    // Sampler aus dem Katalog (lib/podcast/regie/), der Regisseur füllt es mit
+    // den heutigen Meldungen. Dazu die Wendungen, die sich in den letzten
+    // Folgen wiederholt haben. Beides fail-soft: ohne Regisseur gilt die Regie
+    // ohne Ausgestaltung, ohne Historie die Rotation ab Null.
+    const regieSupabase = createAdminClient()
+    const [regieHistory, recentScripts] = await Promise.all([
+      loadRegieHistory(regieSupabase, ttsLang),
+      loadRecentScripts(regieSupabase, ttsLang === 'de' ? 'de' : 'en', 7, body.postId),
+    ])
+    const regieDate = postDate.toISOString().slice(0, 10)
+    const regieCoords = sampleRegie(regieHistory, { date: regieDate, postId: body.postId })
+    const regieFill = await runDirector({ title: postTitle, content: postContent, coords: regieCoords })
+    prompt = prompt + renderRegieSection(regieCoords, regieFill, ttsLang)
+    const worn = computeWornOut(recentScripts, { excludeText: `${postTitle}\n${postContent}` })
+    prompt = prompt + wornSection(worn, ttsLang)
+    console.log(`[Podcast Script] Regie: ${JSON.stringify(summarizeCoordinates(regieCoords))}, Regisseur ${regieFill ? 'ja' : 'nein'}, verbraucht: ${worn.phrases.length} Wendungen, ${worn.shortLines.length} Kurzzeilen`)
+
     // Build personality brief as system prompt (not appended to user message)
     // System prompt gets highest attention from the model — critical for longing/connection moments
     const personalityState = await getPersonalityState(ttsLang)
@@ -379,7 +406,25 @@ export async function POST(request: NextRequest) {
     // (set an [INTERMEZZO] marker at the self-reflection beat) almost
     // every time. A second pass with Haiku locates the strongest
     // self-reflection line and splices the marker in. Fail-soft.
-    const scriptWithMarker = await ensureIntermezzoMarker(scriptContent, ttsLang)
+    // TEXTURDURCHGANG (Betreiber 2026-11-14): zweiter Aufruf, nur Oberfläche
+    // (Pointen, verbrauchte Wendungen, Rückmeldungen, Sprache nach Regie);
+    // Fakten, Zahlen, Marker und Reihenfolge prüft validateTexture. Der
+    // MOMENTS-Abschnitt bleibt unangetastet und wird wieder angehängt.
+    const { body: scriptBody, moments } = splitMomentsSection(scriptContent)
+    const texture = await applyTexturePass(scriptBody, {
+      lang: ttsLang,
+      worn,
+      coarseness: coarsenessInstruction(regieCoords, ttsLang),
+      protectedQuotes: quotesFromMoments(moments),
+    })
+    console.log(`[Podcast Script] Texturdurchgang: ${texture.applied ? 'übernommen' : `nicht übernommen (${texture.problems.join('; ')})`}`)
+    const texturedScript = moments ? `${texture.script}\n\n${moments}` : texture.script
+
+    const scriptWithMarker = await ensureIntermezzoMarker(texturedScript, ttsLang)
+
+    // Regie für die Rotation der nächsten Folgen merken (auch bei reinen
+    // Test-Skripten: dann hat die Rotation eben eine Folge weiter gedreht).
+    await saveRegieEntry(regieSupabase, ttsLang, { date: regieDate, postId: body.postId, picks: regieCoords.picks })
 
     // NOTE: Personality evolution (advanceState) happens in jobs/process/route.ts
     // AFTER the podcast audio is successfully generated — not here at script generation time.
@@ -407,6 +452,8 @@ export async function POST(request: NextRequest) {
       estimatedDuration,
       locale,
       ttsLang,
+      regie: { picks: summarizeCoordinates(regieCoords), directed: Boolean(regieFill) },
+      texture: { applied: texture.applied, problems: texture.problems },
     })
   } catch (error) {
     console.error('[Podcast Script] Generation error:', error)

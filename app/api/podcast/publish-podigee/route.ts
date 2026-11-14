@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { summarizeShowNotes } from '@/lib/podcast/show-notes'
 import { fetchAppleEpisodeUrl } from '@/lib/podcast/apple-lookup'
+import { containsExplicitLanguage } from '@/lib/podcast/explicit'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { safeFetch } from '@/lib/security/ssrf'
@@ -190,11 +191,24 @@ export async function POST(request: NextRequest) {
     const coverPublicUrl = publicUrlData.publicUrl
 
     // ─── Step 3: Create episode ───────────────────────────────────────────────
+    // Explicit-Kennzeichnung (2026-11-14): seit der Tonalität v2 darf geflucht
+    // werden; Podigee nimmt das Flag je Episode (lib/podcast/explicit.ts).
+    const { data: podcastRow } = await supabase
+      .from('post_podcasts')
+      .select('script_content')
+      .eq('post_id', postId)
+      .not('script_content', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const explicit = containsExplicitLanguage((podcastRow as { script_content?: string | null } | null)?.script_content)
+
     const episodeRes = await podigeeRequest('/episodes', 'POST', {
       podcast_id: parseInt(podcastId, 10),
       title,
       subtitle,
       summary: description || '',
+      explicit,
       ...(publishedAt ? { published_at: publishedAt } : {}),
     })
 

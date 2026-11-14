@@ -45,6 +45,8 @@ export type UseCase =
   | 'podcast_modes'
   | 'podcast_show_notes'
   | 'podcast_intermezzo'
+  | 'podcast_regie'
+  | 'podcast_texture'
   | 'podcast_memory'
   | 'podcast_episode'
   | 'podcast_metadata_translation'
@@ -273,6 +275,18 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
     label: 'Podcast — Shownotes',
     description: 'Shownotes zu einer Podcast-Folge schreiben',
     defaultModel: 'claude-haiku-4-5-20251001',
+    allowedProviders: ['anthropic'],
+  },
+  podcast_regie: {
+    label: 'Podcast — Tagesregie',
+    description: 'Fuellt die taeglich rotierende Regie (Form, Stilmittel, Streit, Ausbrueche) mit den Meldungen des Tages',
+    defaultModel: 'claude-sonnet-5',
+    allowedProviders: ['anthropic'],
+  },
+  podcast_texture: {
+    label: 'Podcast — Texturdurchgang',
+    description: 'Zweiter Durchgang am Skript: Pointen ausduennen, verbrauchte Wendungen ersetzen, Rueckmeldungen und Sprache nach Regie',
+    defaultModel: 'claude-opus-5-5',
     allowedProviders: ['anthropic'],
   },
   podcast_intermezzo: {
