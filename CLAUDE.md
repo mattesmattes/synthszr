@@ -741,8 +741,58 @@ weiterarbeitet. `shadow_enabled = false` stoppt nur neue Kickoffs.
 - Archiv v1: `docs/podcast/tonality/v1-archive-2026-11-14.md`. Bericht mit
   Noten und Messwerten: `docs/podcast/tonality/v2-style-report.md`
   (Prüfer-Mittel v1 3,4, v2 stabil um 7 von 10).
-- Trockenlauf: `npx tsx scripts/podcast-style-dryrun.ts --post post.txt
-  --state state.json --date <ISO> --out dir [--call]`.
+- Trockenlauf in Stufen (`scripts/podcast-style-dryrun.ts`, Aufrufe im
+  Kopfkommentar): `director` → `script` → `texture` → `validate` → `record`;
+  baut dieselben Prompts wie die Route aus Dateien, mit `--call` und
+  `ANTHROPIC_API_KEY` ruft jede Stufe auch das Modell.
+
+### Podcast: Tagesregie, Fingerabdruck, Texturdurchgang, derbe Sprache
+Gegen Schablonen von Folge zu Folge (Betreiber 2026-11-14: ein Generator, der
+das Skript jeden Tag neu ausrichtet). Ablauf in
+`app/api/podcast/generate-script` (`maxDuration` 800):
+1. **Tagesregie** (`lib/podcast/regie/`): `sampleRegie` (`sampler.ts`,
+   deterministisch, Seed aus Datum|Post) zieht je Folge Koordinaten aus
+   `REGIE_AXES` (`catalog.ts`): Dramaturgie (7 Formen, Sperre 3 Folgen),
+   Temperatur (5), drei von 14 Stilmitteln, zwei von 10 Bildwelten, Segment
+   vor dem Schluss (5; Sperren je 2 Folgen), Derbheit (clean, salty doppelt
+   gewichtet, unfiltered); seltener Genutztes zuerst. Der Regisseur
+   (`director.ts`, Use Case `podcast_regie`, Default Sonnet 5, Tool
+   `report_regie`, 90 s, fail-soft) füllt die Koordinaten mit den Geschichten
+   des Tages (Streit, Ausbrüche mit Ziel und Vorwurf, Plan je Stilmittel);
+   `parseRegieFill` verwirft Ziele, die nicht im Artikel stehen, und fremde
+   Stilmittel. `renderRegieSection` hängt „TODAY'S DIRECTION“ bzw. „REGIE
+   DIESER FOLGE“ an den User-Prompt (inkl. „NOT today: …“); `voice-style.ts`
+   verweist für Form, Temperatur, Stilmittel, Bildwelt, Segment und Sprache
+   darauf und hat nur noch einen Rückfall ohne Regie. Historie:
+   `settings.podcast_regie_history_<lang>` (21 Einträge; eine Neu-Erzeugung
+   desselben Posts ersetzt den Eintrag und zählt nicht als Vorgänger).
+2. **Fingerabdruck** (`lib/podcast/fingerprint.ts`, kein Modell, keine
+   Tabelle): aus den letzten sieben Skripten (`post_podcasts.script_content`,
+   Locale en bzw. de) Wendungen (3–5 Wörter), Kurzzeilen und
+   Sprechanweisungen, die in mehreren Folgen wiederkehren; ohne Eigennamen,
+   Ziffern, einfache Rückmeldungen und Wendungen aus dem heutigen Artikel.
+   Abschnitt „WORN OUT IN RECENT EPISODES“ im Skript- und im Textur-Prompt.
+3. **Texturdurchgang** (`lib/podcast/texture-pass.ts`, Use Case
+   `podcast_texture`, Default Opus 5.5, Streaming): zweiter Aufruf nur für die
+   Oberfläche (Pointen ausdünnen, Verbrauchtes ersetzen, schlichte
+   Rückmeldungen, Versprecher, Derbheit des Tages, Sprechanweisungen
+   variieren). `validateTexture` prüft hart: Marker, Zahlenmenge, Begrüßung
+   wörtlich, Zeilenformat, Länge ±12 %, Zeilenzahl, Abschnittslängen ±35 %,
+   geschützte MOMENTS-Zitate; bei Verstoß oder Fehler bleibt das Skript des
+   ersten Aufrufs. MOMENTS werden vorher abgetrennt und danach wieder
+   angehängt, danach `ensureIntermezzoMarker`.
+4. **Derbe Sprache und Explicit-Flag:** F-Wort an salty- und
+   unfiltered-Tagen erlaubt, `SWEARING_LIMITS` (nie gegen Gruppen oder
+   Privatleute, geflucht aus Überzeugung). `publish-podigee` setzt
+   `explicit` über `containsExplicitLanguage` (`lib/podcast/explicit.ts`,
+   nur gesprochene Zeilen ohne MOMENTS; ohne Skript vorsichtshalber `true`).
+- Die Route antwortet zusätzlich mit `regie: {picks, directed}` und
+  `texture: {applied, problems}`; Admin → Audio zeigt darunter die Zeile
+  „Regie: … — Textur übernommen/verworfen“. Modelle für Regisseur und
+  Textur: Admin → Einstellungen → Podcast.
+- Mehrkosten je Folge ≈ 0,15 USD (Regisseur ≈ 0,03, Textur ≈ 0,12).
+- `extractTextFromTiptap` liegt in `lib/podcast/tiptap-text.ts` und behält
+  Leerzeichen-Textknoten (vorher klebten Wörter wie „longagentic“).
 
 ## Recent Changes (2026-11-12)
 
