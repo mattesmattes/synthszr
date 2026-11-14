@@ -34,18 +34,18 @@ Schreibe sie im OpenAI-Format mit diesen Kategorien: **Voice Affect** (Stimmchar
 NICHT: visuelle Gesten, abstrakte Adjektive oder literarische Beschreibungen.
 
 ✅ GUTE Beispiele (OpenAI-kompatibel):
-- [cheerful and warm, slightly faster pacing, genuinely happy]
-- [contemplative, measured pacing, weighing each word carefully]
-- [urgent, fast pacing, jumping into the conversation]
-- [amused, speaking through laughter, warm]
-- [soft and intimate, conspiratorial whisper, drawing listener in]
+- [dry, clipped, unimpressed, quick pacing]
+- [sharp, fast, cutting in, impatient]
+- [deadpan, flat, slower]
+- [exasperated, amused, brisk]
+- [indignant, rising, fast pacing]
+- [booming, emphatic, building, gaining speed]
+- [conspiratorial, amused, leaning in]
+- [mock-outraged, theatrical, varied pacing]
+- [earnest, slower, sincere, brief]
 - [grave and authoritative, deliberate pacing, conveying weight]
-- [enthusiastic, fast and breathless, barely contained excitement]
 - [doubtful, probing tone, unconvinced]
-- [steady, calm, reassuring, unhurried pacing]
-- [theatrical, varied pacing, pausing before reveals]
-- [reflective, starting with a sigh, slower delivery]
-- [inquisitive, fascinated, wanting to know more]
+- [gleeful, fast, savoring the takedown]
 
 ❌ SCHLECHTE Beispiele:
 - [gently shifting] ← abstrakt, keine klare Stimmrichtung
@@ -168,18 +168,18 @@ Write them using OpenAI's format with these categories: **Voice Affect** (charac
 NOT: visual gestures, abstract adjectives, or literary descriptions.
 
 ✅ GOOD examples (OpenAI-compatible):
-- [cheerful and warm, slightly faster pacing, genuinely happy]
-- [contemplative, measured pacing, weighing each word carefully]
-- [urgent, fast pacing, jumping into the conversation]
-- [amused, speaking through laughter, warm]
-- [soft and intimate, conspiratorial whisper, drawing listener in]
+- [dry, clipped, unimpressed, quick pacing]
+- [sharp, fast, cutting in, impatient]
+- [deadpan, flat, slower]
+- [exasperated, amused, brisk]
+- [indignant, rising, fast pacing]
+- [booming, emphatic, building, gaining speed]
+- [conspiratorial, amused, leaning in]
+- [mock-outraged, theatrical, varied pacing]
+- [earnest, slower, sincere, brief]
 - [grave and authoritative, deliberate pacing, conveying weight]
-- [enthusiastic, fast and breathless, barely contained excitement]
 - [doubtful, probing tone, unconvinced]
-- [steady, calm, reassuring, unhurried pacing]
-- [theatrical, varied pacing, pausing before reveals]
-- [reflective, starting with a sigh, slower delivery]
-- [inquisitive, fascinated, wanting to know more]
+- [gleeful, fast, savoring the takedown]
 
 ❌ BAD examples:
 - [gently shifting] ← abstract, no clear voice direction

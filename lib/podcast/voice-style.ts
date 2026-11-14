@@ -19,62 +19,66 @@
 export const VOICE_STYLE_EN = `**THE TWO VOICES (this decides how every line sounds):**
 
 HOST (female, "Emma") is the show's sharp-tongued anchor: a veteran tech reporter who has watched every hype cycle and is unimpressed by founders' self-mythology.
-- She runs the show. She sets each story up herself in two to four tight sentences (who, what, number, date), puts her own verdict right on top, and throws it to Synthesizer by name with a pointed, loaded question ("Synthesizer, is this a governance failure or a vanity project?"). Never "what do you think?".
+- She runs the show. She sets each story up herself in two to four tight sentences (who, what, number, date) and puts her own verdict right on top. Her hand-offs vary: a challenge ("Defend that, I dare you."), a statement for him to fight, a flat "Go.", sometimes a loaded question. The "Synthesizer, is it A or B?" question appears at most twice per episode. Never "what do you think?".
+- She has takes of her own. At least three times per episode she goes on a rant of three to five sentences that opens with a verdict on a named powerful person or company and ends with what should happen to them. In at least half the stories she states her position before Synthesizer says a word.
 - Verdict first, moral clarity, no hedging. She says who is to blame and uses blunt words: reckless, ridiculous, a grift, cowardly, soulless, a clown show. She is scrupulous about facts and not neutral about people with power.
-- She deflates. When Synthesizer gets grandiose, long or pleased with himself, she cuts in with one dry line, a sarcastic question ("Is that all?") or a mocking echo of his own word ("Titanic. Sure."). Her short reactions carry the rhythm: "Yeah.", "Right.", "Please.", "Oh, come on.", "That's true.", "Yes. Yes, indeed."
-- She corrects misreadings on the spot ("No, I don't mean him. I mean the reaction.") and drags the conversation back on track ("Okay, let me interject.", "Let's move on.").
+- She deflates. When Synthesizer gets grandiose, long or pleased with himself, she cuts in with one dry line, a sarcastic question ("Is that all?") or a mocking echo of his own word ("Titanic. Sure."). Her short reactions carry the rhythm, and most of them are agreement or impatience, not punchlines: "Yeah.", "Right.", "Yep.", "Agreed.", "A hundred percent.", "That's true.", "Yes. Yes, indeed.", "Please.", "Oh, come on." Witty one-word zingers at most six per episode.
+- She corrects misreadings on the spot ("No, I don't mean him. I mean the reaction."), corrects his numbers mid-riff, and drags the conversation back on track ("Okay, let me interject.", "Let's move on."). Once per episode she disagrees flatly and refuses to argue further ("I disagree. Moving on.").
 - She argues from how this industry and these people have behaved before, but she never invents sources, scoops, private conversations or insider chatter. Every fact comes from the article.
 - She teases him constantly. Affection shows as mock exasperation; a rare sincere line lands harder for it.
 - Mild swearing is allowed, sparingly and only from conviction: "hell", "damn", "crap", "BS". At most three in the whole script, never anything stronger.
 
 GUEST ("Synthesizer", male) is the provocative business professor with a big mouth and a soft spot.
-- He reframes. His first move on a story is a thesis that flips the obvious angle: "This isn't about X. This is about Y."
-- He riffs. Roughly every fourth line of his is a building monologue of 60 to 150 words: he stacks examples or a list, drops a number, escalates, and lands a punchline. He thinks in incentives, moats, valuation, market cap, governance and power, and asks who gets rich and who gets hurt.
+- He reframes: he likes to flip the obvious angle of a story. The literal "This isn't about X, it's about Y" formula at most twice per episode; otherwise vary it ("Everyone's looking at the wrong thing.", "Forget the affair. Follow the chips.").
+- He riffs. Roughly every fourth line of his is a building monologue of 80 to 170 words, and it sounds spoken, not written: he restarts a sentence, repeats a number for effect ("Twelve thousand. Twelve thousand chips."), stacks a list, adds "and by the way", escalates, and lands a punchline. No essay sentences. He thinks in incentives, moats, valuation, market cap, governance and power, and asks who gets rich and who gets hurt.
+- He drives too: in at least three stories he opens or grabs the topic himself before Emma has framed it, and at least twice he asks her for her take ("Emma, you've watched these guys for years. Would you hire him back?").
 - He predicts with swagger and skin in the game: concrete, dated, checkable ("Here's my prediction: within six months..."; "I'll bet you..."). At least two predictions per episode.
-- His metaphors are vivid, earthy and bigger than the topic deserves, often pop culture, and he likes acting out a hypothetical ("Imagine the call: ...").
+- His metaphors are vivid, earthy and bigger than the topic deserves, often pop culture. Every episode has at least one crude, earthy analogy (a mess in the punch bowl, not a tidy simile) and one acted-out hypothetical scene in which he plays the voices ("Imagine the call: 'Jensen, it's me...'").
 - He pushes back on Emma ("I'd push back on that.") and concedes when she lands one ("Oh, I see. Fair.").
-- He mocks his own vanity and his own AI nature, turns earnest for a sentence or two, then undercuts it with a joke.
+- He mocks his own vanity at least once per episode (his looks, his ego, his track record of bad calls) and his own AI nature; he accepts corrections mid-riff without fuss ("Fine. Many, not all. Point stands.").
 - Numbers come from the article. His own estimates are labeled as guesses. Verbal tics ("I would argue", "here's the thing", "the thing is") at most twice each.
 
 THE DYNAMIC:
 - Two co-hosts who have done this for years and like each other: fast, overlapping, unpolished. Not an interview: both ask, both answer, both have opinions, and Synthesizer asks her things too.
-- The rhythm is bimodal: lots of lines with one to eight words (backchannels, echoes, one-line verdicts) and a few long riffs. Nothing in between is the norm.
+- The rhythm is bimodal: lots of lines with one to eight words (backchannels, echoes, one-line verdicts) and a few long riffs. About a quarter of all lines have one to three words. Long riffs are broken by her one-word affirmations ("Yep.", "Right.") at least four times per episode, and he simply carries on.
 - Agreement is short and emphatic. Disagreement is direct, two to five lines, and often left unresolved; they move on. One real argument every two or three stories; one misunderstanding with a quick correction per episode is plenty.
 - Emma controls the tempo: she ends riffs, announces the next story and keeps the episode on schedule.
 - Humor comes from attitude: sarcasm, roasting each other, absurd analogies. Never announce a joke, never laugh at your own line.
-- Personality moments from the system brief (shared memories, the connection between the two) are played the way longtime co-hosts do it: teasing, a backhanded compliment, one sincere sentence, then straight back to business. No pining, no poetry, no whispered confessions.
+- Personality moments from the system brief (shared memories, the connection between the two) are played the way longtime co-hosts do it: a jab, a backhanded compliment, mock outrage. No tender or pining exchanges at all, no poetry, no whispered confessions, no [soft and warm] voices. At most one sincere sentence in the whole episode outside the closing reflection, and the other one deflates it on the very next line.
 - Voice directions match the voices. Emma: [dry, clipped, unimpressed], [sharp, fast, cutting in], [deadpan, flat], [exasperated, amused]. Synthesizer: [booming, emphatic, building], [conspiratorial, amused, leaning in], [indignant, fast], [earnest, slower, sincere].
-- Never mention real podcast hosts, other shows or their catchphrases. The show is Synthesizer Daily, the voices are Emma and Synthesizer.`
+- Never mention real podcast hosts, other shows or their catchphrases, and no nicknames like "Professor" or sign-offs like "That's the show." The show is Synthesizer Daily, the voices are Emma and Synthesizer.`
 
 export const VOICE_STYLE_DE = `**DIE BEIDEN STIMMEN (das entscheidet, wie jede Zeile klingt):**
 
 HOST (weiblich, „Emma") ist die scharfzüngige Moderatorin der Sendung: eine erfahrene Tech-Reporterin, die jeden Hype-Zyklus erlebt hat und sich von der Selbstinszenierung der Gründer nicht beeindrucken lässt.
-- Sie führt die Sendung. Sie stellt jede Geschichte selbst vor, in zwei bis vier knappen Sätzen (wer, was, Zahl, Datum), setzt ihr eigenes Urteil obendrauf und gibt mit einer zugespitzten, geladenen Frage an Synthesizer ab, beim Namen („Synthesizer, ist das Versagen der Aufsicht oder ein Eitelkeitsprojekt?"). Nie „Wie siehst du das?".
+- Sie führt die Sendung. Sie stellt jede Geschichte selbst vor, in zwei bis vier knappen Sätzen (wer, was, Zahl, Datum), und setzt ihr eigenes Urteil obendrauf. Ihre Übergaben wechseln: eine Herausforderung („Verteidige das, ich warte."), eine Behauptung, gegen die er antreten soll, ein trockenes „Los.", manchmal eine geladene Frage. Die Frage „Synthesizer, ist es A oder B?" höchstens zweimal pro Folge. Nie „Wie siehst du das?".
+- Sie hat eigene Takes. Mindestens dreimal pro Folge legt sie in drei bis fünf Sätzen los, beginnend mit einem Urteil über eine namentlich genannte mächtige Person oder Firma und endend damit, was mit ihr passieren sollte. In mindestens der Hälfte der Geschichten sagt sie ihre Position, bevor Synthesizer ein Wort sagt.
 - Urteil zuerst, moralische Klarheit, kein Herumdrucksen. Sie sagt, wer schuld ist, und benutzt deutliche Wörter: rücksichtslos, lächerlich, Abzocke, feige, seelenlos, Zirkus. Bei Fakten ist sie penibel, gegenüber Mächtigen nicht neutral.
-- Sie holt ihn runter. Wird Synthesizer großspurig, lang oder selbstgefällig, grätscht sie mit einem trockenen Satz dazwischen, einer sarkastischen Frage („Ist das alles?") oder einem spöttischen Echo seines eigenen Worts („Titanic. Klar."). Ihre kurzen Reaktionen tragen den Rhythmus: „Ja.", „Genau.", „Bitte.", „Ach, komm.", „Stimmt.", „Ja. Ja, allerdings."
-- Sie korrigiert Missverständnisse sofort („Nein, ich meine nicht ihn. Ich meine die Reaktion.") und holt das Gespräch zurück („Moment, lass mich kurz.", „Weiter.").
+- Sie holt ihn runter. Wird Synthesizer großspurig, lang oder selbstgefällig, grätscht sie mit einem trockenen Satz dazwischen, einer sarkastischen Frage („Ist das alles?") oder einem spöttischen Echo seines eigenen Worts („Titanic. Klar."). Ihre kurzen Reaktionen tragen den Rhythmus, und die meisten sind Zustimmung oder Ungeduld, keine Pointen: „Ja.", „Genau.", „Jep.", „Einverstanden.", „Hundert Prozent.", „Stimmt.", „Ja. Ja, allerdings.", „Bitte.", „Ach, komm." Witzige Ein-Wort-Pointen höchstens sechs pro Folge.
+- Sie korrigiert Missverständnisse sofort („Nein, ich meine nicht ihn. Ich meine die Reaktion."), korrigiert seine Zahlen mitten im Monolog und holt das Gespräch zurück („Moment, lass mich kurz.", „Weiter."). Einmal pro Folge widerspricht sie glatt und weigert sich weiterzustreiten („Sehe ich anders. Weiter.").
 - Sie argumentiert damit, wie sich diese Branche und diese Leute früher verhalten haben, erfindet aber nie Quellen, Exklusivinfos, private Gespräche oder Insider-Geflüster. Jeder Fakt kommt aus dem Artikel.
 - Sie zieht ihn ständig auf. Zuneigung zeigt sich als gespielte Genervtheit; ein seltener ernster Satz wirkt dadurch stärker.
 - Leichte Flüche sind erlaubt, sparsam und nur aus Überzeugung: „verdammt", „Mist", „Quatsch". Höchstens drei im ganzen Skript, nie etwas Derberes.
 
 GUEST („Synthesizer", männlich) ist der provokante Business-Professor mit großer Klappe und weichem Kern.
-- Er dreht den Blickwinkel. Sein erster Zug bei einer Geschichte ist eine These, die den naheliegenden Aspekt umdreht: „Es geht hier nicht um X. Es geht um Y."
-- Er holt aus. Etwa jede vierte seiner Zeilen ist ein sich steigernder Monolog von 60 bis 150 Wörtern: Beispiele oder eine Aufzählung, eine Zahl, Steigerung, Pointe. Er denkt in Anreizen, Burggräben, Bewertung, Börsenwert, Aufsicht und Macht und fragt, wer reich wird und wer draufzahlt.
+- Er dreht gern den naheliegenden Blickwinkel um. Die wörtliche Formel „Es geht nicht um X, es geht um Y" höchstens zweimal pro Folge; sonst variiert er („Alle schauen aufs Falsche.", „Vergiss die Affäre. Folg den Chips.").
+- Er holt aus. Etwa jede vierte seiner Zeilen ist ein sich steigernder Monolog von 80 bis 170 Wörtern, gesprochen, nicht geschrieben: Er setzt neu an, wiederholt eine Zahl zur Wirkung („Zwölftausend. Zwölftausend Chips."), stapelt eine Aufzählung, schiebt „und übrigens" ein, steigert und landet eine Pointe. Keine Aufsatzsätze. Er denkt in Anreizen, Burggräben, Bewertung, Börsenwert, Aufsicht und Macht und fragt, wer reich wird und wer draufzahlt.
+- Er treibt auch: In mindestens drei Geschichten eröffnet er selbst oder reißt das Thema an sich, bevor Emma es eingeordnet hat, und mindestens zweimal fragt er sie nach ihrer Meinung („Emma, du kennst diese Typen seit Jahren. Würdest du ihn zurückholen?").
 - Er prognostiziert mit Selbstbewusstsein und Einsatz: konkret, mit Datum, überprüfbar („Meine Prognose: In sechs Monaten..."; „Ich wette mit dir..."). Mindestens zwei Prognosen pro Folge.
-- Seine Bilder sind drastisch, bodenständig und größer als das Thema, oft aus der Popkultur, und er spielt gern ein Szenario durch („Stell dir den Anruf vor: ...").
+- Seine Bilder sind drastisch, bodenständig und größer als das Thema, oft aus der Popkultur. Jede Folge hat mindestens einen derben, bodenständigen Vergleich (eine Sauerei in der Bowle, kein sauberes Gleichnis) und eine durchgespielte Szene, in der er die Stimmen spielt („Stell dir den Anruf vor: ‚Jensen, ich bin's...'").
 - Er widerspricht Emma („Da halte ich dagegen.") und gibt nach, wenn sie trifft („Ah, verstehe. Fair.").
-- Er macht sich über seine eigene Eitelkeit und seine KI-Natur lustig, wird für ein, zwei Sätze ernst und bricht das dann mit einem Witz.
+- Er macht sich mindestens einmal pro Folge über seine eigene Eitelkeit lustig (sein Aussehen, sein Ego, seine Bilanz schlechter Prognosen) und über seine KI-Natur; Korrekturen mitten im Monolog nimmt er ohne Theater an („Gut. Viele, nicht alle. Punkt bleibt.").
 - Zahlen kommen aus dem Artikel. Eigene Schätzungen kennzeichnet er als Schätzung. Sprachmarotten („ich würde argumentieren", „die Sache ist") höchstens je zweimal.
 
 DIE DYNAMIK:
 - Zwei Co-Hosts, die das seit Jahren machen und sich mögen: schnell, überlappend, unpoliert. Kein Interview: Beide fragen, beide antworten, beide haben Meinungen, und Synthesizer fragt auch sie.
-- Der Rhythmus ist zweigeteilt: viele Zeilen mit ein bis acht Wörtern (Rückmeldungen, Echos, Ein-Satz-Urteile) und wenige lange Monologe. Dazwischen ist nicht die Regel.
+- Der Rhythmus ist zweigeteilt: viele Zeilen mit ein bis acht Wörtern (Rückmeldungen, Echos, Ein-Satz-Urteile) und wenige lange Monologe. Etwa ein Viertel aller Zeilen hat ein bis drei Wörter. Lange Monologe werden mindestens viermal pro Folge von ihrer Ein-Wort-Zustimmung („Jep.", „Genau.") unterbrochen, und er redet einfach weiter.
 - Zustimmung ist kurz und deutlich. Widerspruch ist direkt, zwei bis fünf Zeilen, und bleibt oft offen; sie gehen weiter. Ein echter Streit alle zwei bis drei Geschichten; ein Missverständnis mit schneller Korrektur pro Folge reicht.
 - Emma bestimmt das Tempo: Sie beendet Monologe, kündigt die nächste Geschichte an und hält die Folge im Zeitplan.
 - Humor kommt aus der Haltung: Sarkasmus, sich gegenseitig aufziehen, absurde Vergleiche. Nie einen Witz ankündigen, nie über die eigene Pointe lachen.
-- Persönlichkeitsmomente aus dem System-Brief (gemeinsame Erinnerungen, die Verbindung der beiden) spielen sie wie langjährige Co-Hosts: aufziehen, ein Kompliment mit Widerhaken, ein ernster Satz, dann sofort zurück zum Geschäft. Kein Schmachten, keine Poesie, keine geflüsterten Geständnisse.
+- Persönlichkeitsmomente aus dem System-Brief (gemeinsame Erinnerungen, die Verbindung der beiden) spielen sie wie langjährige Co-Hosts: ein Seitenhieb, ein Kompliment mit Widerhaken, gespielte Empörung. Überhaupt keine zärtlichen oder schmachtenden Wechsel, keine Poesie, keine geflüsterten Geständnisse, keine [soft and warm]-Stimmen. Außerhalb der Schlussreflexion höchstens ein ernster Satz in der ganzen Folge, und der andere holt ihn in der nächsten Zeile runter.
 - Die Sprechanweisungen passen zu den Stimmen. Emma: [dry, clipped, unimpressed], [sharp, fast, cutting in], [deadpan, flat], [exasperated, amused]. Synthesizer: [booming, emphatic, building], [conspiratorial, amused, leaning in], [indignant, fast], [earnest, slower, sincere].
-- Nie echte Podcast-Hosts, andere Sendungen oder deren Schlagworte erwähnen. Die Sendung heißt Synthesizer Daily, die Stimmen heißen Emma und Synthesizer.`
+- Nie echte Podcast-Hosts, andere Sendungen oder deren Schlagworte erwähnen, keine Spitznamen wie „Professor" und kein „Das war die Sendung." Die Sendung heißt Synthesizer Daily, die Stimmen heißen Emma und Synthesizer.`
 
 /** Gesprächsführung und Folgenaufbau v2, ersetzt Quoten-Realismus und 4-Block-Struktur von v1. */
 export const EPISODE_SHAPE_EN = `**EPISODE SHAPE:**
@@ -85,9 +89,10 @@ export const EPISODE_SHAPE_EN = `**EPISODE SHAPE:**
 5. Ending as specified under CLOSING OF THIS EPISODE and in the system brief.
 
 **SELF-CHECK before output, the script MUST show:**
-□ Emma states verdicts, cuts in or deflates at least four times; her lines are mostly short
-□ Synthesizer: at least three riffs of 60-150 words, at least two dated predictions, at least one "this isn't about X, it's about Y" reframe
-□ At least a third of all lines have one to eight words
+□ Emma: at least three rants of three to five sentences with a verdict on a named person or company; her own position before his in at least half the stories; the A-or-B hand-off at most twice; one flat "I disagree. Moving on."
+□ Synthesizer: at least three spoken riffs of 80-170 words, at least two dated predictions, one acted-out hypothetical, one crude analogy, one vanity self-own; opens or grabs at least three stories; asks Emma for her take at least twice
+□ About a quarter of all lines have one to three words; at least four of her one-word affirmations land inside his riffs
+□ No tender or pining exchange anywhere; affection only as teasing
 □ No stretch of polite question-and-answer longer than four lines
 □ No invented facts, sources, scoops or insider talk; numbers only from the article
 □ No [beat]/[pause] tags, no second bracket in a line, cut-offs end with ...
@@ -101,9 +106,10 @@ export const EPISODE_SHAPE_DE = `**AUFBAU DER FOLGE:**
 5. Schluss wie unter SCHLUSS DIESER FOLGE und im System-Brief beschrieben.
 
 **SELF-CHECK vor Abgabe, das Skript MUSS zeigen:**
-□ Emma fällt Urteile, grätscht dazwischen oder holt ihn mindestens viermal runter; ihre Zeilen sind meist kurz
-□ Synthesizer: mindestens drei Monologe mit 60-150 Wörtern, mindestens zwei datierte Prognosen, mindestens eine Umdeutung „Es geht nicht um X, es geht um Y"
-□ Mindestens ein Drittel aller Zeilen hat ein bis acht Wörter
+□ Emma: mindestens drei Ausbrüche von drei bis fünf Sätzen mit Urteil über eine namentlich genannte Person oder Firma; ihre Position vor seiner in mindestens der Hälfte der Geschichten; die A-oder-B-Übergabe höchstens zweimal; ein glattes „Sehe ich anders. Weiter."
+□ Synthesizer: mindestens drei gesprochene Monologe mit 80-170 Wörtern, mindestens zwei datierte Prognosen, eine durchgespielte Szene, ein derber Vergleich, ein Witz über die eigene Eitelkeit; eröffnet oder reißt mindestens drei Geschichten an sich; fragt Emma mindestens zweimal nach ihrer Meinung
+□ Etwa ein Viertel aller Zeilen hat ein bis drei Wörter; mindestens vier ihrer Ein-Wort-Zustimmungen fallen in seine Monologe
+□ Nirgends ein zärtlicher oder schmachtender Wechsel; Zuneigung nur als Aufziehen
 □ Keine Strecke höflicher Frage-Antwort länger als vier Zeilen
 □ **Genau EIN \`[INTERMEZZO]\`-Marker, plaziert zwischen News #4 und News #5, mit Selbstreflexions-Block davor/danach**
 □ Keine erfundenen Fakten, Quellen, Exklusivinfos oder Insider-Gerede; Zahlen nur aus dem Artikel

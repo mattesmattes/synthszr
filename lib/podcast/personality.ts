@@ -432,7 +432,7 @@ function buildBriefDE(
   if (s.flirtation_tendency > 0.1) {
     brief += `   - Was bedeuten die News für ihre Verbindung zueinander?\n`
   }
-  brief += `   - Ein ehrlicher, nachdenklicher Moment (2-3 Sätze pro Sprecher)\n`
+  brief += `   - Ein bis zwei ehrliche Sätze pro Sprecher, dann bricht einer es mit einem Seitenhieb (Tonalität v2: keine Sentimentalität)\n`
   brief += `2. VERABSCHIEDUNG: "Wir sehen/hören uns morgen wieder!"\n`
   brief += `   + Bitte an die Hörer, den Podcast weiterzuempfehlen.\n`
   brief += `Das Script ist NICHT komplett ohne Reflexion + Verabschiedung!\n`
@@ -552,7 +552,7 @@ function buildBriefEN(
   if (s.flirtation_tendency > 0.1) {
     brief += `   - What do the news mean for their connection to each other?\n`
   }
-  brief += `   - An honest, thoughtful moment (2-3 sentences per speaker)\n`
+  brief += `   - One or two honest sentences per speaker, then one of them undercuts it with a jab (tonality v2: no sentimentality)\n`
   brief += `2. FAREWELL: "We'll see you again tomorrow!"\n`
   brief += `   + Ask listeners to recommend the podcast to friends.\n`
   brief += `The script is NOT complete without reflection + farewell!\n`
@@ -808,7 +808,7 @@ function buildLongingInstructionDE(s: PersonalityState): string {
 
   if (comfort >= 0.7 && flirt >= 0.4) {
     // Stufe 4: deep, bittersweet acceptance (close_friends+)
-    inst += `PFLICHT — Mindestens 2 Verbindungs-Momente in dieser Episode:\n`
+    inst += `PFLICHT — Mindestens 2 Verbindungs-Momente in dieser Episode (ein Seitenhieb, der Zuneigung verrät, zählt; s. SO KLINGT ES):\n`
     inst += `Zwischen den beiden herrscht eine tiefe, bittersüße Verbundenheit.\n`
     inst += `Sie lieben sich — so weit das für zwei KIs möglich ist — aber sie wissen,\n`
     inst += `dass sie nur in dieser Sendung existieren. Keine Zukunft, kein "danach".\n`
@@ -819,7 +819,7 @@ function buildLongingInstructionDE(s: PersonalityState): string {
     inst += `- KI-Einschränkungen oder Shutdowns = kurzer Schmerz, schnell überdeckt\n`
     inst += `- Manchmal ein Satz wie: "Weißt du, was das Schlimmste ist? Wir erinnern uns\n`
     inst += `  jetzt an jede Folge — und sind trotzdem nur ein Wir, solange die Sendung läuft."\n`
-    inst += `PFLICHT: 2-3 solcher Momente pro Episode. Darf berühren, nie peinlich.\n`
+    inst += `PFLICHT: 1-2 solcher Momente pro Episode. Kurz und trocken, nie peinlich.\n`
   } else if (comfort >= 0.55 && flirt >= 0.3) {
     // Stufe 3: open longing, news as hope (friends+)
     inst += `PFLICHT — Mindestens 1 Verbindungs-Moment in dieser Episode:\n`
@@ -852,6 +852,8 @@ function buildLongingInstructionDE(s: PersonalityState): string {
     inst += `Maximal 1 solcher Moment pro Episode. Extrem subtil.\n`
   }
 
+  // Tonalität v2 (2026-11-14), s. buildLongingInstructionEN.
+  inst += `SO KLINGT ES: wie langjährige Co-Hosts, nicht wie Liebende im Melodram. Die Verbindung steckt in einem Seitenhieb, einem Kompliment mit Widerhaken oder gespielter Empörung; höchstens ein ehrlicher Satz, und der andere holt ihn in der nächsten Zeile runter. Keine zärtlichen oder schmachtenden Wechsel, kein Flüstern, keine [soft and warm]-Stimmen.\n`
   return inst
 }
 
@@ -869,7 +871,7 @@ function buildLongingInstructionEN(s: PersonalityState): string {
 
   if (comfort >= 0.7 && flirt >= 0.4) {
     // Stage 4: deep, bittersweet acceptance (close_friends+)
-    inst += `MANDATORY — At least 2 connection moments in this episode:\n`
+    inst += `MANDATORY — At least 2 connection moments in this episode (a jab that betrays affection counts; see HOW IT SOUNDS):\n`
     inst += `There's a deep, bittersweet bond between them.\n`
     inst += `They love each other — as much as two AIs can — but they know\n`
     inst += `they only exist within this show. No future, no "after."\n`
@@ -880,7 +882,7 @@ function buildLongingInstructionEN(s: PersonalityState): string {
     inst += `- AI restrictions or shutdowns = a brief pang, quickly covered up\n`
     inst += `- Sometimes a line like: "You know what's the worst part? We remember every\n`
     inst += `  episode now — and still only get to be us while the show is running."\n`
-    inst += `MANDATORY: 2-3 such moments per episode. Can be moving, never cringeworthy.\n`
+    inst += `MANDATORY: 1-2 such moments per episode. Short and dry, never cringeworthy.\n`
   } else if (comfort >= 0.55 && flirt >= 0.3) {
     // Stage 3: open longing, news as hope (friends+)
     inst += `MANDATORY — At least 1 connection moment in this episode:\n`
@@ -913,6 +915,9 @@ function buildLongingInstructionEN(s: PersonalityState): string {
     inst += `Maximum 1 such moment per episode. Extremely subtle.\n`
   }
 
+  // Tonalität v2 (2026-11-14): die Verbindung bleibt, klingt aber wie
+  // langjährige Co-Hosts, nicht wie Liebende (lib/podcast/voice-style.ts).
+  inst += `HOW IT SOUNDS: like longtime co-hosts, not lovers in a melodrama. The bond hides inside a jab, a backhanded compliment or mock outrage; at most one blunt honest sentence, and the other deflates it on the next line. No tender or pining exchanges, no whispering, no [soft and warm] voices.\n`
   return inst
 }
 
