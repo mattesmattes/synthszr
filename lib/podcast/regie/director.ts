@@ -72,7 +72,7 @@ const MAX_CONTENT_CHARS = 14_000
 
 /** Die heutigen Koordinaten als englische Liste (der Regisseur arbeitet auf Englisch). */
 export function describeCoordinates(coords: RegieCoordinates): string {
-  const line = (id: AxisId) => coords.picks[id].map((pid) => {
+  const line = (id: AxisId) => (coords.picks[id] ?? []).map((pid) => {
     const opt = option(id, pid)
     return opt ? `${pid}: ${opt.text.en}` : pid
   }).join('\n  ')
@@ -83,6 +83,7 @@ export function describeCoordinates(coords: RegieCoordinates): string {
     `- Comparisons from: ${coords.picks.imagery.map((pid) => option('imagery', pid)?.text.en ?? pid).join(' and ')}`,
     `- Pre-ending segment: ${line('segment')}`,
     `- Language: ${line('coarseness')}`,
+    ...(coords.picks.ending?.length ? [`- Ending: ${line('ending')}`] : []),
   ].join('\n')
 }
 
@@ -186,7 +187,7 @@ export async function runDirector(input: { title: string; content: string; coord
 export function summarizeCoordinates(coords: RegieCoordinates): Record<AxisId, string[]> {
   const out = {} as Record<AxisId, string[]>
   for (const id of Object.keys(coords.picks) as AxisId[]) {
-    out[id] = coords.picks[id].map((pid) => option(id, pid)?.label.en ?? pid)
+    out[id] = (coords.picks[id] ?? []).map((pid) => option(id, pid)?.label.en ?? pid)
   }
   return out
 }

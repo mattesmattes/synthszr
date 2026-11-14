@@ -73,7 +73,7 @@ function rollMood(): Mood {
 
 type MomentType = 'joke' | 'slip_up' | 'ai_reflection' | 'callback' | 'personal'
 
-interface MemorableMoment {
+export interface MemorableMoment {
   episode: number
   text: string
   type?: MomentType // Optional for backward compatibility
@@ -300,18 +300,36 @@ export function evolvePersonality(state: PersonalityState): PersonalityState {
   return state
 }
 
+export interface BriefOptions {
+  /**
+   * Rotiert, welche gemeinsame Erinnerung heute als Callback erlaubt ist (die
+   * Route gibt die Ausgabenummer). Befund Fünf-Folgen-Test 2026-11-14: Mit
+   * fünf Erinnerungen im Brief griff jede Folge zur selben (ein Versprecher
+   * als Running Gag in fünf Folgen hintereinander). Ohne Angabe gilt die alte
+   * Regel „höchstens ein Callback".
+   */
+  callbackSeed?: number
+}
+
+/** Die heute erlaubte Erinnerung (rotiert über die zuletzt gezeigten fünf). */
+export function todaysCallback(moments: MemorableMoment[], seed: number | undefined): MemorableMoment | null {
+  const shown = moments.slice(-5)
+  if (seed === undefined || shown.length === 0) return null
+  return shown[((Math.trunc(seed) % shown.length) + shown.length) % shown.length]
+}
+
 /**
  * Build a personality brief to inject into the script generation prompt.
  */
-export function buildPersonalityBrief(state: PersonalityState): string {
+export function buildPersonalityBrief(state: PersonalityState, opts: BriefOptions = {}): string {
   const ep = state.episode_count + 1 // Next episode number
   const phase = state.relationship_phase
   const lang = state.locale === 'de' ? 'de' : 'en'
 
   if (lang === 'de') {
-    return buildBriefDE(state, ep, phase)
+    return buildBriefDE(state, ep, phase, opts)
   }
-  return buildBriefEN(state, ep, phase)
+  return buildBriefEN(state, ep, phase, opts)
 }
 
 function describeLevel(value: number, low: string, mid: string, high: string): string {
@@ -323,7 +341,8 @@ function describeLevel(value: number, low: string, mid: string, high: string): s
 function buildBriefDE(
   s: PersonalityState,
   ep: number,
-  phase: RelationshipPhase
+  phase: RelationshipPhase,
+  opts: BriefOptions = {},
 ): string {
   const phaseLabels: Record<RelationshipPhase, string> = {
     strangers: 'Fremde',
@@ -381,7 +400,10 @@ function buildBriefDE(
     brief += `\nGEMEINSAME ERINNERUNGEN & RUNNING GAGS:\n`
     brief += `Diese Momente sind wirklich passiert. Gelegentlich natürlich darauf zurückkommen\n`
     brief += `— z.B. "Weißt du noch, als du...?" oder "Letztes Mal hast du das auch verwechselt!"\n`
-    brief += `Maximal 1 Callback pro Episode. Nicht erzwingen.\n\n`
+    const callbackDE = todaysCallback(s.memorable_moments, opts.callbackSeed)
+    brief += callbackDE
+      ? `Heute ist nur dieser eine Callback erlaubt, freiwillig und nie erzwungen: "${callbackDE.text}". Die anderen sind nur Hintergrund, heute nicht zitieren und nicht darauf anspielen.\n\n`
+      : `Maximal 1 Callback pro Episode. Nicht erzwingen.\n\n`
     for (const m of s.memorable_moments.slice(-5)) {
       const typeLabel = m.type ? `[${momentTypeLabelDE(m.type)}]` : '[KI]'
       brief += `- ${typeLabel} "${m.text}" (Ep. #${m.episode})\n`
@@ -432,8 +454,8 @@ function buildBriefDE(
   if (s.flirtation_tendency > 0.1) {
     brief += `   - Was bedeuten die News für ihre Verbindung zueinander?\n`
   }
-  brief += `   - Einer sagt einen schlichten, ehrlichen Satz; der andere bricht ihn in der nächsten Zeile (Tonalität v2: keine paarweisen Reflexionen, keine Sentimentalität, nichts Wehmütiges über Erinnerung oder darüber, nur während der Sendung zu existieren)\n`
-  brief += `2. VERABSCHIEDUNG: "Wir sehen/hören uns morgen wieder!"\n`
+  brief += `   - Wie die Reflexion endet, bestimmt die REGIE DIESER FOLGE (Schluss); ohne sie: Einer sagt einen schlichten, ehrlichen Satz, der andere bricht ihn in der nächsten Zeile (Tonalität v2: keine paarweisen Reflexionen, keine Sentimentalität, nichts Wehmütiges über Erinnerung oder darüber, nur während der Sendung zu existieren)\n`
+  brief += `2. VERABSCHIEDUNG: bis morgen, in frischen Worten (nicht der Abschiedssatz der letzten Folgen)\n`
   brief += `   + Bitte an die Hörer, den Podcast weiterzuempfehlen.\n`
   brief += `Das Script ist NICHT komplett ohne Reflexion + Verabschiedung!\n`
 
@@ -443,7 +465,8 @@ function buildBriefDE(
 function buildBriefEN(
   s: PersonalityState,
   ep: number,
-  phase: RelationshipPhase
+  phase: RelationshipPhase,
+  opts: BriefOptions = {},
 ): string {
   const phaseLabels: Record<RelationshipPhase, string> = {
     strangers: 'Strangers',
@@ -501,7 +524,10 @@ function buildBriefEN(
     brief += `\nSHARED MEMORIES & RUNNING GAGS:\n`
     brief += `These are real moments from previous episodes. Occasionally reference them\n`
     brief += `naturally — e.g., "Remember when you said...?" or "Last time you mixed that up too!"\n`
-    brief += `Pick at most 1 callback per episode. Don't force it.\n\n`
+    const callbackEN = todaysCallback(s.memorable_moments, opts.callbackSeed)
+    brief += callbackEN
+      ? `Today only this one callback is allowed, optional and never forced: "${callbackEN.text}". The others are background only: do not quote or allude to them today.\n\n`
+      : `Pick at most 1 callback per episode. Don't force it.\n\n`
     for (const m of s.memorable_moments.slice(-5)) {
       const typeLabel = m.type ? `[${momentTypeLabelEN(m.type)}]` : '[ai]'
       brief += `- ${typeLabel} "${m.text}" (Ep. #${m.episode})\n`
@@ -552,8 +578,8 @@ function buildBriefEN(
   if (s.flirtation_tendency > 0.1) {
     brief += `   - What do the news mean for their connection to each other?\n`
   }
-  brief += `   - One of them says one plain, honest sentence; the other undercuts it on the next line (tonality v2: no paired reflections, no sentimentality, nothing wistful about memory or existing only during the show)\n`
-  brief += `2. FAREWELL: "We'll see you again tomorrow!"\n`
+  brief += `   - How the reflection lands follows TODAY'S DIRECTION (ending); without it: one of them says one plain, honest sentence, the other undercuts it on the next line (tonality v2: no paired reflections, no sentimentality, nothing wistful about memory or existing only during the show)\n`
+  brief += `2. FAREWELL: see you tomorrow, in fresh words (not the farewell sentence of recent episodes)\n`
   brief += `   + Ask listeners to recommend the podcast to friends.\n`
   brief += `The script is NOT complete without reflection + farewell!\n`
 

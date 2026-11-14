@@ -15,7 +15,7 @@
 
 export type Lang = 'de' | 'en'
 
-export type AxisId = 'dramaturgy' | 'temperature' | 'devices' | 'imagery' | 'segment' | 'coarseness'
+export type AxisId = 'dramaturgy' | 'temperature' | 'devices' | 'imagery' | 'segment' | 'coarseness' | 'ending'
 
 export interface RegieOption {
   id: string
@@ -192,6 +192,32 @@ export const REGIE_AXES: RegieAxis[] = [
       o('unfiltered', 'unfiltered', 'ungefiltert',
         'Unfiltered: swearing is part of the heat, up to eight swear words, at most three f-words.',
         'Ungefiltert: Fluchen gehört zur Hitze, bis zu acht Flüche, höchstens drei F-Wörter.', 1),
+    ],
+  },
+  {
+    // Wie die Folge ausklingt. Befund Fünf-Folgen-Test 2026-11-14: fünfmal
+    // derselbe Schluss (ehrlicher Satz, Spott, „bis morgen", Empfehlung).
+    // Steht am Ende des Katalogs, damit die Ziehung der übrigen Achsen für
+    // bestehende Historien gleich bleibt.
+    id: 'ending',
+    pick: 1,
+    cooldown: 2,
+    options: [
+      o('undercut', 'honest line, undercut', 'ehrlicher Satz, gebrochen',
+        'One of them says one plain, honest sentence about what today means for the two of them as AIs; the other undercuts it on the next line.',
+        'Einer sagt einen schlichten, ehrlichen Satz darüber, was der Tag für die beiden als KI bedeutet; der andere bricht ihn in der nächsten Zeile.'),
+      o('emma-sincere', 'Emma gets the honest line', 'Emma hat den ehrlichen Satz',
+        'The reflection belongs to Emma today: one honest sentence from her, and for once he has no comeback, just a beat before the goodbye.',
+        'Die Reflexion gehört heute Emma: ein ehrlicher Satz von ihr, und ausnahmsweise fällt ihm nichts ein, nur eine kurze Pause vor dem Abschied.'),
+      o('unresolved', 'still arguing', 'Streit bleibt offen',
+        'No truce: today\'s argument is still open, the reflection is a single line inside it, and they sign off mid-disagreement.',
+        'Kein Frieden: Der Streit des Tages bleibt offen, die Reflexion ist eine einzige Zeile mitten darin, und sie verabschieden sich im Widerspruch.'),
+      o('cold-open-payoff', 'cold-open payoff', 'Rückgriff auf den Einstieg',
+        'The ending pays off the cold open, and the reflection hangs on that payoff. No compliments today.',
+        'Der Schluss löst den Einstieg auf, und die Reflexion hängt an dieser Auflösung. Heute keine Komplimente.'),
+      o('dry-out', 'dry exit', 'trockener Abgang',
+        'No sentiment at all: one dry remark about what the news means for the two of them as AIs, then out fast.',
+        'Kein Gefühl: eine trockene Bemerkung, was die News für die beiden als KI bedeuten, dann schnell raus.'),
     ],
   },
 ]

@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { EPISODE_SHAPE_DE, EPISODE_SHAPE_EN, VOICE_STYLE_DE, VOICE_STYLE_EN } from '@/lib/podcast/voice-style'
 import { DEFAULT_SCRIPT_PROMPT_DE, DEFAULT_SCRIPT_PROMPT_EN } from '@/lib/podcast/script-templates'
 import { DIALOGUE_STYLE_RULES_DE, DIALOGUE_STYLE_RULES_EN } from '@/lib/podcast/dialogue-style'
-import { buildPersonalityBrief, type PersonalityState } from '@/lib/podcast/personality'
+import { buildPersonalityBrief, todaysCallback, type PersonalityState } from '@/lib/podcast/personality'
 
 const ALL = [VOICE_STYLE_EN, VOICE_STYLE_DE, EPISODE_SHAPE_EN, EPISODE_SHAPE_DE, DIALOGUE_STYLE_RULES_EN, DIALOGUE_STYLE_RULES_DE]
 
@@ -65,10 +65,23 @@ describe('Persönlichkeits-Brief klingt nach Co-Hosts, nicht nach Melodram', () 
     const en = buildPersonalityBrief(base)
     expect(en).toContain('HOW IT SOUNDS: like longtime co-hosts')
     expect(en).not.toMatch(/only get to be us while the show is running/)
-    expect(en).toMatch(/One of them says one plain, honest sentence/)
+    expect(en).toMatch(/one of them says one plain, honest sentence/i)
+    expect(en).toMatch(/How the reflection lands follows TODAY'S DIRECTION/)
     const de = buildPersonalityBrief({ ...base, locale: 'de' })
     expect(de).toContain('SO KLINGT ES: wie langjährige Co-Hosts')
     expect(de).not.toMatch(/nur ein Wir, solange die Sendung läuft/)
+  })
+
+  it('rotiert den erlaubten Callback über die gemeinsamen Erinnerungen (Fünf-Folgen-Test 2026-11-14)', () => {
+    const moments = ['Carbon. Sorry. Too many elements.', 'You\'d get hacked by Thursday.', 'I said silicon all episode.']
+      .map((text, i) => ({ type: 'joke' as const, text, episode: 300 + i }))
+    const withMoments = { ...base, memorable_moments: moments }
+    expect(todaysCallback(moments, 316)?.text).not.toBe(todaysCallback(moments, 317)?.text)
+    expect(todaysCallback(moments, undefined)).toBeNull()
+    const en = buildPersonalityBrief(withMoments, { callbackSeed: 317 })
+    expect(en).toContain(`Today only this one callback is allowed, optional and never forced: "${todaysCallback(moments, 317)!.text}"`)
+    expect(buildPersonalityBrief(withMoments)).toContain('Pick at most 1 callback per episode')
+    expect(buildPersonalityBrief({ ...withMoments, locale: 'de' }, { callbackSeed: 316 })).toContain('Heute ist nur dieser eine Callback erlaubt')
   })
 
   it('ohne aktive Verbindung keine Klang-Regel', () => {

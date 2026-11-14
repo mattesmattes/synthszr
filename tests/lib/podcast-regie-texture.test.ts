@@ -54,6 +54,24 @@ describe('Sampler der Tagesregie', () => {
     }
   })
 
+  it('wiederholt keinen Schluss aus den zwei vorigen Folgen', () => {
+    const h = run(12)
+    for (let i = 2; i < h.length; i++) {
+      expect([h[i - 1].picks.ending[0], h[i - 2].picks.ending[0]]).not.toContain(h[i].picks.ending[0])
+    }
+  })
+
+  it('Einträge von vor der Schluss-Achse stören weder Ziehung noch Darstellung', () => {
+    const old = sampleRegie([], { date: '2026-11-13', postId: 'alt' })
+    const { ending: _drop, ...picksWithoutEnding } = old.picks
+    const legacy = { ...old, picks: picksWithoutEnding as typeof old.picks }
+    const next = sampleRegie([{ date: legacy.date, postId: legacy.postId, picks: legacy.picks }], { date: '2026-11-14', postId: 'neu' })
+    expect(next.picks.ending).toHaveLength(1)
+    expect(renderRegieSection(legacy, null, 'en')).not.toContain('- Ending:')
+    expect(renderRegieSection(next, null, 'en')).toContain('- Ending:')
+    expect(renderRegieSection(next, null, 'de')).toContain('- Schluss:')
+  })
+
   it('eine Neu-Erzeugung zum selben Post zählt nicht als Vorgänger', () => {
     const first = sampleRegie([], { date: '2026-11-14', postId: 'x' })
     const again = sampleRegie([{ date: '2026-11-14', postId: 'x', picks: first.picks }], { date: '2026-11-14', postId: 'x' })

@@ -550,7 +550,7 @@ function describeRun(info: ScriptRunInfo | null): string | null {
     p.dramaturgy?.[0], p.temperature?.[0],
     p.devices?.length ? `Mittel: ${p.devices.join(', ')}` : null,
     p.imagery?.length ? `Bilder: ${p.imagery.join(', ')}` : null,
-    p.segment?.[0], p.coarseness?.[0],
+    p.segment?.[0], p.coarseness?.[0], p.ending?.[0] ? `Schluss: ${p.ending[0]}` : null,
   ].filter(Boolean)
   const textur = info.texture ? (info.texture.applied ? 'Textur übernommen' : `Textur verworfen (${info.texture.problems.slice(0, 2).join('; ')})`) : null
   return `Regie: ${parts.join(' · ')}${info.regie.directed ? '' : ' (ohne Regisseur)'}${textur ? ` — ${textur}` : ''}`

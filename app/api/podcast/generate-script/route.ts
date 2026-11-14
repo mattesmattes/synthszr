@@ -277,7 +277,7 @@ export async function POST(request: NextRequest) {
     // Build personality brief as system prompt (not appended to user message)
     // System prompt gets highest attention from the model — critical for longing/connection moments
     const personalityState = await getPersonalityState(ttsLang)
-    const personalityBrief = buildPersonalityBrief(personalityState)
+    const personalityBrief = buildPersonalityBrief(personalityState, { callbackSeed: publicEpisode ?? undefined })
 
     // Episode memory: the last three episodes + up to five semantically
     // similar earlier episodes for callbacks and position consistency.

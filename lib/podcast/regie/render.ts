@@ -7,7 +7,8 @@ import type { RegieCoordinates } from '@/lib/podcast/regie/sampler'
 import type { RegieFill } from '@/lib/podcast/regie/director'
 
 function texts(coords: RegieCoordinates, id: AxisId, lang: Lang): string[] {
-  return coords.picks[id].map((pid) => option(id, pid)?.text[lang] ?? pid)
+  // Einträge von vor einer neuen Achse haben sie nicht.
+  return (coords.picks[id] ?? []).map((pid) => option(id, pid)?.text[lang] ?? pid)
 }
 
 function label(id: AxisId, pid: string, lang: Lang): string {
@@ -34,7 +35,7 @@ ${deviceLines}
 - Heute NICHT: ${notToday.join(', ')}.
 - Vergleiche kommen heute aus ${imagery.join(' und ')}.
 - Vor dem Schluss: ${texts(coords, 'segment', lang).join(' ')}
-- Sprache: ${coarsenessInstruction(coords, lang)}`
+- Sprache: ${coarsenessInstruction(coords, lang)}${texts(coords, 'ending', lang).length ? `\n- Schluss: ${texts(coords, 'ending', lang).join(' ')}` : ''}`
     if (fill) {
       s += `\n- Konkreter Plan:`
       if (fill.fight) s += `\n  - Hauptstreit: ${fill.fight.story}: ${fill.fight.conflict}`
@@ -55,7 +56,7 @@ ${deviceLines}
 - NOT today: ${notToday.join(', ')}.
 - Comparisons today come from ${imagery.join(' and ')}.
 - Before the ending: ${texts(coords, 'segment', lang).join(' ')}
-- Language: ${coarsenessInstruction(coords, lang)}`
+- Language: ${coarsenessInstruction(coords, lang)}${texts(coords, 'ending', lang).length ? `\n- Ending: ${texts(coords, 'ending', lang).join(' ')}` : ''}`
   if (fill) {
     s += `\n- Concrete plan:`
     if (fill.fight) s += `\n  - Main argument: ${fill.fight.story}: ${fill.fight.conflict}`

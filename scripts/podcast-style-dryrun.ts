@@ -121,7 +121,7 @@ async function main() {
     const worn = computeWornOut(recentScripts(), { excludeText: `${post.title}\n${post.content}` })
     writeFileSync(join(out, 'worn.json'), JSON.stringify(worn, null, 1))
     user += wornSection(worn, 'en')
-    const system = buildPersonalityBrief(state)
+    const system = buildPersonalityBrief(state, { callbackSeed: episode })
     writeFileSync(join(out, 'system.txt'), system)
     writeFileSync(join(out, 'user.txt'), user)
     console.log(`Prompts: system ${system.length}, user ${user.length} Zeichen; Folge ${episode}; Regisseur ${fill ? 'ja' : 'nein'}; verbraucht ${worn.phrases.length}/${worn.shortLines.length}/${worn.directions.length}`)
