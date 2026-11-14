@@ -11,6 +11,8 @@ const EXPECTED_USE_CASES: UseCase[] = [
   'enrich',
   'synthesis_scoring',
   'podcast_script',
+  'podcast_regie',
+  'podcast_texture',
   'edit_analysis',
   'pattern_extraction',
   'image_generation',
