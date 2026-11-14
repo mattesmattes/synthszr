@@ -82,7 +82,7 @@ writeFileSync(join(out, 'system.txt'), system)
 writeFileSync(join(out, 'user.txt'), user)
 console.log(`Prompts in ${out}: system ${system.length} Zeichen, user ${user.length} Zeichen; Einstieg "${opener.key}", Schluss "${closer.key}", Folge ${episode}`)
 
-if (process.argv.includes('--call')) {
+async function callModel() {
   const { default: Anthropic } = await import('@anthropic-ai/sdk')
   const { scriptRequestBudget, extractScriptText } = await import('@/lib/podcast/script-diagnostics')
   const model = arg('model') ?? 'claude-opus-5-5'
@@ -95,4 +95,8 @@ if (process.argv.includes('--call')) {
   }).finalMessage()
   writeFileSync(join(out, 'script.txt'), extractScriptText(message))
   console.log(`Skript (${model}) in ${join(out, 'script.txt')}, stop_reason ${message.stop_reason}`)
+}
+
+if (process.argv.includes('--call')) {
+  callModel().catch((err) => { console.error(err); process.exit(1) })
 }
