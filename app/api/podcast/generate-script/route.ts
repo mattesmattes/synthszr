@@ -42,6 +42,7 @@ import { runDirector, summarizeCoordinates } from '@/lib/podcast/regie/director'
 import { coarsenessInstruction, renderRegieSection } from '@/lib/podcast/regie/render'
 import { loadRegieHistory, saveRegieEntry } from '@/lib/podcast/regie/history'
 import { applyTexturePass, quotesFromMoments, splitMomentsSection } from '@/lib/podcast/texture-pass'
+import { extractTextFromTiptap } from '@/lib/podcast/tiptap-text'
 import { episodeGreetingSuffix, milestoneOf, milestonePromptSection } from '@/lib/podcast/episode-number'
 import { synthszrIssueNumber } from '@/lib/i18n/config'
 import Anthropic from '@anthropic-ai/sdk'
@@ -68,53 +69,6 @@ interface GenerateScriptRequest {
   durationMinutes?: number
   customPrompt?: string
   smalltalkTopic?: string
-}
-
-/**
- * Extract plain text from TipTap JSON content recursively
- */
-function extractTextFromTiptap(content: unknown): string {
-  if (!content) return ''
-
-  // Handle string content (might be JSON string)
-  if (typeof content === 'string') {
-    try {
-      const parsed = JSON.parse(content)
-      return extractTextFromTiptap(parsed)
-    } catch {
-      return content // Return as-is if not JSON
-    }
-  }
-
-  if (typeof content !== 'object') return ''
-
-  const node = content as { type?: string; content?: unknown[]; text?: string }
-
-  // Text node - return the text
-  if (node.type === 'text' && node.text) {
-    return node.text
-  }
-
-  // Has content array - recurse
-  if (Array.isArray(node.content)) {
-    const texts: string[] = []
-    for (const child of node.content) {
-      const text = extractTextFromTiptap(child)
-      if (text.trim()) {
-        texts.push(text)
-      }
-    }
-    // Join with appropriate separator based on node type
-    if (node.type === 'paragraph' || node.type === 'heading') {
-      return texts.join('') + '\n\n'
-    }
-    if (node.type === 'listItem') {
-      return '• ' + texts.join('') + '\n'
-    }
-    return texts.join('')
-  }
-
-  return ''
 }
 
 export async function POST(request: NextRequest) {
