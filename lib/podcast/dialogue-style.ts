@@ -35,14 +35,14 @@ export const DIALOGUE_STYLE_RULES_EN = `**DIALOGUE STYLE (how it sounds; every r
 10. Spoken text is plain text: no asterisks, no bold, no emoji, no stage directions in words ("laughs", "sighs"); put those into the bracket direction ([laughing]).
 11. Studio moments happen in speech, not in tags: "Hold on, I marked that passage...", "Let me check that real quick...", "I'm just grabbing my coffee." At most two per episode, placed where someone genuinely looks something up or stalls. There are no sound effects in the mix, so a sip or a rustle is only real when it is said.
 
-Example (mid-episode, handing over a news item; invented, for rhythm only):
-HOST: [indignant, emphatic, fast] Next. Nvidia is lending money to the very companies that buy its chips. I mean, come on. That's not demand, that's Nvidia paying people to buy from Nvidia, and somebody on that board should say so out loud. Defend it, I dare you.
-GUEST: [booming, emphatic, building] Neither. This isn't about lending, it's about the next quarter. Every idle GPU at a neocloud is an order that never comes back, so Nvidia rents out its own balance sheet to keep demand breathing. It's the oldest move in hardware: you finance the buyer, you book the sale, and you hope the music doesn't stop before your options vest. And here's my prediction: within twelve months one of those renters defaults and the chips come home with an invoice stapled to them.
-HOST (overlapping): [sharp, fast, cutting in] And the investors eat it.
-GUEST: [conspiratorial, amused] The investors always eat it.
-HOST: [scoffing, amused, quick] Yeah. They're lying to themselves. They're lying to themselves, and they know it.
-GUEST: [indignant, fast] It ends in a stock buyback, Emma.
-HOST: [exasperated, amused] Same thing, better lighting. Moving on.`
+Example (mid-episode, handing over a news item; invented, for rhythm and texture only):
+HOST: [indignant, emphatic, fast] Next. Nvidia is lending money to the companies that buy its chips. I mean, come on. That's Nvidia paying people to buy from Nvidia, and Mister Trillion-Dollar Margin should say so out loud. Defend it, I dare you.
+GUEST: [booming, emphatic, building, gaining speed] I'll do better than defend it, I'll tell you why it's genius and why it ends in tears. Look, every idle GPU at one of these neoclouds is an order that never comes back. So Nvidia rents out its own balance sheet. Customer can't pay? Lend them the money. Lend them the money, book the sale, report the quarter, and by the way, this is exactly what the telecom equipment guys did in the late nineties, they financed their own customers, the customers bought more gear, everybody's revenue went up and to the right, and then the customers went bust and the gear came home in boxes. Same movie. Better chips, same movie. And when this one ends, it's not a hangover, it's a crime scene in a server farm.
+HOST: [scoffing, amused, quick] Yeah. That's what I said, with fewer words.
+GUEST: [conspiratorial, amused, leaning in] I charge by the word.
+HOST: [worked up, talking fast, rolling] No, but here's what bugs me. The board knows this. Like, they know it. Somebody on that board has seen this movie, and nobody says anything because the stock is up. That's not governance. That's a fan club.
+GUEST: [earnest, slower] Agreed. A hundred percent.
+HOST: [sharp, fast] Okay. Something dumber.`
 
 export const DIALOGUE_STYLE_RULES_DE = `**DIALOG-STIL (so klingt es; jede Regel hier ist im fertigen Mix hörbar, halte die Mechanik exakt ein):**
 
