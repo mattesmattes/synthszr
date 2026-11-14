@@ -779,10 +779,12 @@ das Skript jeden Tag neu ausrichtet). Ablauf in
    variieren). Er bekommt die Stilmittel des Tages mit dem Plan des
    Regisseurs (`textureDeviceNotes`) und darf sie nicht glätten (im Test
    strich er sonst einen durchlaufenden Spitznamen als „verbraucht“).
-   `validateTexture` prüft hart: Marker, Zahlenmenge, Begrüßung wörtlich,
-   Zeilenformat, Länge ±12 %, Zeilenzahl, Abschnittslängen ±35 %, geschützte
-   MOMENTS-Zitate, mehrfach genannte Namen (nur EN, `recurringNames`); bei
-   Verstoß oder Fehler bleibt das Skript des ersten Aufrufs. MOMENTS werden vorher abgetrennt und danach wieder
+   Riffs über 100 Wörter bleiben eine Zeile (im Test teilte er sie mit
+   eingestreuten Rückmeldungen). `validateTexture` prüft hart: Marker,
+   Zahlenmenge, Begrüßung wörtlich, Zeilenformat, Länge ±12 %, Zeilenzahl,
+   Abschnittslängen ±35 %, geschützte MOMENTS-Zitate, mehrfach genannte
+   Namen (nur EN, `recurringNames`), lange Riffs nicht geteilt; bei Verstoß
+   oder Fehler bleibt das Skript des ersten Aufrufs. MOMENTS werden vorher abgetrennt und danach wieder
    angehängt, danach `ensureIntermezzoMarker`.
 4. **Derbe Sprache und Explicit-Flag:** F-Wort an salty- und
    unfiltered-Tagen erlaubt, `SWEARING_LIMITS` (nie gegen Gruppen oder
