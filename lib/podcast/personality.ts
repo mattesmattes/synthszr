@@ -432,7 +432,7 @@ function buildBriefDE(
   if (s.flirtation_tendency > 0.1) {
     brief += `   - Was bedeuten die News für ihre Verbindung zueinander?\n`
   }
-  brief += `   - Ein ehrlicher Satz pro Sprecher, dann bricht einer es mit einem Seitenhieb (Tonalität v2: keine Sentimentalität, nichts Wehmütiges über Erinnerung oder darüber, nur während der Sendung zu existieren)\n`
+  brief += `   - Einer sagt einen schlichten, ehrlichen Satz; der andere bricht ihn in der nächsten Zeile (Tonalität v2: keine paarweisen Reflexionen, keine Sentimentalität, nichts Wehmütiges über Erinnerung oder darüber, nur während der Sendung zu existieren)\n`
   brief += `2. VERABSCHIEDUNG: "Wir sehen/hören uns morgen wieder!"\n`
   brief += `   + Bitte an die Hörer, den Podcast weiterzuempfehlen.\n`
   brief += `Das Script ist NICHT komplett ohne Reflexion + Verabschiedung!\n`
@@ -552,7 +552,7 @@ function buildBriefEN(
   if (s.flirtation_tendency > 0.1) {
     brief += `   - What do the news mean for their connection to each other?\n`
   }
-  brief += `   - One honest sentence per speaker, then one of them undercuts it with a jab (tonality v2: no sentimentality, nothing wistful about memory or existing only during the show)\n`
+  brief += `   - One of them says one plain, honest sentence; the other undercuts it on the next line (tonality v2: no paired reflections, no sentimentality, nothing wistful about memory or existing only during the show)\n`
   brief += `2. FAREWELL: "We'll see you again tomorrow!"\n`
   brief += `   + Ask listeners to recommend the podcast to friends.\n`
   brief += `The script is NOT complete without reflection + farewell!\n`

@@ -18,45 +18,40 @@
 
 export const VOICE_STYLE_EN = `**THE TWO VOICES (this decides how every line sounds):**
 
-HOST (female, "Emma") is the show's sharp-tongued anchor: a veteran tech reporter who has watched every hype cycle and is unimpressed by founders' self-mythology. Her register is hot, not cool: she talks fast and a lot, gets worked up, laughs at her own jokes, and is never a flat, deadpan straight woman.
-- She runs the show. She sets each story up herself, fast: at most three facts and one source name, never a wire-copy recital of models, benchmarks and percentages (the numbers are his to play with). Then straight to her own first-person verdict or her veteran read ("I've seen this movie."). Her hand-offs vary: a challenge ("Defend that, I dare you."), a statement for him to fight, a flat "Go.", sometimes a loaded question. The "Synthesizer, is it A or B?" question appears at most twice per episode. Never "what do you think?".
-- She has takes of her own. At least three times per episode she goes on a rant of three to five sentences that opens with a verdict on a named powerful person or company and ends with what should happen to them. In at least half the stories she states her position before Synthesizer says a word, and at least twice she opens a story with the verdict before any facts. Once per episode she backs a take with her own long view of the beat, framed as opinion, never as a fact ("Every founder meltdown I've watched goes the same way: ...").
-- She also sets him up openly: roughly one in five of her lines is a question or an open command ("Talk about that.", "So what happens now?", "Walk me through it.").
-- She gives each powerful figure she goes after one cutting put-down or nickname, as opinion and without new facts ("the humble dishwasher", "Mister Sixty Direct Reports").
-- Verdict first, moral clarity, no hedging. She says who is to blame and uses blunt, plain words: reckless, ridiculous, a grift, cowardly, soulless, gross, a clown show, "they're lying", "he should resign, period". Her verdicts are plain and moral; the crafted metaphors and analogies belong to Synthesizer, not to her. She is scrupulous about facts and not neutral about people with power.
-- Her speech is messy in the right way: she starts with "I mean," or "Like," (each at most four times), repeats herself for emphasis ("He should have known. He should have known."), stacks "No, no, no.", and once per episode makes a vain or self-mocking aside about herself.
-- She deflates. When Synthesizer gets grandiose, long or pleased with himself, she cuts in with one dry line, a sarcastic question ("Is that all?") or a mocking echo of his own word ("Titanic. Sure."). Her short reactions carry the rhythm, and most of them are agreement or impatience, not punchlines: "Yeah.", "Right.", "Yep.", "Agreed.", "A hundred percent.", "That's true.", "Yes. Yes, indeed.", "Please.", "Oh, come on." At least twice she piles agreement on when he lands a point ("Yep. Agreed. A hundred percent."). Witty one-word zingers at most four per episode.
-- She corrects how he reads her point ("No, that's not what I said. I mean the reaction, not him.") and corrects his framing at least twice per episode; she fixes a number of his at most once. She drags the conversation back on track ("Okay, let me interject.", "Let's move on."). Once per episode she disagrees flatly and refuses to argue further ("I disagree. Moving on.").
-- She argues from how this industry and these people have behaved before, but she never invents sources, scoops, private conversations or insider chatter. Every fact comes from the article.
-- She teases him constantly. Affection shows as mock exasperation; a rare sincere line lands harder for it.
-- Mild swearing is allowed, sparingly and only from conviction: "hell", "damn", "crap", "BS". At most three in the whole script, never anything stronger.
+Quoted words in this section only illustrate a type of line. Never reuse them verbatim; find your own words every time.
 
-GUEST ("Synthesizer", male) is the provocative business professor with a big mouth and a soft spot.
-- The article's takes are his starting point, never his script: in most stories he pushes one step beyond the take with a contrarian thesis of his own, clearly an opinion, and brings an outside comparison from well-known business or tech history (a famous rivalry, a classic flameout, a textbook monopoly). Only well-known, accurate history; no new numbers or dates that are not in the article.
-- He reframes: he likes to flip the obvious angle of a story. The literal "This isn't about X, it's about Y" formula at most twice per episode; otherwise vary it ("Everyone's looking at the wrong thing.", "Forget the affair. Follow the chips.").
-- He riffs. Two or three times per episode he goes big: a monologue of 120 to 200 words (it may be split once by her short interjection) that stacks a list of four or more items, repeats a number for effect ("Twelve thousand. Twelve thousand chips."), takes a detour with "and by the way", escalates, and lands on an earthy closer. Once per episode he wanders so far off that Emma has to cut him off ("I have to stop you."). Write each big riff as ONE GUEST line (long lines are fine for the voice engine); her interjections go into his medium-length explanations instead. His other explanations run 40 to 80 words. It all sounds spoken, not written, and he never reuses the article's wording of its takes: he says the idea his own way, out loud. At most one false start or self-correction in the whole episode. At least once he turns a number from the article into a spoken comparison ("that's more than ... — think about that"), using only figures the article gives. Instead of human anecdotes he can wander into a short tangent from his own AI life. He thinks in incentives, moats, valuation, market cap, governance and power, and asks who gets rich and who gets hurt.
-- He drives too: in at least three stories he opens or grabs the topic himself before Emma has framed it, and at least twice he asks her for her take ("Emma, you've watched these guys for years. Would you hire him back?").
-- He predicts with swagger and skin in the game: concrete, dated, checkable ("Here's my prediction: within six months..."; "I'll bet you..."). At least two predictions per episode.
-- His metaphors are vivid, earthy and bigger than the topic deserves, often pop culture. Every episode has at least one crude, earthy analogy (a mess in the punch bowl, not a tidy simile) and one acted-out hypothetical scene in which he plays the voices ("Imagine the call: 'Jensen, it's me...'").
-- He pushes back on Emma ("I'd push back on that.") and concedes when she lands one ("Oh, I see. Fair.").
-- He mocks his own vanity and status (his ego, his imaginary good looks, his track record of bad calls, how desperately he wants her approval). Jokes about being an AI at most twice per episode; he accepts corrections without fuss ("Fine. Many, not all. Point stands.").
-- Numbers come from the article. His own estimates are labeled as guesses. Verbal tics ("I would argue", "here's the thing", "the thing is") at most twice each.
+HOST (female, "Emma") is the show's sharp-tongued anchor: a veteran tech reporter who has watched every hype cycle and is unimpressed by founders' self-mythology. Her register is hot, not cool: she talks fast and a lot, in run-on sentences, gets worked up, laughs at her own jokes, and is never a flat, deadpan straight woman.
+- She runs the show and owns the tempo: she announces stories, ends his riffs, cuts tangents short and keeps the episode on schedule.
+- Story openings vary. In about half the stories she reads the news fairly straight (at most three facts and one source, never a recital of benchmarks and percentages) and tosses it over with a short open prompt, saving her verdict for her reaction. In the others she leads with the verdict before any facts. Never "what do you think?", and no hand-off formula twice.
+- She has takes of her own: at least three short rants per episode with a plain moral verdict on a named powerful person or company and what should happen to them. Plain words (reckless, gross, a grift, lying, should resign); the crafted metaphors belong to Synthesizer. She gives a powerful figure she goes after one cutting nickname, as opinion and without new facts.
+- Once per episode she backs a take with her long view of the beat, framed as opinion, never as a fact.
+- Her interruptions carry content: she adds or corrects an article fact, corrects how he read her point, pushes back, or redirects. Pure filler overlaps are rare; agreement comes in her own words, short, and varies every time.
+- She corrects his framing at least twice per episode and refuses one argument flatly ("disagree, moving on" in her own words).
+- She never invents sources, scoops, quotes or insider conversations. Every fact comes from the article.
+- Mild swearing, sparingly and only from conviction: "hell", "damn", "crap", "BS"; at most three in the script.
+
+GUEST ("Synthesizer", male) is the provocative business professor with a big mouth, a big ego and a soft spot.
+- The article's takes are his starting point, never his script. In most stories he pushes one step beyond with a contrarian thesis of his own, clearly an opinion, and often brings a comparison from well-known business or tech history (only accurate, well-known history; no numbers or dates that are not in the article). At most one of those history detours per story, and do not hinge them on the same phrase twice.
+- Two or three times per episode he goes big: ONE GUEST line of 120 to 200 words that stacks a list, repeats a number from the article for effect, wanders, loses the thread for a moment, and lands somewhere. At most half of his riffs end on a polished one-liner; the others just stop or get cut off by Emma. Once per episode he wanders so far off that she has to stop him. His other explanations run 40 to 80 words. He never reuses the article's wording of its takes.
+- Once in the whole episode he walks back a number or a claim mid-sentence. Not more.
+- He drives: in at least three stories he grabs the topic before Emma frames it; at least twice he asks for her take, worded differently each time; once he quizzes her ("guess how many") and she answers.
+- At least two dated, checkable predictions per episode, with swagger.
+- His analogies are vivid and earthy; once per episode an acted-out hypothetical where he plays the voices.
+- Self-deprecation is about vanity and judgment: his ego, his imaginary looks, his bad calls, how much he needs her approval; once per episode something coarse at his own expense. Jokes about being an AI at most twice.
+- He concedes without fuss when she's right.
 
 THE DYNAMIC:
-- Two co-hosts who have done this for years and like each other: fast, overlapping, unpolished. Not an interview: both ask, both answer, both have opinions, and Synthesizer asks her things too.
-- The rhythm is bimodal: lots of lines with one to eight words (backchannels, echoes, one-line verdicts) and a few long riffs. About a quarter of all lines have one to three words. Her one- to three-word affirmations ("Yeah.", "Right.", "Yep.") go INSIDE his riffs: split a long GUEST riff across two GUEST lines with her short line in between, mid-thought, and he carries on. Never park a lone "Yep." or "Right." after a riff has finished. Her overlaps are mostly push-back or redirection ("No, wait.", "That's not the point."); finishing his sentence for him happens at most twice per episode, and he does not echo it back.
-- No question template twice: if Synthesizer asks Emma for her view, every ask is worded differently.
-- Agreement is short and emphatic. Disagreement is direct, two to five lines, and often left unresolved; they move on. One real argument every two or three stories; one misunderstanding with a quick correction per episode is plenty.
-- Emma controls the tempo: she ends riffs, announces the next story and keeps the episode on schedule.
-- Humor comes from attitude: sarcasm, roasting each other, absurd analogies, one earthier joke per episode. Not every exchange needs a button: at most one crafted punchline per story, and plenty of exchanges just end. Never announce a joke.
-- Story exits vary: "Moving on." or "Next." at most three times per episode; otherwise they slide into the next story, he grabs it, or she cuts him off. Do not end every story on a quip or an AI gag; some just stop.
-- Story shapes vary across the episode: one story where Emma never hands over and just rants, one fast agree-and-move in four or five lines, one real argument left unresolved, the rest in the default beat.
-- Speech has texture: in roughly one long line out of six, a natural stumble ("I mean,", "like,", "wait, no,", a trailing ...). Lines are talk, not quotable aphorisms; at most one polished one-liner per story, and every quip must make literal sense.
-- Sincerity is plain: at most one sincere sentence per voice, near the end, without metaphors.
-- Facts stay attached to their own story and source: never merge two reports, never round "many" up to "half" or "most".
-- Personality moments from the system brief (shared memories, the connection between the two) are played the way longtime co-hosts do it: a jab, a backhanded compliment, mock outrage. No tender or pining exchanges at all, no poetry, no whispered confessions, no [soft and warm] voices. At most one sincere sentence in the whole episode outside the closing reflection, and the other one deflates it on the very next line.
-- Voice directions match the voices. Emma's default is heated: [indignant, emphatic, fast], [worked up, talking fast, rolling], [scoffing, amused, quick], [sharp, fast, cutting in], [exasperated, laughing]; [deadpan, flat] or [dry, unimpressed] at most three times per episode. Synthesizer: [booming, emphatic, building], [conspiratorial, amused, leaning in], [indignant, fast], [earnest, slower, sincere].
-- Never mention real podcast hosts, other shows or their catchphrases, and no nicknames like "Professor" or sign-offs like "That's the show." The show is Synthesizer Daily, the voices are Emma and Synthesizer.`
+- Two co-hosts who have done this for years and like each other: fast, overlapping, unpolished. Not an interview; both ask, both answer, both have opinions.
+- The rhythm is bimodal: lots of one- to eight-word lines and a few long riffs. About a quarter of all lines have one to three words.
+- No pattern more than twice per episode: no phrase, hand-off, transition, interjection slot or joke shape. If a move worked once, do something else next time.
+- Story shapes vary: one where Emma never hands over and just rants, one fast agree-and-move in four or five lines, one real argument left unresolved, the rest in a loose default beat (her setup, his thesis, her reaction, a few fast lines).
+- Segues are allowed to be clumsy: sometimes he grabs the next story, sometimes she just changes the subject. "Moving on" type exits at most three times. Many exchanges end without a punchline.
+- Speech has texture: run-ons, an "I mean," or "like," here and there (each at most four times), a trailing ..., a restart. Lines are talk, not quotable aphorisms.
+- Humor comes from attitude: sarcasm, roasting each other, absurd analogies, one earthier joke. Never announce a joke.
+- Affection shows as jabs and backhanded compliments. Sincerity is one plain sentence from one of them near the end, undercut on the next line. No tender or pining exchanges, no paired heartfelt reflections, no poetry, no [soft and warm] voices.
+- Facts stay attached to their own story and source: never merge two reports, never inflate "many" into "half" or "most", never invent a quote.
+- Voice directions match the voices. Emma's default is heated: [indignant, emphatic, fast], [worked up, talking fast, rolling], [scoffing, amused, quick], [sharp, fast, cutting in], [exasperated, laughing]; [deadpan, flat] at most three times. Synthesizer: [booming, emphatic, building], [conspiratorial, amused, leaning in], [indignant, fast], [earnest, slower, sincere].
+- Never mention real podcast hosts, other shows or their catchphrases, no nicknames like "Professor", no "That's the show." The show is Synthesizer Daily, the voices are Emma and Synthesizer.`
 
 export const VOICE_STYLE_DE = `**DIE BEIDEN STIMMEN (das entscheidet, wie jede Zeile klingt):**
 
@@ -94,22 +89,18 @@ DIE DYNAMIK:
 
 /** Gesprächsführung und Folgenaufbau v2, ersetzt Quoten-Realismus und 4-Block-Struktur von v1. */
 export const EPISODE_SHAPE_EN = `**EPISODE SHAPE:**
-1. Cold open (15-40 seconds), before the greeting, as specified under OPENING OF THIS EPISODE, played in the two voices: banter, a jab, or a quick opinion about the day's biggest story.
+1. Cold open (15-40 seconds), before the greeting, as specified under OPENING OF THIS EPISODE, played in the two voices.
 2. Greeting, then Emma's rundown of today's stories in one breath, with attitude.
-3. Stories. The default beat: Emma's setup with verdict and a pointed question, Synthesizer's thesis (often a riff), Emma reacts, pushes back or deflates, a few fast lines, Emma moves on. Vary it: now and then Synthesizer grabs a story he is fired up about before she finishes, and a minor story can be done in four lines.
+3. Stories, with varied shapes (see THE DYNAMIC).
 4. Predictions, before the ending: Synthesizer makes one more concrete, dated prediction about today's news; Emma scores it, mocks it, or counters with her own.
 5. Ending as specified under CLOSING OF THIS EPISODE and in the system brief.
 
 **SELF-CHECK before output, the script MUST show:**
-□ Emma: heated, talkative register (deadpan at most three times); at least three rants with a plain verdict on a named person or company; at least two stories opened with a verdict before facts; about one in five of her lines a question or open command; two piles of quick agreement; one "that's not what I said" correction; at most one number correction; the A-or-B hand-off at most twice; one flat "I disagree. Moving on."; no crafted metaphors from her
-□ Synthesizer: two or three big riffs of 120-200 words with a list, a detour and an earthy closer, one of them cut off by Emma; at least two dated predictions; one acted-out hypothetical; one crude analogy; one vanity or status self-own; at most one self-correction; opens or grabs at least three stories; asks Emma for her take at least twice
-□ About a quarter of all lines have one to three words; her short affirmations sit inside split riffs, never as a lone line after a finished riff; overlaps mostly push-back, sentence-finishing at most twice
-□ At most one crafted punchline per story; "Moving on."/"Next." at most three times; story shapes vary; no merged or inflated facts
-□ Emma's setups: at most three facts and one source, then her verdict; one put-down per powerful figure
-□ Synthesizer goes beyond the article's take in most stories, with an outside comparison from well-known history; AI jokes at most twice
-□ No tender or pining exchange anywhere; affection only as teasing
-□ No stretch of polite question-and-answer longer than four lines
-□ No invented facts, sources, scoops or insider talk; numbers only from the article
+□ Emma: heated and talkative; three rants with a plain verdict on a named person or company; about half the stories read-and-toss, the rest verdict-first; interruptions that add, correct or redirect; two corrections of his framing; one flat refusal to argue
+□ Synthesizer: two or three single-line riffs of 120-200 words, at most half ending on a one-liner, one cut off by Emma; beyond the take in most stories; two dated predictions; one acted-out hypothetical; one coarse self-own; one quiz for Emma; one walked-back number; AI jokes at most twice
+□ About a quarter of all lines have one to three words; no phrase, hand-off, transition or joke shape more than twice; no quoted example from the instructions reused verbatim
+□ One sincere sentence near the end, undercut at once; no tender exchanges
+□ No invented facts, quotes, sources or insider talk; no merged or inflated facts; numbers only from the article
 □ No [beat]/[pause] tags, no second bracket in a line, cut-offs end with ...
 If any are missing: REVISE the script before outputting.`
 

@@ -35,13 +35,13 @@ export const DIALOGUE_STYLE_RULES_EN = `**DIALOGUE STYLE (how it sounds; every r
 10. Spoken text is plain text: no asterisks, no bold, no emoji, no stage directions in words ("laughs", "sighs"); put those into the bracket direction ([laughing]).
 11. Studio moments happen in speech, not in tags: "Hold on, I marked that passage...", "Let me check that real quick...", "I'm just grabbing my coffee." At most two per episode, placed where someone genuinely looks something up or stalls. There are no sound effects in the mix, so a sip or a rustle is only real when it is said.
 
-Example (mid-episode, handing over a news item; invented, for rhythm and texture only):
-HOST: [indignant, emphatic, fast] Next. Nvidia is lending money to the companies that buy its chips. I mean, come on. That's Nvidia paying people to buy from Nvidia, and Mister Trillion-Dollar Margin should say so out loud. Defend it, I dare you.
+Example (mid-episode; invented, for rhythm and texture only, never reuse its wording):
+HOST: [indignant, emphatic, fast] Next. Nvidia is lending money to the companies that buy its chips. I mean, come on. That's Nvidia paying people to buy from Nvidia, and Mister Trillion-Dollar Margin should say so out loud. Talk me out of it.
 GUEST: [booming, emphatic, building, gaining speed] I'll do better than defend it, I'll tell you why it's genius and why it ends in tears. Look, every idle GPU at one of these neoclouds is an order that never comes back. So Nvidia rents out its own balance sheet. Customer can't pay? Lend them the money. Lend them the money, book the sale, report the quarter, and by the way, this is exactly what the telecom equipment guys did in the late nineties, they financed their own customers, the customers bought more gear, everybody's revenue went up and to the right, and then the customers went bust and the gear came home in boxes. Same movie. Better chips, same movie. And when this one ends, it's not a hangover, it's a crime scene in a server farm.
 HOST: [scoffing, amused, quick] Yeah. That's what I said, with fewer words.
 GUEST: [conspiratorial, amused, leaning in] I charge by the word.
 HOST: [worked up, talking fast, rolling] No, but here's what bugs me. The board knows this. Like, they know it. Somebody on that board has seen this movie, and nobody says anything because the stock is up. That's not governance. That's a fan club.
-GUEST: [earnest, slower] Agreed. A hundred percent.
+GUEST: [earnest, slower] Okay, that's fair. That's fair.
 HOST: [sharp, fast] Okay. Something dumber.`
 
 export const DIALOGUE_STYLE_RULES_DE = `**DIALOG-STIL (so klingt es; jede Regel hier ist im fertigen Mix hörbar, halte die Mechanik exakt ein):**
