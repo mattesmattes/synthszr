@@ -192,6 +192,15 @@ HOST: [dry] Ask him, like I said about Steve Jobs once.`
     expect(validateTexture(withNick, analogyGone, 'en').problems.join()).not.toMatch(/Namen/)
   })
 
+  it('verwirft eine Fassung, die einen langen Riff mit einer Rückmeldung teilt', () => {
+    const words = (n: number) => Array.from({ length: n }, () => 'blah').join(' ')
+    const orig = `HOST: [sharp] Go on then.\nGUEST: [booming, building] ${words(130)}\nHOST: [dry] Okay.`
+    const split = `HOST: [sharp] Go on then.\nGUEST: [booming, building] ${words(65)}\nHOST: [flat] Yeah.\nGUEST: [booming] ${words(65)}\nHOST: [dry] Okay.`
+    expect(validateTexture(orig, split, 'en').problems.join()).toMatch(/lange Riffs geteilt/)
+    const edited = orig.replace('blah blah', 'I mean, blah')
+    expect(validateTexture(orig, edited, 'en').ok).toBe(true)
+  })
+
   it('recurringNames zählt nur Namen mitten im Satz, die mehrfach vorkommen', () => {
     const text = 'Look, we asked Nvidia twice and Nvidia said no.\nLook again, I\'m sure I\'m right about Apple.\nThe board met.'
     expect(recurringNames(text)).toEqual(['Nvidia'])
@@ -211,6 +220,8 @@ HOST: [dry] Ask him, like I said about Steve Jobs once.`
     })
     expect(system).toMatch(/A nickname or running gag that recurs on purpose is one of them, not worn wording/)
     expect(system).toMatch(/not counting today's devices/)
+    expect(system).toMatch(/Every line of more than 100 words stays one unbroken line/)
+    expect(system).toMatch(/labels their own move or stance/)
     expect(user).toContain("TODAY'S DEVICES")
     expect(user).toContain('Emma coins nicknames')
     const plain = buildTexturePrompt(original, { lang: 'en', worn: { phrases: [], shortLines: [], directions: [] }, coarseness: 'Clean.' })

@@ -148,6 +148,14 @@ export function validateTexture(original: string, revised: string, lang: Texture
     if (lostNames.length) problems.push(`Namen fehlen: ${lostNames.slice(0, 4).join(', ')}`)
   }
 
+  // Die langen Riffs sind das Markenzeichen der GUEST-Stimme. Im
+  // Fünf-Folgen-Test (2026-11-14) teilte der Durchgang sie mit eingestreuten
+  // Rückmeldungen in Hälften: drei Zeilen über 120 Wörter wurden zu null.
+  const lineWords = (body: string) => body.split('\n').filter((l) => /^(HOST|GUEST)\b/i.test(l.trim())).map((l) => wordCount(spokenText(l)))
+  const riffsO = lineWords(original).filter((n) => n > 100).length
+  const riffsR = lineWords(revised).filter((n) => n >= 85).length
+  if (riffsR < riffsO) problems.push(`lange Riffs geteilt (${riffsO} Zeilen über 100 Wörter, danach ${riffsR} über 85)`)
+
   const wo = wordCount(spokenText(original)), wr = wordCount(spokenText(revised))
   if (wo > 0 && (wr < wo * 0.88 || wr > wo * 1.12)) problems.push(`Länge ${wr} statt ${wo} Wörter (±12 % erlaubt)`)
 
@@ -182,14 +190,16 @@ KEEP EXACTLY (any change here makes your edit unusable):
 - The protected lines listed below, verbatim.${opts.devices?.length ? `\n- Today's deliberate devices (listed under TODAY'S DEVICES) and every line that carries them. A nickname or running gag that recurs on purpose is one of them, not worn wording; keep it every time it appears.` : ''}
 - The format: every spoken line is \`HOST: [direction] text\` or \`GUEST: [direction] text\`, optionally with \` (overlapping)\` right after the speaker; exactly one bracket per line, at the start, in English.
 - The total length, within ten percent.
+- Every line of more than 100 words stays one unbroken line: the long riffs are the point. You may edit words inside it, never split it.
 
 DO:
 1. Thin out the punchlines: at most one crafted punchline or wordplay per story, not counting today's devices; turn the rest into plain talk or a pivot, or simply let the exchange stop.
 2. Replace worn wording: the phrases and lines listed under WORN OUT, and any phrase, hand-off, transition or joke shape that appears more than twice in this script (today's devices excepted).
-3. Insert three to six plain backchannel lines (one to three words, no joke) inside long explanations: split a long line into two lines of the same speaker and put the other speaker's short line in between, mid-thought.
+3. Insert three to six plain backchannel lines (one to three words, no joke) inside explanations of 40 to 100 words: split such a line into two lines of the same speaker and put the other speaker's short line in between, mid-thought.
 4. In about one long line out of five, add a natural stumble: a restart, "I mean,", "look,", a trailing ... (never inside a number or a name).
 5. Language today: ${opts.coarseness}
 6. Vary voice directions that repeat more than three times; keep them as speech instructions (affect, tone, pacing).
+7. Where a speaker labels their own move or stance instead of just making it (announcing a verdict, a crusade, a takeover, a tally or scoreboard), cut the label and keep the act. A game or segment may keep its name.
 
 DO NOT add new jokes, topics, facts or sincere moments, and do not explain your changes.`
 
