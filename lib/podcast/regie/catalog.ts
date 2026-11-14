@@ -86,8 +86,8 @@ export const REGIE_AXES: RegieAxis[] = [
         'Low-key and dry: tired of this industry, fewer exclamations, sharper knives.',
         'Gedämpft und trocken: müde von dieser Branche, weniger Ausrufe, schärfere Messer.'),
       o('giddy', 'giddy', 'albern',
-        'Giddy: the news is absurd and they are enjoying it, laughing at it rather than with it.',
-        'Albern: Die Nachrichten sind absurd, und sie genießen es; sie lachen über die Leute, nicht mit ihnen.'),
+        'Giddy: the news is absurd and they are enjoying it, laughing at it rather than with it; her rants come out as mockery, delivered laughing.',
+        'Albern: Die Nachrichten sind absurd, und sie genießen es; sie lachen über die Leute, nicht mit ihnen; ihre Ausbrüche kommen als Spott, lachend vorgetragen.'),
     ],
   },
   {

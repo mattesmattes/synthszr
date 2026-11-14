@@ -10,7 +10,7 @@ import { withEntry } from '@/lib/podcast/regie/history'
 import { buildDirectorPrompt, parseRegieFill } from '@/lib/podcast/regie/director'
 import { coarsenessInstruction, renderRegieSection, textureDeviceNotes } from '@/lib/podcast/regie/render'
 import { computeWornOut, wornSection } from '@/lib/podcast/fingerprint'
-import { buildTexturePrompt, numbersIn, quotesFromMoments, recurringNames, splitMomentsSection, stripPreamble, validateTexture } from '@/lib/podcast/texture-pass'
+import { articleEchoes, buildTexturePrompt, numbersIn, quotesFromMoments, recurringNames, splitMomentsSection, stripPreamble, validateTexture } from '@/lib/podcast/texture-pass'
 import { containsExplicitLanguage } from '@/lib/podcast/explicit'
 
 function run(days: number): RegieHistoryEntry[] {
@@ -234,6 +234,23 @@ HOST: [dry] Ask him, like I said about Steve Jobs once.`
     expect(user).toContain('Emma coins nicknames')
     const plain = buildTexturePrompt(original, { lang: 'en', worn: { phrases: [], shortLines: [], directions: [] }, coarseness: 'Clean.' })
     expect(plain.user).not.toContain("TODAY'S DEVICES")
+  })
+
+  it('articleEchoes findet wörtlich nachgesprochene Stellen, lässt Zitate und kurze Treffer aus', () => {
+    const article = 'Crypto audit shops sell two things: expert years and the signature of a small team. The CEO said "we have no reason to believe any secrets were compromised" on Sunday.'
+    const script = `HOST: [sharp] Here's the thing.
+GUEST: [booming] Look, crypto audit shops sell two things: expert years and the signature of a small team, and that's over.
+HOST: [dry] He said "we have no reason to believe any secrets were compromised" with a straight face.
+GUEST: [quick] Expert years and the signature, sure.`
+    const echoes = articleEchoes(script, article)
+    expect(echoes).toEqual(['crypto audit shops sell two things: expert years and the signature of a small team'])
+    expect(articleEchoes(script, '')).toEqual([])
+    const { system, user } = buildTexturePrompt(original, {
+      lang: 'en', worn: { phrases: [], shortLines: [], directions: [] }, coarseness: 'Clean.', echoes,
+    })
+    expect(system).toMatch(/TOO CLOSE TO THE ARTICLE in the speaker's own spoken words/)
+    expect(user).toContain('TOO CLOSE TO THE ARTICLE')
+    expect(buildTexturePrompt(original, { lang: 'en', worn: { phrases: [], shortLines: [], directions: [] }, coarseness: 'Clean.' }).system).not.toMatch(/TOO CLOSE/)
   })
 
   it('der Prompt verlangt Texturarbeit und schützt Fakten', () => {

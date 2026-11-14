@@ -31,6 +31,8 @@ export interface TextureOptions {
    * 2026-11-14: 13 von 15 Spitznamen weg).
    */
   devices?: string[]
+  /** Stellen, die den Artikel wörtlich nachsprechen (`articleEchoes`); werden umformuliert. */
+  echoes?: string[]
 }
 
 export interface TextureResult {
@@ -121,6 +123,48 @@ export function recurringNames(text: string): string[] {
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
+/**
+ * Stellen im Skript, die den Artikel wörtlich nachsprechen: mindestens
+ * `minWords` Wörter am Stück, Zitate in Anführungszeichen ausgenommen.
+ * Befund Fünf-Folgen-Test 2026-11-14: Beide Stimmen trugen die Takes des
+ * Artikels fast wörtlich vor („ein Kolumnist, zwei Münder"), und wer den
+ * Newsletter liest, hört dieselben Sätze noch einmal. Der Texturdurchgang
+ * bekommt die Stellen zum Umformulieren; Fakten und Zahlen bleiben.
+ */
+export function articleEchoes(script: string, article: string, minWords = 8, max = 8): string[] {
+  const TOKEN = /[\p{L}\p{N}]+(?:['’][\p{L}]+)*/gu
+  const key = (ws: string[]) => ws.join(' ').toLowerCase().replace(/’/g, "'")
+  const articleTokens = article.match(TOKEN) ?? []
+  const grams = new Set<string>()
+  for (let i = 0; i + minWords <= articleTokens.length; i++) grams.add(key(articleTokens.slice(i, i + minWords)))
+  if (grams.size === 0) return []
+
+  const spans: string[] = []
+  for (const raw of script.split('\n')) {
+    const line = raw.trim()
+    if (!/^(HOST|GUEST)\b/i.test(line)) continue
+    // Zitate dürfen wörtlich bleiben; sie unterbrechen die Übereinstimmung.
+    const text = spokenText(line).replace(/"[^"]*"|“[^”]*”|„[^“”]*[“”]/g, ' | ')
+    const toks = [...text.matchAll(TOKEN)]
+    const covered = new Array<boolean>(toks.length).fill(false)
+    for (let i = 0; i + minWords <= toks.length; i++) {
+      const window = toks.slice(i, i + minWords)
+      // keine Fenster über eine Zitat-Lücke hinweg
+      if (text.slice(window[0].index!, window[window.length - 1].index!).includes('|')) continue
+      if (grams.has(key(window.map((m) => m[0])))) for (let j = i; j < i + minWords; j++) covered[j] = true
+    }
+    for (let i = 0; i < toks.length; i++) {
+      if (!covered[i]) continue
+      let j = i
+      while (j + 1 < toks.length && covered[j + 1]) j++
+      const end = toks[j].index! + toks[j][0].length
+      spans.push(text.slice(toks[i].index!, end))
+      i = j
+    }
+  }
+  return [...new Set(spans)].sort((a, b) => b.length - a.length).slice(0, max)
+}
+
 /** Harte Prüfung der überarbeiteten Fassung gegen das Original. */
 export function validateTexture(original: string, revised: string, lang: TextureLang, protectedQuotes: string[] = []): { ok: boolean; problems: string[] } {
   const problems: string[] = []
@@ -193,13 +237,13 @@ KEEP EXACTLY (any change here makes your edit unusable):
 - Every line of more than 100 words stays one unbroken line: the long riffs are the point. You may edit words inside it, never split it.
 
 DO:
-1. Thin out the punchlines: at most one crafted punchline or wordplay per story, not counting today's devices; turn the rest into plain talk or a pivot, or simply let the exchange stop.
+1. Thin out the punchlines: at most one crafted punchline or wordplay per story, not counting today's devices; turn the rest into plain talk or a pivot, or simply let the exchange stop. Most turns end plainly: where a turn closes on a neat antithesis or aphorism, flatten or cut that last sentence, except once per story.
 2. Replace worn wording: the phrases and lines listed under WORN OUT, and any phrase, hand-off, transition or joke shape that appears more than twice in this script (today's devices excepted).
 3. Insert three to six plain backchannel lines (one to three words, no joke) inside explanations of 40 to 100 words: split such a line into two lines of the same speaker and put the other speaker's short line in between, mid-thought.
 4. Give most lines over 50 words one spoken mark: a restart, a self-correction, an aside, or a filler ("I mean,", "you know,", "look,", "like"); no filler more than five times in the script, never inside a number or a name. Never leave three balanced, finished sentences in a row.
 5. Language today: ${opts.coarseness}
 6. Vary voice directions that repeat more than three times; keep them as speech instructions (affect, tone, pacing).
-7. Where a speaker labels their own move or stance instead of just making it (announcing a verdict, a crusade, a takeover, a tally or scoreboard), cut the label and keep the act. A game or segment may keep its name.
+7. Where a speaker labels their own move or stance instead of just making it (announcing a verdict, a crusade, a takeover, a tally or scoreboard), cut the label and keep the act. A game or segment may keep its name.${opts.echoes?.length ? `\n8. Say the passages listed under TOO CLOSE TO THE ARTICLE in the speaker's own spoken words: same facts, names and numbers, different wording.` : ''}
 
 DO NOT add new jokes, topics, facts or sincere moments, and do not explain your changes.`
 
@@ -210,6 +254,7 @@ DO NOT add new jokes, topics, facts or sincere moments, and do not explain your 
     parts.push(`WORN OUT (recur across recent episodes, replace them):\n${q([...w.phrases, ...w.shortLines, ...w.directions])}`)
   }
   if (opts.devices?.length) parts.push(`TODAY'S DEVICES (deliberate; keep them and every line that carries them):\n${q(opts.devices)}`)
+  if (opts.echoes?.length) parts.push(`TOO CLOSE TO THE ARTICLE (read out almost word for word; rephrase as talk):\n${q(opts.echoes)}`)
   if (opts.protectedQuotes?.length) parts.push(`PROTECTED LINES (keep verbatim):\n${q(opts.protectedQuotes)}`)
   parts.push(`SCRIPT:\n${script}`)
   return { system, user: parts.join('\n\n') }

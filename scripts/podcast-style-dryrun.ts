@@ -38,7 +38,7 @@ import { sampleRegie, type RegieCoordinates, type RegieHistoryEntry } from '@/li
 import { buildDirectorPrompt, parseRegieFill, runDirector, summarizeCoordinates, type RegieFill } from '@/lib/podcast/regie/director'
 import { coarsenessInstruction, renderRegieSection, textureDeviceNotes } from '@/lib/podcast/regie/render'
 import { withEntry } from '@/lib/podcast/regie/history'
-import { buildTexturePrompt, quotesFromMoments, splitMomentsSection, stripPreamble, validateTexture } from '@/lib/podcast/texture-pass'
+import { articleEchoes, buildTexturePrompt, quotesFromMoments, splitMomentsSection, stripPreamble, validateTexture } from '@/lib/podcast/texture-pass'
 
 const stage = process.argv[2]
 function arg(name: string): string | undefined {
@@ -145,15 +145,17 @@ async function main() {
     const script = readFileSync(join(out, 'script.txt'), 'utf-8')
     const { body, moments } = splitMomentsSection(script)
     const worn = readJson(join(out, 'worn.json'), computeWornOut(recentScripts()))
-    const fill = arg('post') ? readFill(readPost().content, coords) : null
+    const post = arg('post') ? readPost() : null
+    const fill = post ? readFill(post.content, coords) : null
     const opts = {
       lang: 'en' as const, worn, coarseness: coarsenessInstruction(coords, 'en'), protectedQuotes: quotesFromMoments(moments),
       devices: textureDeviceNotes(coords, fill, 'en'),
+      echoes: post ? articleEchoes(body, post.content) : [],
     }
     const { system, user } = buildTexturePrompt(body, opts)
     writeFileSync(join(out, 'texture-system.txt'), system)
     writeFileSync(join(out, 'texture-user.txt'), user)
-    console.log(`Textur-Prompts: system ${system.length}, user ${user.length} Zeichen`)
+    console.log(`Textur-Prompts: system ${system.length}, user ${user.length} Zeichen; Artikel-Echos ${opts.echoes.length}`)
     if (call) {
       const { applyTexturePass } = await import('@/lib/podcast/texture-pass')
       const res = await applyTexturePass(body, opts)

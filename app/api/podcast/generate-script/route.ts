@@ -41,7 +41,7 @@ import { sampleRegie } from '@/lib/podcast/regie/sampler'
 import { runDirector, summarizeCoordinates } from '@/lib/podcast/regie/director'
 import { coarsenessInstruction, renderRegieSection, textureDeviceNotes } from '@/lib/podcast/regie/render'
 import { loadRegieHistory, saveRegieEntry } from '@/lib/podcast/regie/history'
-import { applyTexturePass, quotesFromMoments, splitMomentsSection } from '@/lib/podcast/texture-pass'
+import { applyTexturePass, articleEchoes, quotesFromMoments, splitMomentsSection } from '@/lib/podcast/texture-pass'
 import { extractTextFromTiptap } from '@/lib/podcast/tiptap-text'
 import { episodeGreetingSuffix, milestoneOf, milestonePromptSection } from '@/lib/podcast/episode-number'
 import { synthszrIssueNumber } from '@/lib/i18n/config'
@@ -371,6 +371,7 @@ export async function POST(request: NextRequest) {
       coarseness: coarsenessInstruction(regieCoords, ttsLang),
       protectedQuotes: quotesFromMoments(moments),
       devices: textureDeviceNotes(regieCoords, regieFill, ttsLang),
+      echoes: articleEchoes(scriptBody, postContent),
     })
     console.log(`[Podcast Script] Texturdurchgang: ${texture.applied ? 'übernommen' : `nicht übernommen (${texture.problems.join('; ')})`}`)
     const texturedScript = moments ? `${texture.script}\n\n${moments}` : texture.script
