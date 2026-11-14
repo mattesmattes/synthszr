@@ -134,6 +134,14 @@ describe('Fingerabdruck der letzten Folgen', () => {
     expect(topical.phrases).not.toContain('a total clown show')
   })
 
+  it('schlichte Rückmeldungen gelten nie als verbraucht, Floskeln schon', () => {
+    const tail = '\nHOST: [flat] Mm-hm.\nGUEST: [quick] Uh-huh.\nHOST: [dry] Got it.\nGUEST: [dry] Noted.'
+    const w = computeWornOut([scriptA + tail, scriptB + tail, scriptC + tail])
+    expect(w.shortLines).toContain('Noted.')
+    expect(w.shortLines).not.toEqual(expect.arrayContaining(['Mm-hm.']))
+    for (const plain of ['Mm-hm.', 'Uh-huh.', 'Got it.']) expect(w.shortLines).not.toContain(plain)
+  })
+
   it('der Prompt-Abschnitt bleibt leer, wenn nichts verbraucht ist', () => {
     expect(wornSection(computeWornOut([scriptA]), 'en')).toBe('')
     expect(wornSection(computeWornOut([scriptA, scriptB, scriptC]), 'en')).toMatch(/WORN OUT/)

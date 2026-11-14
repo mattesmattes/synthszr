@@ -45,11 +45,18 @@ const STOP = new Set([
   'du', 'wir', 'er', 'sie', 'ein', 'eine', 'nicht', 'mit', 'den', 'dem', 'des', 'auch', 'so', 'ja', 'nein',
 ])
 
-/** Ein-Wort-Rückmeldungen sind erwünscht, auch wenn sie sich wiederholen. */
+/**
+ * Schlichte Rückmeldungen sind erwünscht, auch wenn sie sich wiederholen
+ * (der Texturdurchgang streut sie gezielt ein). Im Fünf-Folgen-Test standen
+ * „Mm-hm.", „Uh-huh." und „Huh." sonst als verbraucht in der Liste.
+ */
 const PLAIN_BACKCHANNELS = new Set([
-  'yeah', 'right', 'yep', 'yes', 'no', 'okay', 'mm', 'mhm', 'hm', 'hmm', 'wait', 'sure', 'true', 'exactly',
-  'agreed', 'ja', 'genau', 'jep', 'stimmt', 'nein', 'moment',
+  'yeah', 'right', 'yep', 'yup', 'yes', 'no', 'nope', 'okay', 'ok', 'mm', 'mmm', 'mhm', 'mm-hm', 'mm-hmm', 'mhmm',
+  'uh-huh', 'huh', 'hm', 'hmm', 'uh', 'um', 'ah', 'oh', 'wow', 'whoa', 'wait', 'sure', 'true', 'exactly', 'agreed',
+  'ja', 'genau', 'jep', 'stimmt', 'nein', 'moment', 'aha', 'ach', 'echt',
 ])
+/** Mehrwortige schlichte Rückmeldungen (normalisiert). */
+const PLAIN_PHRASES = new Set(['got it', 'i know', 'fair enough', 'for sure', 'of course', 'oh no', 'oh wow', 'oh boy', 'ich weiß', 'na klar'])
 
 const GREETING_RE = /hey,? hey,? (and welcome to|und willkommen bei) synthesizer daily/i
 
@@ -134,8 +141,7 @@ export function computeWornOut(
       }
       if (toks.length > 0 && toks.length <= 4) {
         const key = normalizeLine(line.text)
-        if (toks.length === 1 && PLAIN_BACKCHANNELS.has(key)) continue
-        if (toks.every((t) => PLAIN_BACKCHANNELS.has(t))) continue
+        if (toks.every((t) => PLAIN_BACKCHANNELS.has(t)) || PLAIN_PHRASES.has(key)) continue
         if (!seenShort.has(key)) {
           seenShort.add(key)
           const prev = shortDf.get(key)
