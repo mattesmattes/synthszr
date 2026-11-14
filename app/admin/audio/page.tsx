@@ -525,15 +525,35 @@ const DEFAULT_MOMENT_STYLE = { label: 'Moment', color: 'bg-gray-500/20 text-gray
  * einer Zwischenschicht, ein leerer Body oder ein Netzwerkfehler erscheinen
  * jetzt mit Status und Auszug im roten Hinweis statt als „Unexpected token".
  */
-async function readScriptResponse(res: Response): Promise<{ script: string }> {
+/** Was die Route über Tagesregie und Texturdurchgang meldet (2026-11-14). */
+interface ScriptRunInfo {
+  regie?: { picks: Record<string, string[]>; directed: boolean }
+  texture?: { applied: boolean; problems: string[] }
+}
+
+async function readScriptResponse(res: Response): Promise<{ script: string } & ScriptRunInfo> {
   const text = await res.text()
-  let data: { error?: string; script?: string } = {}
+  let data: { error?: string; script?: string } & ScriptRunInfo = {}
   try { data = JSON.parse(text) } catch { /* kein JSON — unten als Auszug gemeldet */ }
   if (!res.ok || typeof data.script !== 'string') {
     const auszug = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240)
     throw new Error(data.error ?? `HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''}: ${auszug || 'leere Antwort'}`)
   }
-  return { script: data.script }
+  return { script: data.script, regie: data.regie, texture: data.texture }
+}
+
+/** Eine Zeile für die Admin-Anzeige: welche Regie heute galt und ob die Textur übernommen wurde. */
+function describeRun(info: ScriptRunInfo | null): string | null {
+  if (!info?.regie) return null
+  const p = info.regie.picks
+  const parts = [
+    p.dramaturgy?.[0], p.temperature?.[0],
+    p.devices?.length ? `Mittel: ${p.devices.join(', ')}` : null,
+    p.imagery?.length ? `Bilder: ${p.imagery.join(', ')}` : null,
+    p.segment?.[0], p.coarseness?.[0], p.ending?.[0] ? `Schluss: ${p.ending[0]}` : null,
+  ].filter(Boolean)
+  const textur = info.texture ? (info.texture.applied ? 'Textur übernommen' : `Textur verworfen (${info.texture.problems.slice(0, 2).join('; ')})`) : null
+  return `Regie: ${parts.join(' · ')}${info.regie.directed ? '' : ' (ohne Regisseur)'}${textur ? ` — ${textur}` : ''}`
 }
 
 function describeScriptError(error: unknown): string {
@@ -603,6 +623,7 @@ function AudioPage() {
   const [dialogueRules, setDialogueRules] = useState('')
   const [dialogueRulesDefault, setDialogueRulesDefault] = useState('')
   const [scriptGenerated, setScriptGenerated] = useState(false)
+  const [scriptRunInfo, setScriptRunInfo] = useState<ScriptRunInfo | null>(null)
   // Solange ein Script oder Audio entsteht, ist kein zweiter Start möglich
   // (Betreiber 2026-11-10: „Podcast generieren" war während der
   // Script-Erzeugung klickbar). Der State sperrt die Buttons, der Ref fängt
@@ -1038,6 +1059,7 @@ function AudioPage() {
       })
       const data = await readScriptResponse(res)
       setPodcastScript(data.script)
+      setScriptRunInfo(data)
       setScriptGenerated(true)
       setScriptModified(false)
       setPodcastAudioUrl(null)
@@ -1074,6 +1096,7 @@ function AudioPage() {
       const data = await readScriptResponse(res)
       generatedScript = data.script
       setPodcastScript(generatedScript)
+      setScriptRunInfo(data)
       setScriptGenerated(true)
       setScriptModified(false)
       setPodcastAudioUrl(null)
@@ -1354,8 +1377,11 @@ function AudioPage() {
                   className="font-mono text-sm h-[300px]"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Format: <code className="bg-muted px-1 rounded">HOST:</code> oder <code className="bg-muted px-1 rounded">GUEST:</code> gefolgt von Voice-Directions wie <code className="bg-muted px-1 rounded">[cheerful and warm, faster pacing]</code>.
+                  Format: <code className="bg-muted px-1 rounded">HOST:</code> oder <code className="bg-muted px-1 rounded">GUEST:</code> gefolgt von Voice-Directions wie <code className="bg-muted px-1 rounded">[indignant, emphatic, fast]</code>.
                 </p>
+                {scriptGenerated && describeRun(scriptRunInfo) && (
+                  <p className="text-xs text-muted-foreground">{describeRun(scriptRunInfo)}</p>
+                )}
               </div>
 
               {/* Generate Button & Status */}

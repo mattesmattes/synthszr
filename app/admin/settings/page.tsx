@@ -124,7 +124,7 @@ const USE_CASE_GROUPS: Array<{ title: string; useCases: string[] }> = [
   },
   {
     title: 'Podcast',
-    useCases: ['podcast_script', 'podcast_modes', 'podcast_show_notes', 'podcast_intermezzo', 'podcast_memory', 'podcast_episode', 'podcast_metadata_translation'],
+    useCases: ['podcast_script', 'podcast_regie', 'podcast_texture', 'podcast_modes', 'podcast_show_notes', 'podcast_intermezzo', 'podcast_memory', 'podcast_episode', 'podcast_metadata_translation'],
   },
   {
     title: 'Bildgenerierung',

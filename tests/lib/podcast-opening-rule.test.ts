@@ -12,12 +12,12 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-const ROUTE = readFileSync('app/api/podcast/generate-script/route.ts', 'utf-8')
+const ROUTE = readFileSync('lib/podcast/script-templates.ts', 'utf-8')
 
 /** Die Vorlage als Text: vom Zuweisungs-Backtick bis zum ersten nicht
  *  maskierten Backtick (die Vorlagen enthalten \`…\`-Codeschnipsel). */
 function template(name: string): string {
-  const m = ROUTE.match(new RegExp(`const ${name} = \`((?:[^\`\\\\]|\\\\.)*)\``))
+  const m = ROUTE.match(new RegExp(`export const ${name} = \`((?:[^\`\\\\]|\\\\.)*)\``))
   if (!m) throw new Error(`${name} nicht gefunden`)
   return m[1]
 }

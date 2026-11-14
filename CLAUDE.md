@@ -723,6 +723,94 @@ Not-Aus: `update curation_runs set cancel_requested = true where id = …` —
 `advanceRun` schließt den Run beim nächsten Tick als `cancelled` ab, bevor er
 weiterarbeitet. `shadow_enabled = false` stoppt nur neue Kickoffs.
 
+## Recent Changes (2026-11-14)
+
+### Podcast-Tonalität v2
+- HOST (Emma) spricht wie eine scharfzüngige, hitzige Tech-Journalistin
+  (Urteil zuerst, Ausbrüche gegen Mächtige, holt ihn runter, korrigiert),
+  GUEST (Synthesizer) wie ein provokanter Business-Professor (Umdeutung,
+  große Riffs von 120-200 Wörtern, datierte Prognosen, derbe Vergleiche,
+  Selbstironie über Eitelkeit). Vorbild war ein bekannter US-Tech-Podcast;
+  im Prompt stehen nur Merkmale, keine Namen oder Schlagworte.
+- Stimmen und Folgenaufbau: `lib/podcast/voice-style.ts` (Platzhalter
+  `{voiceStyle}`, `{episodeShape}`); Vorlagen ausgelagert nach
+  `lib/podcast/script-templates.ts`; Dialogregeln 4/7/8/9 in
+  `lib/podcast/dialogue-style.ts`; Persönlichkeits-Brief klingt wie
+  Co-Hosts statt Melodram (`personality.ts`, Klang-Regel); Intermezzo-Ton
+  angepasst. Quoten-Realismus und 4-Block-Struktur von v1 sind gestrichen.
+- Archiv v1: `docs/podcast/tonality/v1-archive-2026-11-14.md`. Bericht mit
+  Noten und Messwerten: `docs/podcast/tonality/v2-style-report.md`
+  (Prüfer-Mittel v1 3,4, v2 stabil um 7 von 10).
+- Trockenlauf in Stufen (`scripts/podcast-style-dryrun.ts`, Aufrufe im
+  Kopfkommentar): `director` → `script` → `texture` → `validate` → `record`;
+  baut dieselben Prompts wie die Route aus Dateien, mit `--call` und
+  `ANTHROPIC_API_KEY` ruft jede Stufe auch das Modell.
+
+### Podcast: Tagesregie, Fingerabdruck, Texturdurchgang, derbe Sprache
+Gegen Schablonen von Folge zu Folge (Betreiber 2026-11-14: ein Generator, der
+das Skript jeden Tag neu ausrichtet). Ablauf in
+`app/api/podcast/generate-script` (`maxDuration` 800):
+1. **Tagesregie** (`lib/podcast/regie/`): `sampleRegie` (`sampler.ts`,
+   deterministisch, Seed aus Datum|Post) zieht je Folge Koordinaten aus
+   `REGIE_AXES` (`catalog.ts`): Dramaturgie (7 Formen, Sperre 3 Folgen),
+   Temperatur (5), drei von 14 Stilmitteln, zwei von 10 Bildwelten, Segment
+   vor dem Schluss (5; Sperren je 2 Folgen), Derbheit (clean, salty doppelt
+   gewichtet, unfiltered), Schluss (5, Sperre 2; als letzte Achse ergänzt,
+   damit bestehende Historien die übrigen Achsen gleich ziehen); seltener
+   Genutztes zuerst. Der Regisseur
+   (`director.ts`, Use Case `podcast_regie`, Default Sonnet 5, Tool
+   `report_regie`, 90 s, fail-soft) füllt die Koordinaten mit den Geschichten
+   des Tages (Streit, Ausbrüche mit Ziel und Vorwurf, Plan je Stilmittel);
+   `parseRegieFill` verwirft Ziele, die nicht im Artikel stehen, und fremde
+   Stilmittel. `renderRegieSection` hängt „TODAY'S DIRECTION“ bzw. „REGIE
+   DIESER FOLGE“ an den User-Prompt (inkl. „NOT today: …“); `voice-style.ts`
+   verweist für Form, Temperatur, Stilmittel, Bildwelt, Segment und Sprache
+   darauf und hat nur noch einen Rückfall ohne Regie. Historie:
+   `settings.podcast_regie_history_<lang>` (21 Einträge; eine Neu-Erzeugung
+   desselben Posts ersetzt den Eintrag und zählt nicht als Vorgänger).
+2. **Fingerabdruck** (`lib/podcast/fingerprint.ts`, kein Modell, keine
+   Tabelle): aus den letzten sieben Skripten (`post_podcasts.script_content`,
+   Locale en bzw. de) Wendungen (3–5 Wörter), Kurzzeilen und
+   Sprechanweisungen, die in mehreren Folgen wiederkehren; ohne Eigennamen,
+   Ziffern, schlichte Rückmeldungen („Mm-hm.“, „Got it.“) und Wendungen aus
+   dem heutigen Artikel.
+   Abschnitt „WORN OUT IN RECENT EPISODES“ im Skript- und im Textur-Prompt.
+3. **Texturdurchgang** (`lib/podcast/texture-pass.ts`, Use Case
+   `podcast_texture`, Default Opus 5.5, Streaming): zweiter Aufruf nur für die
+   Oberfläche (Pointen ausdünnen, Verbrauchtes ersetzen, schlichte
+   Rückmeldungen, Versprecher, Derbheit des Tages, Sprechanweisungen
+   variieren). Er bekommt die Stilmittel des Tages mit dem Plan des
+   Regisseurs (`textureDeviceNotes`) und darf sie nicht glätten (im Test
+   strich er sonst einen durchlaufenden Spitznamen als „verbraucht“).
+   Riffs über 100 Wörter bleiben eine Zeile (im Test teilte er sie mit
+   eingestreuten Rückmeldungen). Stellen, die den Artikel wörtlich
+   nachsprechen (`articleEchoes`: ab acht Wörtern am Stück, Zitate
+   ausgenommen, höchstens acht), formuliert er als Gespräch um. `validateTexture` prüft hart: Marker,
+   Zahlenmenge, Begrüßung wörtlich, Zeilenformat, Länge ±12 %, Zeilenzahl,
+   Abschnittslängen ±35 %, geschützte MOMENTS-Zitate, mehrfach genannte
+   Namen (nur EN, `recurringNames`), lange Riffs nicht geteilt; bei Verstoß
+   oder Fehler bleibt das Skript des ersten Aufrufs. MOMENTS werden vorher abgetrennt und danach wieder
+   angehängt, danach `ensureIntermezzoMarker`.
+4. **Derbe Sprache und Explicit-Flag:** F-Wort an salty- und
+   unfiltered-Tagen erlaubt, `SWEARING_LIMITS` (nie gegen Gruppen oder
+   Privatleute, geflucht aus Überzeugung). `publish-podigee` setzt
+   `explicit` über `containsExplicitLanguage` (`lib/podcast/explicit.ts`,
+   nur gesprochene Zeilen ohne MOMENTS; ohne Skript vorsichtshalber `true`).
+- Die Route antwortet zusätzlich mit `regie: {picks, directed}` und
+  `texture: {applied, problems}`; Admin → Audio zeigt darunter die Zeile
+  „Regie: … — Textur übernommen/verworfen“. Modelle für Regisseur und
+  Textur: Admin → Einstellungen → Podcast.
+- Persönlichkeits-Brief: je Folge nur ein erlaubter Callback aus den
+  gemeinsamen Erinnerungen (`todaysCallback`, rotiert über die
+  Ausgabenummer), Verabschiedung frisch formuliert, die Reflexion am Schluss
+  folgt der Regie-Achse „Schluss“ (im Test kamen sonst fünfmal derselbe
+  Schluss und derselbe Running Gag).
+- Mehrkosten je Folge ≈ 0,15 USD (Regisseur ≈ 0,03, Textur ≈ 0,12).
+- Fünf-Folgen-Test 10.–14.11. (Stil ≈ 6,3, Vielfalt, gefundene Fehler):
+  Nachtrag in `docs/podcast/tonality/v2-style-report.md`.
+- `extractTextFromTiptap` liegt in `lib/podcast/tiptap-text.ts` und behält
+  Leerzeichen-Textknoten (vorher klebten Wörter wie „longagentic“).
+
 ## Recent Changes (2026-11-12)
 
 ### Admin: Top sources

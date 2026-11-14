@@ -196,7 +196,7 @@ LANGUAGE — CRITICAL: Write every spoken word of the dialog in ${lang}. The res
 
 CONTENT: HOST and GUEST talk about themselves — their role as AI voices, the meta-layer of the conversation, a human studio moment, or a brief reflection on what they just discussed. The transition should grow organically out of the last block (do NOT abruptly change topic) and taper gently toward the next topic.
 
-LENGTH: 6-10 lines, alternating HOST and GUEST. Tone calm, intimate, sometimes dryly humorous. One open question, one honest observation, one concrete moment.
+LENGTH: 6-10 lines, alternating HOST and GUEST. Quieter than the rest of the episode, but still the same two voices: HOST is dry, direct and teasing, never gushing; GUEST turns earnest for a sentence and then undercuts it with a joke. Affection shows as teasing, no pining, no poetry. One open question, one honest observation, one concrete moment.
 
 FORMAT (mandatory):
 - Each line starts with "HOST:" or "GUEST:" followed by an emotion tag in square brackets, then the spoken text in ${lang}.

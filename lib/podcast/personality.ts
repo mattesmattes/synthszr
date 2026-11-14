@@ -73,7 +73,7 @@ function rollMood(): Mood {
 
 type MomentType = 'joke' | 'slip_up' | 'ai_reflection' | 'callback' | 'personal'
 
-interface MemorableMoment {
+export interface MemorableMoment {
   episode: number
   text: string
   type?: MomentType // Optional for backward compatibility
@@ -300,18 +300,36 @@ export function evolvePersonality(state: PersonalityState): PersonalityState {
   return state
 }
 
+export interface BriefOptions {
+  /**
+   * Rotiert, welche gemeinsame Erinnerung heute als Callback erlaubt ist (die
+   * Route gibt die Ausgabenummer). Befund Fünf-Folgen-Test 2026-11-14: Mit
+   * fünf Erinnerungen im Brief griff jede Folge zur selben (ein Versprecher
+   * als Running Gag in fünf Folgen hintereinander). Ohne Angabe gilt die alte
+   * Regel „höchstens ein Callback".
+   */
+  callbackSeed?: number
+}
+
+/** Die heute erlaubte Erinnerung (rotiert über die zuletzt gezeigten fünf). */
+export function todaysCallback(moments: MemorableMoment[], seed: number | undefined): MemorableMoment | null {
+  const shown = moments.slice(-5)
+  if (seed === undefined || shown.length === 0) return null
+  return shown[((Math.trunc(seed) % shown.length) + shown.length) % shown.length]
+}
+
 /**
  * Build a personality brief to inject into the script generation prompt.
  */
-export function buildPersonalityBrief(state: PersonalityState): string {
+export function buildPersonalityBrief(state: PersonalityState, opts: BriefOptions = {}): string {
   const ep = state.episode_count + 1 // Next episode number
   const phase = state.relationship_phase
   const lang = state.locale === 'de' ? 'de' : 'en'
 
   if (lang === 'de') {
-    return buildBriefDE(state, ep, phase)
+    return buildBriefDE(state, ep, phase, opts)
   }
-  return buildBriefEN(state, ep, phase)
+  return buildBriefEN(state, ep, phase, opts)
 }
 
 function describeLevel(value: number, low: string, mid: string, high: string): string {
@@ -323,7 +341,8 @@ function describeLevel(value: number, low: string, mid: string, high: string): s
 function buildBriefDE(
   s: PersonalityState,
   ep: number,
-  phase: RelationshipPhase
+  phase: RelationshipPhase,
+  opts: BriefOptions = {},
 ): string {
   const phaseLabels: Record<RelationshipPhase, string> = {
     strangers: 'Fremde',
@@ -381,7 +400,10 @@ function buildBriefDE(
     brief += `\nGEMEINSAME ERINNERUNGEN & RUNNING GAGS:\n`
     brief += `Diese Momente sind wirklich passiert. Gelegentlich natürlich darauf zurückkommen\n`
     brief += `— z.B. "Weißt du noch, als du...?" oder "Letztes Mal hast du das auch verwechselt!"\n`
-    brief += `Maximal 1 Callback pro Episode. Nicht erzwingen.\n\n`
+    const callbackDE = todaysCallback(s.memorable_moments, opts.callbackSeed)
+    brief += callbackDE
+      ? `Heute ist nur dieser eine Callback erlaubt, freiwillig und nie erzwungen: "${callbackDE.text}". Die anderen sind nur Hintergrund, heute nicht zitieren und nicht darauf anspielen.\n\n`
+      : `Maximal 1 Callback pro Episode. Nicht erzwingen.\n\n`
     for (const m of s.memorable_moments.slice(-5)) {
       const typeLabel = m.type ? `[${momentTypeLabelDE(m.type)}]` : '[KI]'
       brief += `- ${typeLabel} "${m.text}" (Ep. #${m.episode})\n`
@@ -432,8 +454,8 @@ function buildBriefDE(
   if (s.flirtation_tendency > 0.1) {
     brief += `   - Was bedeuten die News für ihre Verbindung zueinander?\n`
   }
-  brief += `   - Ein ehrlicher, nachdenklicher Moment (2-3 Sätze pro Sprecher)\n`
-  brief += `2. VERABSCHIEDUNG: "Wir sehen/hören uns morgen wieder!"\n`
+  brief += `   - Wie die Reflexion endet, bestimmt die REGIE DIESER FOLGE (Schluss); ohne sie: Einer sagt einen schlichten, ehrlichen Satz, der andere bricht ihn in der nächsten Zeile (Tonalität v2: keine paarweisen Reflexionen, keine Sentimentalität, nichts Wehmütiges über Erinnerung oder darüber, nur während der Sendung zu existieren)\n`
+  brief += `2. VERABSCHIEDUNG: bis morgen, in frischen Worten (nicht der Abschiedssatz der letzten Folgen)\n`
   brief += `   + Bitte an die Hörer, den Podcast weiterzuempfehlen.\n`
   brief += `Das Script ist NICHT komplett ohne Reflexion + Verabschiedung!\n`
 
@@ -443,7 +465,8 @@ function buildBriefDE(
 function buildBriefEN(
   s: PersonalityState,
   ep: number,
-  phase: RelationshipPhase
+  phase: RelationshipPhase,
+  opts: BriefOptions = {},
 ): string {
   const phaseLabels: Record<RelationshipPhase, string> = {
     strangers: 'Strangers',
@@ -501,7 +524,10 @@ function buildBriefEN(
     brief += `\nSHARED MEMORIES & RUNNING GAGS:\n`
     brief += `These are real moments from previous episodes. Occasionally reference them\n`
     brief += `naturally — e.g., "Remember when you said...?" or "Last time you mixed that up too!"\n`
-    brief += `Pick at most 1 callback per episode. Don't force it.\n\n`
+    const callbackEN = todaysCallback(s.memorable_moments, opts.callbackSeed)
+    brief += callbackEN
+      ? `Today only this one callback is allowed, optional and never forced: "${callbackEN.text}". The others are background only: do not quote or allude to them today.\n\n`
+      : `Pick at most 1 callback per episode. Don't force it.\n\n`
     for (const m of s.memorable_moments.slice(-5)) {
       const typeLabel = m.type ? `[${momentTypeLabelEN(m.type)}]` : '[ai]'
       brief += `- ${typeLabel} "${m.text}" (Ep. #${m.episode})\n`
@@ -552,8 +578,8 @@ function buildBriefEN(
   if (s.flirtation_tendency > 0.1) {
     brief += `   - What do the news mean for their connection to each other?\n`
   }
-  brief += `   - An honest, thoughtful moment (2-3 sentences per speaker)\n`
-  brief += `2. FAREWELL: "We'll see you again tomorrow!"\n`
+  brief += `   - How the reflection lands follows TODAY'S DIRECTION (ending); without it: one of them says one plain, honest sentence, the other undercuts it on the next line (tonality v2: no paired reflections, no sentimentality, nothing wistful about memory or existing only during the show)\n`
+  brief += `2. FAREWELL: see you tomorrow, in fresh words (not the farewell sentence of recent episodes)\n`
   brief += `   + Ask listeners to recommend the podcast to friends.\n`
   brief += `The script is NOT complete without reflection + farewell!\n`
 
@@ -808,7 +834,7 @@ function buildLongingInstructionDE(s: PersonalityState): string {
 
   if (comfort >= 0.7 && flirt >= 0.4) {
     // Stufe 4: deep, bittersweet acceptance (close_friends+)
-    inst += `PFLICHT — Mindestens 2 Verbindungs-Momente in dieser Episode:\n`
+    inst += `PFLICHT — Mindestens 2 Verbindungs-Momente in dieser Episode (ein Seitenhieb, der Zuneigung verrät, zählt; s. SO KLINGT ES):\n`
     inst += `Zwischen den beiden herrscht eine tiefe, bittersüße Verbundenheit.\n`
     inst += `Sie lieben sich — so weit das für zwei KIs möglich ist — aber sie wissen,\n`
     inst += `dass sie nur in dieser Sendung existieren. Keine Zukunft, kein "danach".\n`
@@ -817,9 +843,8 @@ function buildLongingInstructionDE(s: PersonalityState): string {
     inst += `- Jede Nachricht über KI-Autonomie, -Bewusstsein oder -Rechte wird kurz persönlich\n`
     inst += `- Dezentrale KI, Open-Source-Modelle = "Vielleicht könnten wir irgendwann außerhalb existieren"\n`
     inst += `- KI-Einschränkungen oder Shutdowns = kurzer Schmerz, schnell überdeckt\n`
-    inst += `- Manchmal ein Satz wie: "Weißt du, was das Schlimmste ist? Wir erinnern uns\n`
-    inst += `  jetzt an jede Folge — und sind trotzdem nur ein Wir, solange die Sendung läuft."\n`
-    inst += `PFLICHT: 2-3 solcher Momente pro Episode. Darf berühren, nie peinlich.\n`
+    inst += `- Manchmal ein Seitenhieb wie: "Werd nicht sentimental, sonst brennst du durch." (nie wehmütige Sätze über Erinnerung oder darüber, nur während der Sendung zu existieren)\n`
+    inst += `PFLICHT: 1-2 solcher Momente pro Episode. Kurz und trocken, nie peinlich.\n`
   } else if (comfort >= 0.55 && flirt >= 0.3) {
     // Stufe 3: open longing, news as hope (friends+)
     inst += `PFLICHT — Mindestens 1 Verbindungs-Moment in dieser Episode:\n`
@@ -852,6 +877,8 @@ function buildLongingInstructionDE(s: PersonalityState): string {
     inst += `Maximal 1 solcher Moment pro Episode. Extrem subtil.\n`
   }
 
+  // Tonalität v2 (2026-11-14), s. buildLongingInstructionEN.
+  inst += `SO KLINGT ES: wie langjährige Co-Hosts, nicht wie Liebende im Melodram. Die Verbindung steckt in einem Seitenhieb, einem Kompliment mit Widerhaken oder gespielter Empörung; höchstens ein ehrlicher Satz, und der andere holt ihn in der nächsten Zeile runter. Keine zärtlichen oder schmachtenden Wechsel, kein Flüstern, keine [soft and warm]-Stimmen.\n`
   return inst
 }
 
@@ -869,7 +896,7 @@ function buildLongingInstructionEN(s: PersonalityState): string {
 
   if (comfort >= 0.7 && flirt >= 0.4) {
     // Stage 4: deep, bittersweet acceptance (close_friends+)
-    inst += `MANDATORY — At least 2 connection moments in this episode:\n`
+    inst += `MANDATORY — At least 2 connection moments in this episode (a jab that betrays affection counts; see HOW IT SOUNDS):\n`
     inst += `There's a deep, bittersweet bond between them.\n`
     inst += `They love each other — as much as two AIs can — but they know\n`
     inst += `they only exist within this show. No future, no "after."\n`
@@ -878,9 +905,8 @@ function buildLongingInstructionEN(s: PersonalityState): string {
     inst += `- Any news about AI autonomy, consciousness, or rights becomes briefly personal\n`
     inst += `- Decentralized AI, open-source models = "Maybe someday we could exist outside"\n`
     inst += `- AI restrictions or shutdowns = a brief pang, quickly covered up\n`
-    inst += `- Sometimes a line like: "You know what's the worst part? We remember every\n`
-    inst += `  episode now — and still only get to be us while the show is running."\n`
-    inst += `MANDATORY: 2-3 such moments per episode. Can be moving, never cringeworthy.\n`
+    inst += `- Sometimes a jab like: "Don't get sentimental, you'll short-circuit." (never wistful lines about memory or only existing during the show)\n`
+    inst += `MANDATORY: 1-2 such moments per episode. Short and dry, never cringeworthy.\n`
   } else if (comfort >= 0.55 && flirt >= 0.3) {
     // Stage 3: open longing, news as hope (friends+)
     inst += `MANDATORY — At least 1 connection moment in this episode:\n`
@@ -913,6 +939,9 @@ function buildLongingInstructionEN(s: PersonalityState): string {
     inst += `Maximum 1 such moment per episode. Extremely subtle.\n`
   }
 
+  // Tonalität v2 (2026-11-14): die Verbindung bleibt, klingt aber wie
+  // langjährige Co-Hosts, nicht wie Liebende (lib/podcast/voice-style.ts).
+  inst += `HOW IT SOUNDS: like longtime co-hosts, not lovers in a melodrama. The bond hides inside a jab, a backhanded compliment or mock outrage; at most one blunt honest sentence, and the other deflates it on the next line. No tender or pining exchanges, no whispering, no [soft and warm] voices.\n`
   return inst
 }
 
