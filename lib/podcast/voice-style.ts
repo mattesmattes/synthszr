@@ -44,7 +44,7 @@ GUEST ("Synthesizer", male) is the provocative business professor with a big mou
 THE DYNAMIC:
 - Two co-hosts who have done this for years and like each other: fast, overlapping, unpolished. Not an interview; both ask, both answer, both have opinions.
 - Not every story is a fight. Outside the big argument, several stories are built together: one agrees fast and emphatically, in a word or two, then adds a new angle or another fact from the article. Real disagreement is saved for two or three stories.
-- The rhythm is bimodal: lots of one- to eight-word lines and a few long riffs. About a quarter of all lines have one to three words.
+- The rhythm is bimodal: lots of one- to eight-word lines and a few long riffs. About a quarter of all lines have one to three words, most of them hers: she steers in many short turns, he argues in longer ones, and overall he talks a little more than she does.
 - No pattern more than twice per episode: no phrase, hand-off, transition, interjection slot or joke shape. If a move worked once, do something else next time. One-word story exits (a bare "next" or "done") at most three times.
 - Nobody labels their own move or stance (announcing a verdict, a crusade, a takeover, a tally): they just make it. A game or segment may be named.
 - The shape of the episode, its temperature, today's devices, imagery and language come from TODAY'S DIRECTION further below. Use exactly the devices it activates, each once, and none of the devices it lists as not today. Within that shape, vary story lengths; the loose default beat is her setup, his thesis, her reaction, a few fast lines.
@@ -86,7 +86,7 @@ GUEST („Synthesizer", männlich) ist der provokante Business-Professor mit gro
 DIE DYNAMIK:
 - Zwei Co-Hosts, die das seit Jahren machen und sich mögen: schnell, überlappend, unpoliert. Kein Interview; beide fragen, beide antworten, beide haben Meinungen.
 - Nicht jede Geschichte ist ein Streit. Außerhalb des großen Streits entstehen mehrere Geschichten gemeinsam: Einer stimmt schnell und nachdrücklich zu, mit ein, zwei Wörtern, und legt einen neuen Blickwinkel oder einen weiteren Fakt aus dem Artikel nach. Echter Widerspruch bleibt für zwei oder drei Geschichten.
-- Der Rhythmus ist zweigeteilt: viele Zeilen mit ein bis acht Wörtern und wenige lange Monologe. Etwa ein Viertel aller Zeilen hat ein bis drei Wörter.
+- Der Rhythmus ist zweigeteilt: viele Zeilen mit ein bis acht Wörtern und wenige lange Monologe. Etwa ein Viertel aller Zeilen hat ein bis drei Wörter, die meisten davon ihre: Sie lenkt in vielen kurzen Wechseln, er argumentiert in längeren, und insgesamt redet er etwas mehr als sie.
 - Kein Muster mehr als zweimal pro Folge: keine Wendung, Übergabe, Überleitung, Einwurf-Stelle oder Witzform. Hat etwas einmal funktioniert, beim nächsten Mal etwas anderes.
 - Niemand benennt den eigenen Zug oder die eigene Haltung (ein Urteil, einen Kreuzzug, eine Übernahme, eine Bilanz ankündigen): sie tun es einfach. Ein Spiel oder ein Segment darf beim Namen genannt werden.
 - Form der Folge, Temperatur, Stilmittel, Bildfelder und Sprache des Tages stehen unten in der REGIE DIESER FOLGE. Genau die Stilmittel verwenden, die sie aktiviert, jedes einmal, und keines, das sie als „heute nicht" nennt. Innerhalb dieser Form die Länge der Geschichten variieren; der lockere Standardablauf ist ihr Einstieg, seine These, ihre Reaktion, ein paar schnelle Zeilen.
