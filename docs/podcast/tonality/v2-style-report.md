@@ -35,9 +35,8 @@ nirgends im Prompt (Test `tests/lib/podcast-voice-style.test.ts`).
 
 Prompts aus dem Post vom 14.11.2026 (`5bd522fa-…`, englische Übersetzung,
 2.818 Wörter) und dem Persönlichkeitsstand vor Folge 376 gebaut. Das Skript
-schrieb jeweils ein Claude-Opus-Lauf mit exakt diesen Prompts (Stellvertreter
-für den Produktionsaufruf `podcast_script` = claude-opus-5-5; ohne API-Schlüssel
-in dieser Umgebung). Bewertet hat ein unabhängiger Prüf-Lauf, der die
+schrieb jeweils ein Stellvertreter-Lauf mit exakt diesen Prompts (für den
+Produktionsaufruf `podcast_script`; ohne API-Schlüssel in dieser Umgebung). Bewertet hat ein unabhängiger Prüf-Lauf, der die
 Transkripte, den Post und das Skript liest und fünf Dimensionen von 1 bis 10
 benotet (10 = in Ton und Mechanik nicht von den Vorbildern zu unterscheiden),
 plus Prüfungen auf reale Namen, erfundene Fakten und Format. Ab Runde 6 kannte
