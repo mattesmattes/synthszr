@@ -755,7 +755,9 @@ das Skript jeden Tag neu ausrichtet). Ablauf in
    `REGIE_AXES` (`catalog.ts`): Dramaturgie (7 Formen, Sperre 3 Folgen),
    Temperatur (5), drei von 14 Stilmitteln, zwei von 10 Bildwelten, Segment
    vor dem Schluss (5; Sperren je 2 Folgen), Derbheit (clean, salty doppelt
-   gewichtet, unfiltered); seltener Genutztes zuerst. Der Regisseur
+   gewichtet, unfiltered), Schluss (5, Sperre 2; als letzte Achse ergänzt,
+   damit bestehende Historien die übrigen Achsen gleich ziehen); seltener
+   Genutztes zuerst. Der Regisseur
    (`director.ts`, Use Case `podcast_regie`, Default Sonnet 5, Tool
    `report_regie`, 90 s, fail-soft) füllt die Koordinaten mit den Geschichten
    des Tages (Streit, Ausbrüche mit Ziel und Vorwurf, Plan je Stilmittel);
@@ -798,7 +800,14 @@ das Skript jeden Tag neu ausrichtet). Ablauf in
   `texture: {applied, problems}`; Admin → Audio zeigt darunter die Zeile
   „Regie: … — Textur übernommen/verworfen“. Modelle für Regisseur und
   Textur: Admin → Einstellungen → Podcast.
+- Persönlichkeits-Brief: je Folge nur ein erlaubter Callback aus den
+  gemeinsamen Erinnerungen (`todaysCallback`, rotiert über die
+  Ausgabenummer), Verabschiedung frisch formuliert, die Reflexion am Schluss
+  folgt der Regie-Achse „Schluss“ (im Test kamen sonst fünfmal derselbe
+  Schluss und derselbe Running Gag).
 - Mehrkosten je Folge ≈ 0,15 USD (Regisseur ≈ 0,03, Textur ≈ 0,12).
+- Fünf-Folgen-Test 10.–14.11. (Stil ≈ 6,3, Vielfalt, gefundene Fehler):
+  Nachtrag in `docs/podcast/tonality/v2-style-report.md`.
 - `extractTextFromTiptap` liegt in `lib/podcast/tiptap-text.ts` und behält
   Leerzeichen-Textknoten (vorher klebten Wörter wie „longagentic“).
 

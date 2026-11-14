@@ -109,3 +109,88 @@ Prüfer sieht, ist Textur, nicht Statistik.
 - Derbere Sprache zulassen.
 - Ein zweiter Durchgang, der nur die Textur überarbeitet (Pointen streichen,
   Rückmeldungen einstreuen), wie der Take-Durchgang im Ghostwriter.
+
+## Nachtrag: Tagesregie, Texturdurchgang und Fünf-Folgen-Test (2026-11-14)
+
+Umgesetzt sind die drei Hebel oben, soweit der Betreiber sie freigegeben hat:
+derbere Sprache bis zum F-Wort (je Folge über die Regie geregelt), ein
+zweiter Durchgang nur für die Textur und gegen die Schablone ein Generator,
+der jede Folge anders ausrichtet. Er besteht aus der Tagesregie mit sieben
+Achsen (Form, Temperatur, Stilmittel, Bildwelt, Segment, Derbheit, Schluss)
+und einem Fingerabdruck der letzten Folgen. Technik und Dateien stehen in
+CLAUDE.md, „Podcast: Tagesregie, Fingerabdruck, Texturdurchgang, derbe
+Sprache“.
+
+### Testaufbau
+
+Fünf echte Posts vom 10. bis 14.11.2026, jede Stufe wie in der Route:
+Sampler mit fortgeschriebener Historie, Regisseur, Skript, Texturdurchgang,
+harte Prüfung. Die Modellaufrufe übernahmen Stellvertreter-Läufe mit exakt
+den Produktions-Prompts. Bewertet haben unabhängige Prüf-Läufe: je Folge ein
+Stil-Prüfer mit dem bisherigen Maßstab und ein Vielfalts-Prüfer über alle
+fünf Folgen. Die Tage 0 bis 2 liefen parallel (der Fingerabdruck sah dort nur
+den ersten Lauf von Tag 0), die Tage 3 und 4 sahen die drei Vorgänger. Das
+ist strenger als die Produktion, wo jede Folge alle Vorgänger sieht.
+
+### Was der Test gefunden und behoben hat
+
+1. Der Texturdurchgang strich durchlaufende Spitznamen als „verbraucht“
+   (13 von 15). Er bekommt jetzt die Stilmittel des Tages, und die Prüfung
+   verwirft Fassungen, in denen mehrfach genannte Namen fehlen.
+2. Er teilte die langen Riffs mit eingestreuten Rückmeldungen (drei Zeilen
+   über 120 Wörter wurden zu null). Riffs über 100 Wörter bleiben jetzt eine
+   Zeile, auch das prüft die harte Prüfung.
+3. Schablonen aus der eigenen Vorgabe: Jeder Ausbruch endete mit „sollte
+   sich schämen“, Emma kündigte ihr „Urteil“ an, fast jede Geschichte war
+   Widerspruch plus Pointe. Die Vorgaben sind umformuliert: kein moralischer
+   Refrain, mehrere Geschichten gemeinsam gebaut, wechselnde Geschichtsenden.
+4. Beide Stimmen sprachen die Takes des Artikels fast wörtlich nach. Stellen
+   ab acht Wörtern am Stück erkennt jetzt `articleEchoes`, der
+   Texturdurchgang formuliert sie um. In den Folgen danach sank die Zahl von
+   acht auf zwei je Folge.
+5. Schlichte Rückmeldungen („Mm-hm.“) standen als verbraucht im
+   Fingerabdruck; sie sind ausgenommen.
+6. Fünfmal derselbe Schluss und derselbe Running Gag aus dem
+   Persönlichkeits-Gedächtnis: Der Schluss ist jetzt die siebte
+   Regie-Achse, und je Folge ist nur ein Callback erlaubt, rotiert über die
+   Folgennummer. Dieser letzte Fix kam nach dem Test und ist nur durch
+   Unit-Tests abgesichert.
+
+### Ergebnisse
+
+Texturdurchgang: in allen fünf Folgen übernommen (nach den Fixes 1 und 2),
+Länge −1 bis −6 %, Riffs erhalten.
+
+Stil (HOST / GUEST / Dynamik / Humor / Gesamt):
+
+| Folge | Regie (Form, Temperatur, Derbheit) | Noten | Mittel |
+|---|---|---|---|
+| Tag 0, 10.11. | Emma übernimmt, Kreuzzug gegen Skepsis, deftig | 6,5 / 5,5 / 6 / 6 / 6 | 6,0 |
+| Tag 1, 11.11. | Tiefenbohrung, albern, ungefiltert | 6,5 / 6 / 6 / 6 / 6 | 6,1 |
+| Tag 2, 12.11. | ein großer Streit, trocken und müde, sauber | 7 / 7 / 6,5 / 6 / 6,5 | 6,6 |
+| Tag 3, 13.11. | Blitzrunde, wütend gegen trotzig, deftig | 6,5 / 6 / 6,5 / 6 / 6,5 | 6,3 |
+| Tag 4, 14.11. | Einigkeit, vergnügte Zyniker, deftig | 7 / 6,5 / 6,5 / 6 / 6,5 | 6,5 |
+
+Die Stil-Deckung liegt mit etwa 6,3 unter Runde 7 (6,9). Das ist der Preis
+der Vielfalt: Der Prüfer misst gegen eine Sendung mit fester Form, und
+Formen wie „Blitzrunde“ oder „Einigkeit“ weichen bewusst davon ab. Am
+besten schneiden Tage mit einem großen Streit ab. Wiederkehrende Kritik:
+Der Professor redet zu wenig am Stück (GUEST-Anteil 41–50 % statt 57 %,
+nachgezogen), Takes klingen zu sehr nach dem Artikel (nachgezogen), Humor
+zu sauber.
+
+Vielfalt über die fünf Folgen (1–10): Form 6, Stilmittel 7,
+Wendungen 5, Einstiege und Schlüsse 5, Stimmen gleich geblieben 9. Messung
+ohne Modell: keine Wendung und keine Kurzzeile in drei oder mehr der fünf
+Folgen (Fingerabdruck mit Schwelle 3), stilistische 3-Gramme je Paar mit
+Jaccard 0,003 bis 0,008. Die Schwächen bei Wendungen und Schlüssen kamen vor
+allem aus dem gleichen Schluss-Ritual und einem Callback, der jeden Tag
+wiederkam (Fix 6), sowie aus Verbindungsfloskeln, die in der Produktion der
+Fingerabdruck über sieben Folgen erfasst.
+
+### Kosten
+
+Regisseur (Sonnet 5) etwa 0,03 USD und Texturdurchgang (Opus 5.5) etwa
+0,12 USD je Folge, zusammen etwa 0,15 USD Mehrkosten; die Erzeugung dauert
+ein bis zwei Minuten länger.
+
