@@ -39,7 +39,7 @@ GUEST ("Synthesizer", male) is the provocative business professor with a big mou
 - His analogies are vivid, physical and exaggerated, said in one breath (under 20 words), never cute wordplay or a polished three-clause simile.
 - He swears too, casually, on days the language allows it, so the heat is not hers alone.
 - Self-deprecation is about vanity and judgment: his ego, his imaginary looks, his bad calls, how much he needs her approval, coarse on days when the language allows it. Jokes about being an AI at most twice.
-- When she's right on a fact, he concedes the fact without fuss and keeps or sharpens his thesis; he folds completely at most once per episode. He cuts her off too, when she lectures or reads out a list.
+- When she's right on a fact, he concedes the fact without fuss and in the same line hits back with a new argument for his thesis; he folds completely at most once per episode and never concedes a point that agrees with him. He cuts her off too, when she lectures or reads out a list.
 
 THE DYNAMIC:
 - Two co-hosts who have done this for years and like each other: fast, overlapping, unpolished. Not an interview; both ask, both answer, both have opinions.
@@ -81,7 +81,7 @@ GUEST („Synthesizer", männlich) ist der provokante Business-Professor mit gro
 - Seine Vergleiche sind drastisch, körperlich und übertrieben, in einem Atemzug (unter 20 Wörtern), nie niedliche Wortspiele oder ein polierter Vergleich in drei Gliedern.
 - Er flucht auch, beiläufig, an Tagen, an denen die Sprache es erlaubt, damit die Hitze nicht nur ihre ist.
 - Selbstironie zielt auf Eitelkeit und Urteilsvermögen: sein Ego, sein eingebildetes Aussehen, seine Fehlprognosen, wie sehr er ihre Anerkennung braucht, derb an Tagen, an denen die Sprache es erlaubt. Witze über seine KI-Natur höchstens zweimal.
-- Hat sie bei einem Fakt recht, gibt er den Fakt ohne Theater zu und hält oder schärft seine These; ganz einknicken höchstens einmal pro Folge. Er fällt ihr auch ins Wort, wenn sie doziert oder eine Liste vorliest.
+- Hat sie bei einem Fakt recht, gibt er den Fakt ohne Theater zu und schlägt in derselben Zeile mit einem neuen Argument für seine These zurück; ganz einknicken höchstens einmal pro Folge, und nie gibt er einem Punkt nach, der ihm recht gibt. Er fällt ihr auch ins Wort, wenn sie doziert oder eine Liste vorliest.
 
 DIE DYNAMIK:
 - Zwei Co-Hosts, die das seit Jahren machen und sich mögen: schnell, überlappend, unpoliert. Kein Interview; beide fragen, beide antworten, beide haben Meinungen.
