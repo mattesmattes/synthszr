@@ -177,7 +177,7 @@ export async function retrieveMemory(params: {
     if (recentErr) {
       console.warn('[PodcastMemory] Recent fetch failed', { error: recentErr.message })
     }
-    const recent = (recentRows as EpisodeMemoryRow[] | null) || []
+    const recent = ((recentRows as Partial<EpisodeMemoryRow>[] | null) || []).map(normalizeMemoryRow)
 
     // Semantic lookup — only if we got a non-empty query and embeddings
     // are reachable. Excludes IDs already in recent so we don't duplicate.
@@ -194,7 +194,8 @@ export async function retrieveMemory(params: {
             match_count: semanticCount + recentCount(recent),
           })
           const recentIds = new Set(recent.map((r) => r.id))
-          similar = ((simRows as EpisodeMemoryRow[] | null) || [])
+          similar = ((simRows as Partial<EpisodeMemoryRow>[] | null) || [])
+            .map(normalizeMemoryRow)
             .filter((r) => !recentIds.has(r.id))
             .slice(0, semanticCount)
         }
@@ -212,6 +213,29 @@ export async function retrieveMemory(params: {
 
 function recentCount(rows: EpisodeMemoryRow[]): number {
   return rows.length
+}
+
+/**
+ * Fehlende oder leere Listenfelder als leere Liste. Befund 2026-11-15: Die
+ * RPC `match_podcast_memory` (Migration 20260522) liefert
+ * `running_gags_called_back` nicht mit; `buildMemoryBrief` iterierte darüber,
+ * warf „is not iterable", und jede Skript-Erzeugung lief ohne Gedächtnis
+ * („Memory retrieval failed (continuing without)“ in jedem Lauf).
+ */
+export function normalizeMemoryRow(row: Partial<EpisodeMemoryRow>): EpisodeMemoryRow {
+  const list = <T>(v: T[] | null | undefined): T[] => (Array.isArray(v) ? v : [])
+  return {
+    id: row.id ?? '',
+    episode_number: row.episode_number ?? 0,
+    recorded_at: row.recorded_at ?? '',
+    topics_covered: list(row.topics_covered),
+    host_positions: list(row.host_positions),
+    guest_positions: list(row.guest_positions),
+    running_gags_introduced: list(row.running_gags_introduced),
+    running_gags_called_back: list(row.running_gags_called_back),
+    key_moments: list(row.key_moments),
+    tone_summary: row.tone_summary ?? null,
+  }
 }
 
 /**

@@ -4,7 +4,7 @@
  * leerer Textblock). Die Meldung muss stop_reason und Blocktypen nennen.
  */
 import { describe, expect, it } from 'vitest'
-import { describeEmptyScript, extractScriptText, scriptRequestBudget, fallbackModelFor, shouldRetryWithFallback } from '@/lib/podcast/script-diagnostics'
+import { describeEmptyScript, extractScriptText, isTruncated, scriptRequestBudget, fallbackModelFor, shouldRetryWithFallback } from '@/lib/podcast/script-diagnostics'
 
 describe('extractScriptText', () => {
   it('verbindet nur Textbloecke', () => {
@@ -37,8 +37,10 @@ describe('scriptRequestBudget', () => {
   it('schaltet Denken ab, wo das Modell es erlaubt, und laesst max_tokens unveraendert', () => {
     expect(scriptRequestBudget('claude-opus-5', 12000)).toEqual({ max_tokens: 12000, thinking: { type: 'disabled' } })
   })
-  it('gibt Modellen ohne abschaltbares Denken Spielraum fuer das Denken', () => {
-    expect(scriptRequestBudget('claude-opus-5-5', 12000)).toEqual({ max_tokens: 20000 })
+  it('gibt Modellen ohne abschaltbares Denken reichlich Spielraum (Befund 2026-11-15: 20.000 reichten nicht)', () => {
+    expect(scriptRequestBudget('claude-opus-5-5', 12000)).toEqual({ max_tokens: 64000 })
+    // Ein größeres Ziel wächst darüber hinaus mit.
+    expect(scriptRequestBudget('claude-opus-5-5', 60000)).toEqual({ max_tokens: 68000 })
   })
 })
 
@@ -47,10 +49,16 @@ describe('fallbackModelFor / shouldRetryWithFallback', () => {
     expect(fallbackModelFor('claude-opus-5-5')).toBe('claude-opus-5')
     expect(fallbackModelFor('claude-opus-5')).toBeNull()
   })
-  it('wiederholt bei Verweigerung und bei verbrauchtem Denkbudget, sonst nicht', () => {
+  it('wiederholt bei Verweigerung und bei jeder abgeschnittenen Antwort, sonst nicht', () => {
     expect(shouldRetryWithFallback({ stop_reason: 'refusal', content: [] })).toBe(true)
     expect(shouldRetryWithFallback({ stop_reason: 'max_tokens', content: [{ type: 'thinking' }] })).toBe(true)
-    expect(shouldRetryWithFallback({ stop_reason: 'max_tokens', content: [{ type: 'text', text: 'halb' }] })).toBe(false)
+    // Befund 2026-11-15: ein halbes Skript (Abbruch bei Zeile 84) ging als fertiges durch.
+    expect(shouldRetryWithFallback({ stop_reason: 'max_tokens', content: [{ type: 'text', text: 'halb' }] })).toBe(true)
     expect(shouldRetryWithFallback({ stop_reason: 'end_turn', content: [] })).toBe(false)
+  })
+  it('isTruncated erkennt nur das volle Budget', () => {
+    expect(isTruncated({ stop_reason: 'max_tokens' })).toBe(true)
+    expect(isTruncated({ stop_reason: 'end_turn' })).toBe(false)
+    expect(isTruncated({ stop_reason: null })).toBe(false)
   })
 })

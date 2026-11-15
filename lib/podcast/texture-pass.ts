@@ -267,7 +267,7 @@ export async function applyTexturePass(script: string, opts: TextureOptions): Pr
     const Anthropic = (await import('@anthropic-ai/sdk')).default
     const { getModelForUseCase } = await import('@/lib/ai/model-config')
     const { withUsageLogging } = await import('@/lib/ai/usage-log')
-    const { extractScriptText, fallbackModelFor, scriptRequestBudget, shouldRetryWithFallback } = await import('@/lib/podcast/script-diagnostics')
+    const { extractScriptText, fallbackModelFor, isTruncated, scriptRequestBudget, shouldRetryWithFallback } = await import('@/lib/podcast/script-diagnostics')
     const client = withUsageLogging(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 300_000 }), 'podcast_texture')
     const model = await getModelForUseCase('podcast_texture')
     const { system, user } = buildTexturePrompt(script, opts)
@@ -280,9 +280,17 @@ export async function applyTexturePass(script: string, opts: TextureOptions): Pr
     }).finalMessage()
 
     let message = await call(model)
-    if (!extractScriptText(message).trim() && shouldRetryWithFallback(message)) {
+    if (shouldRetryWithFallback(message)) {
       const fallback = fallbackModelFor(model)
       if (fallback) message = await call(fallback)
+    }
+    // Eine abgeschnittene oder verweigerte Fassung wird nie geprüft oder
+    // übernommen; die Längenprüfung finge sie zwar meist, aber nicht, wenn nur
+    // die letzten Zeilen fehlen.
+    if (isTruncated(message) || message.stop_reason === 'refusal') {
+      const problem = `Textur ${isTruncated(message) ? 'abgeschnitten' : 'verweigert'} (stop_reason ${message.stop_reason})`
+      console.warn(`[PodcastTexture] ${problem}, erste Fassung bleibt`)
+      return { script, applied: false, problems: [problem] }
     }
     const revised = stripPreamble(extractScriptText(message))
     const check = validateTexture(script, revised, opts.lang, opts.protectedQuotes)

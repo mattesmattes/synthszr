@@ -820,6 +820,20 @@ das Skript jeden Tag neu ausrichtet). Ablauf in
   folgt der Regie-Achse „Schluss“ (im Test kamen sonst fünfmal derselbe
   Schluss und derselbe Running Gag).
 - Mehrkosten je Folge ≈ 0,15 USD (Regisseur ≈ 0,03, Textur ≈ 0,12).
+- **Budget und Abbruch (2026-11-15):** Opus 5.5 denkt immer mit, das Denken
+  zählt gegen `max_tokens`. Erste echte Folge mit Tagesregie: 12.000 + 8.000
+  Token reichten nicht, das Skript brach bei Zeile 84 mitten im Satz ab, und
+  die Route lieferte es trotzdem aus. Jetzt: beim Streaming mindestens 64.000
+  Token (`scriptRequestBudget`, bezahlt wird nur Erzeugtes); eine
+  abgeschnittene Antwort geht wie eine Verweigerung an das Rückfallmodell
+  (Opus 5, Denken aus, `shouldRetryWithFallback`); bleibt sie abgeschnitten,
+  antwortet die Route mit 500 statt mit einem halben Skript. Der
+  Texturdurchgang verwirft abgeschnittene oder verweigerte Fassungen.
+- **Episoden-Gedächtnis:** Die RPC `match_podcast_memory` liefert
+  `running_gags_called_back` nicht; `buildMemoryBrief` warf deshalb bei jeder
+  Erzeugung („Memory retrieval failed“), die Folgen liefen ohne Gedächtnis.
+  `normalizeMemoryRow` (`lib/podcast/memory.ts`) füllt fehlende Listen seit
+  2026-11-15.
 - Fünf-Folgen-Test 10.–14.11. (Stil ≈ 6,3, Vielfalt, gefundene Fehler):
   Nachtrag in `docs/podcast/tonality/v2-style-report.md`.
 - `extractTextFromTiptap` liegt in `lib/podcast/tiptap-text.ts` und behält
