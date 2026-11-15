@@ -41,14 +41,25 @@ export function describeEmptyScript(message: MessageLike, maxTokens: number): st
 const THINKING_HEADROOM_TOKENS = 8000
 
 /**
+ * Untergrenze des Budgets für Modelle, die ihr Denken nicht abschalten können.
+ * Beide Aufrufer (Skript und Texturdurchgang) streamen, ein großes max_tokens
+ * kostet also kein HTTP-Timeout; es ist nur eine Decke, bezahlt wird, was das
+ * Modell tatsächlich erzeugt. Befund 2026-11-15: Mit 12.000 + 8.000 Token
+ * verbrauchte Opus 5.5 das ganze Budget für Denken und Text, das Skript brach
+ * bei Zeile 84 mitten im Satz ab (der Prompt ist mit Tagesregie und
+ * Fingerabdruck länger geworden, das Modell denkt entsprechend mehr).
+ */
+const STREAMED_MAX_TOKENS = 64_000
+
+/**
  * Aufruf-Parameter je Modell: Denken aus, wo es geht (die Skript-Aufgabe ist
- * Schreiben, kein Reasoning); sonst Spielraum, damit nach dem Denken noch
- * Text herauskommt.
+ * Schreiben, kein Reasoning); sonst reichlich Spielraum, damit nach dem
+ * Denken der ganze Text herauskommt.
  */
 export function scriptRequestBudget(model: string, maxTokens: number): { max_tokens: number; thinking?: { type: 'disabled' } } {
   const caps = getModelCapabilities(model)
   if (caps.supportsDisabledThinking) return { max_tokens: maxTokens, thinking: { type: 'disabled' } }
-  return { max_tokens: maxTokens + THINKING_HEADROOM_TOKENS }
+  return { max_tokens: Math.max(maxTokens + THINKING_HEADROOM_TOKENS, STREAMED_MAX_TOKENS) }
 }
 
 /** Rückfallmodell mit abschaltbarem Denken; null, wenn das Hauptmodell das schon kann. */
@@ -56,8 +67,16 @@ export function fallbackModelFor(model: string): string | null {
   return getModelCapabilities(model).supportsDisabledThinking ? null : 'claude-opus-5'
 }
 
-/** Verweigerung oder nur gedacht bis zum Budget — ein zweiter Versuch ohne Denken lohnt. */
+/** Abgeschnitten: Das Budget war voll, bevor das Modell fertig war, auch wenn schon Text da ist. */
+export function isTruncated(message: Pick<MessageLike, 'stop_reason'>): boolean {
+  return message.stop_reason === 'max_tokens'
+}
+
+/**
+ * Verweigert oder abgeschnitten: Ein zweiter Versuch mit dem Rückfallmodell
+ * (Denken aus) lohnt. Bis 2026-11-15 galt das nur, wenn gar kein Text kam;
+ * ein halbes Skript ging dann als fertiges durch.
+ */
 export function shouldRetryWithFallback(message: Pick<MessageLike, 'stop_reason' | 'content'>): boolean {
-  if (message.stop_reason === 'refusal') return true
-  return message.stop_reason === 'max_tokens' && !message.content.some((b) => b.type === 'text')
+  return message.stop_reason === 'refusal' || isTruncated(message)
 }

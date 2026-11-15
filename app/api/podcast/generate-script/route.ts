@@ -48,7 +48,7 @@ import { synthszrIssueNumber } from '@/lib/i18n/config'
 import Anthropic from '@anthropic-ai/sdk'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { withUsageLogging } from '@/lib/ai/usage-log'
-import { describeEmptyScript, extractScriptText, fallbackModelFor, scriptRequestBudget, shouldRetryWithFallback } from '@/lib/podcast/script-diagnostics'
+import { describeEmptyScript, extractScriptText, fallbackModelFor, isTruncated, scriptRequestBudget, shouldRetryWithFallback } from '@/lib/podcast/script-diagnostics'
 
 // TTS language mapping for podcast generation
 const LOCALE_TO_TTS_LANG: Record<string, 'de' | 'en'> = {
@@ -309,7 +309,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Podcast Script] Generating ${durationMinutes}min script for post ${body.postId} in ${locale} (episode #${personalityState.episode_count + 1}, phase: ${personalityState.relationship_phase}, flirt: ${personalityState.flirtation_tendency.toFixed(2)}, comfort: ${personalityState.mutual_comfort.toFixed(2)})`)
 
-    console.log(`[Podcast Script] Target: ${wordCount} words, max_tokens: ${maxTokens}, model: ${podcastModel}`)
+    console.log(`[Podcast Script] Target: ${wordCount} words, max_tokens: ${scriptRequestBudget(podcastModel, maxTokens).max_tokens}, model: ${podcastModel}`)
 
     const systemPrompt = memoryBrief
       ? `${personalityBrief}\n\n${memoryBrief}`
@@ -327,31 +327,40 @@ export async function POST(request: NextRequest) {
     }
 
     let message = await callModel(podcastModel)
+    let usedModel = podcastModel
+    const budgetOf = (model: string) => scriptRequestBudget(model, maxTokens).max_tokens
 
     // Befund 2026-10-29: Opus 5.5 bricht bei dieser Aufgabe immer wieder mit
     // stop_reason refusal ab (Klassifizierer greift während des Denkens) oder
     // verbraucht das Budget mit Denken. Ein Versuch mit Opus 5 und
     // abgeschaltetem Denken liefert das Skript; das Hauptmodell bleibt wählbar.
-    if (!extractScriptText(message).trim() && shouldRetryWithFallback(message)) {
+    // Seit 2026-11-15 auch bei einer abgeschnittenen Antwort MIT Text: Vorher
+    // ging ein halbes Skript (Abbruch bei Zeile 84) als fertiges durch.
+    if (shouldRetryWithFallback(message)) {
       const fallback = fallbackModelFor(podcastModel)
       if (fallback) {
-        console.warn(`[Podcast Script] ${podcastModel}: ${describeEmptyScript(message, maxTokens)} — zweiter Versuch mit ${fallback}`)
+        console.warn(`[Podcast Script] ${podcastModel}: stop_reason ${message.stop_reason}, ${message.usage?.output_tokens ?? '?'}/${budgetOf(podcastModel)} Token — zweiter Versuch mit ${fallback}`)
         message = await callModel(fallback)
+        usedModel = fallback
       }
     }
 
     // Extract text from response
     const scriptContent = extractScriptText(message)
 
-    if (message.stop_reason === 'max_tokens') {
-      console.warn(`[Podcast Script] WARNING: Script truncated at max_tokens (${maxTokens}). Output used ${message.usage?.output_tokens} tokens.`)
+    if (isTruncated(message)) {
+      // Ein abgeschnittenes Skript wird nie ausgeliefert: Die Audio-Erzeugung
+      // machte daraus eine Folge, die mitten im Satz endet.
+      const reason = `Skript abgeschnitten: ${usedModel} hat das Token-Budget (${message.usage?.output_tokens ?? '?'}/${budgetOf(usedModel)}) erreicht, bevor das Skript fertig war. Bitte erneut generieren.`
+      console.error(`[Podcast Script] ${reason}`)
+      return NextResponse.json({ error: reason }, { status: 500 })
     }
 
     if (!scriptContent.trim()) {
       // Befund 2026-10-29: ohne stop_reason und Blocktypen ist eine leere
       // Antwort nicht von einer Verweigerung oder einem verbrauchten
       // Denkbudget zu unterscheiden.
-      const reason = describeEmptyScript(message, maxTokens)
+      const reason = describeEmptyScript(message, budgetOf(usedModel))
       console.error(`[Podcast Script] ${reason}`)
       return NextResponse.json({ error: reason }, { status: 500 })
     }
