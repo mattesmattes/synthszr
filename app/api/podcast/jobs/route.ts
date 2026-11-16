@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/auth/session'
 import { parseScriptText, type PodcastLine } from '@/lib/tts/elevenlabs-tts'
-import { isGeminiTTSModel, isGeminiVoice } from '@/lib/tts/gemini-voices'
+import { isGeminiTTSModel, isGeminiVoiceId } from '@/lib/tts/gemini-voices'
 
 interface CreateJobRequest {
   script: string | PodcastLine[]
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       if (!isGeminiTTSModel(body.model)) {
         return NextResponse.json({ error: 'Unbekanntes Gemini-TTS-Modell' }, { status: 400 })
       }
-      if (!isGeminiVoice(body.hostVoiceId) || !isGeminiVoice(body.guestVoiceId)) {
+      if (!isGeminiVoiceId(body.hostVoiceId) || !isGeminiVoiceId(body.guestVoiceId)) {
         return NextResponse.json({ error: 'Unbekannte Gemini-Stimme' }, { status: 400 })
       }
     }

@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { getTTSSettings, generatePreviewAudio, TTSVoice, TTSModel } from '@/lib/tts/openai-tts'
 import { DIALOGUE_STYLE_RULES_EN } from '@/lib/podcast/dialogue-style'
-import { isGeminiTTSModel, isGeminiVoice } from '@/lib/tts/gemini-voices'
+import { isGeminiTTSModel, isGeminiVoiceId } from '@/lib/tts/gemini-voices'
 
 /**
  * GET /api/admin/tts-settings
@@ -185,7 +185,7 @@ export async function PUT(request: NextRequest) {
     for (const key of GEMINI_VOICE_KEYS) {
       const value = body[key]
       if (value === undefined) continue
-      if (!isGeminiVoice(value)) {
+      if (!isGeminiVoiceId(value)) {
         return NextResponse.json({ error: `Invalid voice for ${key}` }, { status: 400 })
       }
       updates.push({ key, value })

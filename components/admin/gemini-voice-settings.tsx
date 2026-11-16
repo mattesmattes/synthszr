@@ -11,18 +11,20 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import {
+  GEMINI_LIBRARY_LANGUAGE,
   GEMINI_PREVIEW_TEXT,
   GEMINI_TTS_MODELS,
   GEMINI_TTS_PRICE_HINT,
-  GEMINI_TTS_VOICES,
+  geminiVoiceGroups,
+  type GeminiLibraryVoice,
   type GeminiTTSModel,
   type PodcastTTSLang,
 } from '@/lib/tts/gemini-voices'
 import { GEMINI_MODEL_LABELS } from '@/lib/tts/podcast-voices'
-import { requestLineAudio } from '@/lib/tts/voice-lab-client'
+import { loadLibraryVoices, requestLineAudio } from '@/lib/tts/voice-lab-client'
 
 export interface GeminiCast {
   model: GeminiTTSModel
@@ -39,15 +41,57 @@ const SPEAKERS = [
   { id: 'guest' as const, name: 'Synthesizer (GUEST)' },
 ]
 
-export function GeminiVoiceSelect({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+/** Stimmen der erweiterten Bibliothek (de-DE), einmal je Sitzung geladen. */
+export function useGeminiLibraryVoices(languageCode: string = GEMINI_LIBRARY_LANGUAGE) {
+  const [state, setState] = useState<{ voices: GeminiLibraryVoice[]; error: string | null; loading: boolean }>({ voices: [], error: null, loading: true })
+  useEffect(() => {
+    let cancelled = false
+    loadLibraryVoices(languageCode).then((r) => {
+      if (!cancelled) setState({ voices: r.voices, error: r.error ?? null, loading: false })
+    })
+    return () => { cancelled = true }
+  }, [languageCode])
+  return state
+}
+
+/** Kurzzeile zum Stand der Bibliothek, damit ein Fehler sofort sichtbar ist. */
+export function libraryStatusText(state: { voices: GeminiLibraryVoice[]; error: string | null; loading: boolean }): string {
+  if (state.loading) return `Stimmbibliothek ${GEMINI_LIBRARY_LANGUAGE} wird geladen …`
+  if (state.error) return `Stimmbibliothek ${GEMINI_LIBRARY_LANGUAGE} nicht erreichbar: ${state.error}`
+  const female = state.voices.filter((v) => v.gender === 'female').length
+  const male = state.voices.filter((v) => v.gender === 'male').length
+  return state.voices.length === 0
+    ? `Stimmbibliothek ${GEMINI_LIBRARY_LANGUAGE}: keine Stimmen gefunden`
+    : `Stimmbibliothek ${GEMINI_LIBRARY_LANGUAGE}: ${state.voices.length} Stimmen (${female} weiblich, ${male} männlich)`
+}
+
+export function GeminiVoiceSelect({
+  value,
+  onChange,
+  label,
+  library = [],
+  triggerClassName,
+}: {
+  value: string
+  onChange: (v: string) => void
+  label: string
+  library?: GeminiLibraryVoice[]
+  triggerClassName?: string
+}) {
+  const groups = geminiVoiceGroups(library, [value])
   return (
     <div className="space-y-1">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger aria-label={label}><SelectValue /></SelectTrigger>
+        <SelectTrigger aria-label={label} className={triggerClassName}><SelectValue /></SelectTrigger>
         <SelectContent>
-          {GEMINI_TTS_VOICES.map((v) => (
-            <SelectItem key={v.id} value={v.id}>{v.id} – {v.label}</SelectItem>
+          {groups.map((g) => (
+            <SelectGroup key={g.label}>
+              <SelectLabel>{g.label}</SelectLabel>
+              {g.options.map((o) => (
+                <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>
+              ))}
+            </SelectGroup>
           ))}
         </SelectContent>
       </Select>
@@ -63,6 +107,7 @@ interface Props {
 }
 
 export function GeminiVoiceSettings({ value, onChange, active }: Props) {
+  const library = useGeminiLibraryVoices()
   const [sampleLang, setSampleLang] = useState<PodcastTTSLang>('en')
   const [sampleSpeaker, setSampleSpeaker] = useState<'host' | 'guest'>('host')
   const [sampleStyle, setSampleStyle] = useState('')
@@ -72,7 +117,9 @@ export function GeminiVoiceSettings({ value, onChange, active }: Props) {
   const [sampleError, setSampleError] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // Probetext folgt Sprache und Sprecher, solange er nicht von Hand geändert ist.
+  // Probetext folgt Sprache und Sprecher, solange er nicht von Hand geändert
+  // ist; ein Sprachwechsel lädt immer den Probetext der neuen Sprache
+  // (Betreiber 2026-11-16: deutsche Tests mit deutschem Text).
   const [textEdited, setTextEdited] = useState(false)
   useEffect(() => {
     if (!textEdited) setSampleText(GEMINI_PREVIEW_TEXT[sampleLang][sampleSpeaker])
@@ -134,16 +181,19 @@ export function GeminiVoiceSettings({ value, onChange, active }: Props) {
                 label={`${s.name}, ${lang.name}`}
                 value={value.voices[lang.id][s.id]}
                 onChange={(v) => setVoice(lang.id, s.id, v)}
+                library={library.voices}
               />
             ))}
           </div>
         ))}
       </div>
 
+      <p className={library.error ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>{libraryStatusText(library)}</p>
+
       <div className="space-y-3 rounded-md border p-3">
         <p className="text-sm font-medium">Stimmprobe</p>
         <div className="grid gap-3 sm:grid-cols-3">
-          <Select value={sampleLang} onValueChange={(v) => setSampleLang(v as PodcastTTSLang)}>
+          <Select value={sampleLang} onValueChange={(v) => { setSampleLang(v as PodcastTTSLang); setTextEdited(false) }}>
             <SelectTrigger aria-label="Sprache der Probe"><SelectValue /></SelectTrigger>
             <SelectContent>
               {LANGS.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}

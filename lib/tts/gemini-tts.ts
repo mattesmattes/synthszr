@@ -11,9 +11,11 @@
  */
 
 import { ensureWav, wavDurationSeconds } from '@/lib/audio/wav'
+import type { GeminiLibraryVoice, VoiceGender } from '@/lib/tts/gemini-voices'
 import { SUSPECT_SHORT_AUDIO_MARKER, withRetry } from '@/lib/tts/retry'
 
 export const GEMINI_INTERACTIONS_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions'
+export const GEMINI_VOICES_URL = 'https://generativelanguage.googleapis.com/v1beta/voices'
 
 /** Ein Turn von 200 Wörtern braucht deutlich länger als eine OpenAI-Zeile. */
 const GEMINI_TIMEOUT_MS = 90_000
@@ -166,4 +168,98 @@ export async function requestGeminiSpeech(opts: GeminiSpeechOptions): Promise<Bu
 export async function generateSpeechGemini(opts: GeminiSpeechOptions): Promise<Buffer> {
   console.log(`[TTS-Gemini] model=${opts.model}, voice=${opts.voice}, len=${opts.text.length}${opts.style ? `, style="${opts.style}"` : ', style=none'}`)
   return withRetry(() => requestGeminiSpeech(opts), `Gemini TTS (${opts.voice})`)
+}
+
+// ---------------------------------------------------------------------------
+// Erweiterte Stimmbibliothek (GET /v1beta/voices)
+// ---------------------------------------------------------------------------
+
+const VOICES_PAGE_SIZE = 200
+const VOICES_MAX_PAGES = 5
+const VOICES_TIMEOUT_MS = 20_000
+
+function str(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function genderOf(value: unknown): VoiceGender | null {
+  const g = str(value)?.toLowerCase()
+  if (!g) return null
+  if (g.includes('female') || g === 'f') return 'female'
+  if (g.includes('male') || g === 'm') return 'male'
+  if (g.includes('neutral')) return 'neutral'
+  return null
+}
+
+/**
+ * Ein Eintrag der Antwort, normalisiert. Die Doku zeigt keine Beispiel-
+ * Antwort, nur die Felder des Python-SDK (id, display_name, language_code,
+ * accent, gender, pitch, description); REST kann sie auch in camelCase
+ * liefern, und language_code kann eine Liste sein.
+ */
+export function normalizeLibraryVoice(raw: unknown): GeminiLibraryVoice | null {
+  const rec = asRecord(raw)
+  if (!rec) return null
+  const id = str(rec.id) ?? str(rec.name) ?? str(rec.voice_id) ?? str(rec.voiceId)
+  if (!id) return null
+  const langs = rec.language_code ?? rec.languageCode ?? rec.language_codes ?? rec.languageCodes
+  const languageCodes = (Array.isArray(langs) ? langs : [langs]).map(str).filter((l): l is string => !!l)
+  return {
+    id,
+    name: str(rec.display_name) ?? str(rec.displayName) ?? id,
+    gender: genderOf(rec.gender),
+    languageCodes,
+    accent: str(rec.accent),
+    description: str(rec.description),
+  }
+}
+
+export interface ListVoicesOptions {
+  languageCode: string
+  fetchImpl?: typeof fetch
+  apiKey?: string
+}
+
+/** Alle Stimmen einer Sprache aus der Bibliothek (seitenweise, höchstens fünf Seiten à 200). */
+export async function listGeminiVoices({ languageCode, fetchImpl, apiKey }: ListVoicesOptions): Promise<GeminiLibraryVoice[]> {
+  const key = apiKey ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  if (!key) throw new Error('GOOGLE_GENERATIVE_AI_API_KEY not set')
+  const doFetch = fetchImpl ?? fetch
+  const voices: GeminiLibraryVoice[] = []
+  let pageToken: string | null = null
+
+  for (let page = 0; page < VOICES_MAX_PAGES; page++) {
+    const params = new URLSearchParams({ language_code: languageCode, page_size: String(VOICES_PAGE_SIZE) })
+    if (pageToken) params.set('page_token', pageToken)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), VOICES_TIMEOUT_MS)
+    let json: unknown
+    try {
+      const response = await doFetch(`${GEMINI_VOICES_URL}?${params}`, {
+        headers: { 'x-goog-api-key': key },
+        signal: controller.signal,
+      })
+      if (!response.ok) {
+        throw new Error(`Gemini voices API error: ${response.status} - ${errorMessageOf(await response.text())}`)
+      }
+      json = await response.json()
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') throw new Error(`Gemini voices timeout after ${VOICES_TIMEOUT_MS}ms`)
+      throw err
+    } finally {
+      clearTimeout(timeoutId)
+    }
+
+    const root = asRecord(json)
+    const list = Array.isArray(root?.voices) ? root.voices : []
+    for (const raw of list) {
+      const voice = normalizeLibraryVoice(raw)
+      if (voice) voices.push(voice)
+    }
+    pageToken = str(root?.next_page_token) ?? str(root?.nextPageToken)
+    if (!pageToken) break
+  }
+
+  const seen = new Set<string>()
+  return voices.filter((v) => (seen.has(v.id) ? false : (seen.add(v.id), true)))
 }

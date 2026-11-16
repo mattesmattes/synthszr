@@ -14,7 +14,7 @@ import {
   DEFAULT_GEMINI_TTS_MODEL,
   DEFAULT_GEMINI_VOICES,
   isGeminiTTSModel,
-  isGeminiVoice,
+  isGeminiVoiceId,
   type GeminiTTSModel,
   type PodcastTTSProvider,
 } from '@/lib/tts/gemini-voices'
@@ -204,10 +204,10 @@ export async function getTTSSettings(): Promise<TTSSettings> {
     // Anbieter und Gemini-Besetzung; ungültige Werte fallen auf die Defaults
     podcast_tts_provider: settingsMap.podcast_tts_provider === 'gemini' ? 'gemini' : 'openai',
     gemini_tts_model: isGeminiTTSModel(settingsMap.gemini_tts_model) ? settingsMap.gemini_tts_model : DEFAULT_GEMINI_TTS_MODEL,
-    gemini_host_voice_de: isGeminiVoice(settingsMap.gemini_host_voice_de) ? settingsMap.gemini_host_voice_de : DEFAULT_GEMINI_VOICES.de.host,
-    gemini_guest_voice_de: isGeminiVoice(settingsMap.gemini_guest_voice_de) ? settingsMap.gemini_guest_voice_de : DEFAULT_GEMINI_VOICES.de.guest,
-    gemini_host_voice_en: isGeminiVoice(settingsMap.gemini_host_voice_en) ? settingsMap.gemini_host_voice_en : DEFAULT_GEMINI_VOICES.en.host,
-    gemini_guest_voice_en: isGeminiVoice(settingsMap.gemini_guest_voice_en) ? settingsMap.gemini_guest_voice_en : DEFAULT_GEMINI_VOICES.en.guest,
+    gemini_host_voice_de: isGeminiVoiceId(settingsMap.gemini_host_voice_de) ? settingsMap.gemini_host_voice_de : DEFAULT_GEMINI_VOICES.de.host,
+    gemini_guest_voice_de: isGeminiVoiceId(settingsMap.gemini_guest_voice_de) ? settingsMap.gemini_guest_voice_de : DEFAULT_GEMINI_VOICES.de.guest,
+    gemini_host_voice_en: isGeminiVoiceId(settingsMap.gemini_host_voice_en) ? settingsMap.gemini_host_voice_en : DEFAULT_GEMINI_VOICES.en.host,
+    gemini_guest_voice_en: isGeminiVoiceId(settingsMap.gemini_guest_voice_en) ? settingsMap.gemini_guest_voice_en : DEFAULT_GEMINI_VOICES.en.guest,
     // Mixing settings (stored as JSON string)
     mixing_settings: settingsMap.mixing_settings
       ? (typeof settingsMap.mixing_settings === 'string'
