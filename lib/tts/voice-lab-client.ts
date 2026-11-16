@@ -3,6 +3,7 @@
  * POST /api/admin/podcast-voice-lab vertonen und als abspielbare URL liefern.
  */
 
+import type { GeminiLibraryVoice } from '@/lib/tts/gemini-voices'
 import type { LineDelivery, TTSProviderId } from '@/lib/tts/line-delivery'
 
 export interface LineAudioRequest {
@@ -47,4 +48,29 @@ export async function requestLineAudio(req: LineAudioRequest, signal?: AbortSign
     ms: Number(data.ms) || 0,
     delivery: data.delivery as LineDelivery,
   }
+}
+
+export interface LibraryVoicesResult {
+  voices: GeminiLibraryVoice[]
+  error?: string
+}
+
+const libraryCache = new Map<string, Promise<LibraryVoicesResult>>()
+
+/** Stimmen der erweiterten Gemini-Bibliothek einer Sprache, einmal je Sitzung geladen. */
+export function loadLibraryVoices(languageCode: string): Promise<LibraryVoicesResult> {
+  let pending = libraryCache.get(languageCode)
+  if (!pending) {
+    pending = fetch(`/api/admin/podcast-voice-lab?voices=${encodeURIComponent(languageCode)}`, { credentials: 'include' })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) return { voices: [], error: typeof data.error === 'string' ? data.error : `Fehler ${res.status}` }
+        return { voices: Array.isArray(data.voices) ? data.voices : [], ...(typeof data.error === 'string' ? { error: data.error } : {}) }
+      })
+      .catch((err: unknown) => ({ voices: [], error: err instanceof Error ? err.message : String(err) }))
+    libraryCache.set(languageCode, pending)
+    // Fehlschläge nicht festhalten: der nächste Aufruf versucht es neu.
+    void pending.then((r) => { if (r.error) libraryCache.delete(languageCode) })
+  }
+  return pending
 }

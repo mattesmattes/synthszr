@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { parseScriptText } from '@/lib/tts/elevenlabs-tts'
-import { isGeminiTTSModel, isGeminiVoice } from '@/lib/tts/gemini-voices'
+import { detectLanguage } from '@/lib/agents/language'
+import { isGeminiTTSModel, isGeminiVoiceId, type GeminiLibraryVoice } from '@/lib/tts/gemini-voices'
+import { listGeminiVoices } from '@/lib/tts/gemini-tts'
 import { renderLine } from '@/lib/tts/render-line'
 import { isSpeakable, prepareLineForTTS, type TTSProviderId } from '@/lib/tts/line-delivery'
 
@@ -11,6 +13,8 @@ import { isSpeakable, prepareLineForTTS, type TTSProviderId } from '@/lib/tts/li
  *
  * GET                      → die letzten Folgen mit Skript (Titel, Datum, Zeilen)
  * GET ?postId=&locale=     → das Skript dieser Folge
+ * GET ?voices=de-DE        → Stimmen der erweiterten Gemini-Bibliothek für die
+ *                            Sprache (eine Stunde zwischengespeichert)
  * POST {provider, model, voice, text, withDirection}
  *                          → eine Skriptzeile vertonen, genau wie im Audio-Job
  *                            (lib/tts/render-line.ts), Antwort als Base64
@@ -29,6 +33,24 @@ const LIST_LIMIT = 15
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
+const LANGUAGE_CODE_RE = /^[a-z]{2,3}-[A-Z]{2}$/
+const VOICES_CACHE_MS = 60 * 60 * 1000
+const voicesCache = new Map<string, { at: number; voices: GeminiLibraryVoice[] }>()
+
+/** Bibliothek je Sprache; ein Fehler kommt als Text zurück, damit der Stimmtest ihn zeigt. */
+async function libraryVoices(languageCode: string): Promise<{ voices: GeminiLibraryVoice[]; error?: string }> {
+  const cached = voicesCache.get(languageCode)
+  if (cached && Date.now() - cached.at < VOICES_CACHE_MS) return { voices: cached.voices }
+  try {
+    const voices = await listGeminiVoices({ languageCode })
+    voicesCache.set(languageCode, { at: Date.now(), voices })
+    return { voices }
+  } catch (error) {
+    console.error('[Voice Lab] Stimmbibliothek nicht erreichbar:', error)
+    return { voices: [], error: error instanceof Error ? error.message : 'Stimmbibliothek nicht erreichbar' }
+  }
+}
+
 async function loadTitles(supabase: AdminClient, ids: string[]): Promise<Map<string, string>> {
   const titles = new Map<string, string>()
   if (ids.length === 0) return titles
@@ -45,6 +67,14 @@ async function loadTitles(supabase: AdminClient, ids: string[]): Promise<Map<str
 export async function GET(request: NextRequest) {
   const authError = await requireAdmin(request)
   if (authError) return authError
+
+  const voicesFor = request.nextUrl.searchParams.get('voices')
+  if (voicesFor !== null) {
+    if (!LANGUAGE_CODE_RE.test(voicesFor)) {
+      return NextResponse.json({ error: 'Ungültiger Sprachcode' }, { status: 400 })
+    }
+    return NextResponse.json({ languageCode: voicesFor, ...(await libraryVoices(voicesFor)) })
+  }
 
   const supabase = createAdminClient()
   const postId = request.nextUrl.searchParams.get('postId')
@@ -95,6 +125,8 @@ export async function GET(request: NextRequest) {
       createdAt: row.created_at,
       durationSeconds: row.duration_seconds,
       lines: parseScriptText(row.script_content ?? '').length,
+      // Alle Sprachzeilen tragen meist das englische Skript: die Sprache aus dem Text.
+      lang: detectLanguage(parseScriptText(row.script_content ?? '').map((l) => l.text.replace(/\[[^\]]*\]/g, ' ')).join(' ')) ?? (row.locale === 'de' ? 'de' : 'en'),
     })),
   })
 }
@@ -125,7 +157,7 @@ export async function POST(request: NextRequest) {
   if (!modelOk) {
     return NextResponse.json({ error: 'Unbekanntes Modell' }, { status: 400 })
   }
-  const voiceOk = provider === 'gemini' ? isGeminiVoice(body.voice) : OPENAI_VOICES.has(body.voice ?? '')
+  const voiceOk = provider === 'gemini' ? isGeminiVoiceId(body.voice) : OPENAI_VOICES.has(body.voice ?? '')
   if (!voiceOk || !body.voice) {
     return NextResponse.json({ error: 'Unbekannte Stimme' }, { status: 400 })
   }

@@ -22,15 +22,18 @@ import {
   DEFAULT_GEMINI_TTS_MODEL,
   GEMINI_TTS_MODELS,
   GEMINI_TTS_PRICE_HINT,
-  GEMINI_TTS_VOICES,
   isGeminiTTSModel,
+  type GeminiLibraryVoice,
   type GeminiTTSModel,
   type PodcastTTSLang,
   type PodcastTTSProvider,
 } from '@/lib/tts/gemini-voices'
+import { GeminiVoiceSelect, libraryStatusText, useGeminiLibraryVoices } from '@/components/admin/gemini-voice-settings'
 import { describeDelivery, prepareLineForTTS, spokenText } from '@/lib/tts/line-delivery'
 import { GEMINI_MODEL_LABELS, OPENAI_MODEL_LABELS, OPENAI_PODCAST_VOICES, OPENAI_TTS_MODELS } from '@/lib/tts/podcast-voices'
 import { requestLineAudio, type LineAudio } from '@/lib/tts/voice-lab-client'
+import { VOICE_LAB_SAMPLE_SCRIPTS } from '@/lib/tts/voice-lab-samples'
+import { detectLanguage } from '@/lib/agents/language'
 
 /** Höchstens so viele Zeilen je Durchgang (Kosten, Wartezeit). */
 export const MAX_SELECTED_LINES = 12
@@ -57,11 +60,25 @@ export interface VoiceLabSettings {
 interface ScriptMeta {
   postId: string
   locale: string
+  /** Sprache des Skripts (erkannt), nicht die Sprachzeile in post_podcasts. */
+  lang?: PodcastTTSLang
   title: string | null
   createdAt: string
   durationSeconds: number | null
   lines: number
 }
+
+/** Sprache eines Skripts aus dem gesprochenen Text (Stoppwort-Heuristik). */
+export function scriptLangOf(script: string): PodcastTTSLang | null {
+  const spoken = script
+    .split('\n')
+    .filter((l) => /^(HOST|GUEST)/i.test(l.trim()))
+    .map((l) => l.replace(/^(HOST|GUEST)[^:]*:\s*/i, '').replace(/\[[^\]]*\]/g, ' '))
+    .join(' ')
+  return detectLanguage(spoken)
+}
+
+const SAMPLE_SOURCE: Record<PodcastTTSLang, string> = { de: 'sample:de', en: 'sample:en' }
 
 type LineResult = { status: 'pending' } | ({ status: 'done' } & LineAudio) | { status: 'error'; error: string }
 
@@ -129,16 +146,16 @@ function KitEditor({
   onChange,
   presets,
   lang,
+  library,
 }: {
   name: string
   kit: VoiceKit
   onChange: (kit: VoiceKit) => void
   presets: Preset[]
   lang: PodcastTTSLang
+  library: GeminiLibraryVoice[]
 }) {
-  const voices = kit.provider === 'gemini'
-    ? GEMINI_TTS_VOICES.map((v) => ({ id: v.id, label: `${v.id} – ${v.label}` }))
-    : OPENAI_PODCAST_VOICES.map((v) => ({ id: v.id, label: `${v.name} – ${v.description}` }))
+  const voices = OPENAI_PODCAST_VOICES.map((v) => ({ id: v.id, label: `${v.name} – ${v.description}` }))
   const models = kit.provider === 'gemini'
     ? GEMINI_TTS_MODELS.map((m) => ({ id: m as string, label: GEMINI_MODEL_LABELS[m] ?? m }))
     : OPENAI_TTS_MODELS.map((m) => ({ id: m as string, label: OPENAI_MODEL_LABELS[m] }))
@@ -180,24 +197,33 @@ function KitEditor({
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Emma (HOST)</Label>
-          <Select value={kit.host} onValueChange={(host) => onChange({ ...kit, host })}>
-            <SelectTrigger aria-label={`Emma Kit ${name}`}><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {voices.map((v) => <SelectItem key={v.id} value={v.id}>{v.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Synthesizer (GUEST)</Label>
-          <Select value={kit.guest} onValueChange={(guest) => onChange({ ...kit, guest })}>
-            <SelectTrigger aria-label={`Synthesizer Kit ${name}`}><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {voices.map((v) => <SelectItem key={v.id} value={v.id}>{v.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
+        {kit.provider === 'gemini' ? (
+          <>
+            <GeminiVoiceSelect label={`Emma (HOST), Kit ${name}`} value={kit.host} onChange={(host) => onChange({ ...kit, host })} library={library} />
+            <GeminiVoiceSelect label={`Synthesizer (GUEST), Kit ${name}`} value={kit.guest} onChange={(guest) => onChange({ ...kit, guest })} library={library} />
+          </>
+        ) : (
+          <>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Emma (HOST)</Label>
+              <Select value={kit.host} onValueChange={(host) => onChange({ ...kit, host })}>
+                <SelectTrigger aria-label={`Emma Kit ${name}`}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {voices.map((v) => <SelectItem key={v.id} value={v.id}>{v.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Synthesizer (GUEST)</Label>
+              <Select value={kit.guest} onValueChange={(guest) => onChange({ ...kit, guest })}>
+                <SelectTrigger aria-label={`Synthesizer Kit ${name}`}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {voices.map((v) => <SelectItem key={v.id} value={v.id}>{v.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        )}
       </div>
       <p className="text-xs text-muted-foreground">
         {kit.provider === 'gemini'
@@ -219,12 +245,13 @@ interface Props {
 }
 
 export function PodcastVoiceLab({ currentScript, settings, onAdoptGemini }: Props) {
+  const library = useGeminiLibraryVoices()
   const [scripts, setScripts] = useState<ScriptMeta[]>([])
   const [scriptsError, setScriptsError] = useState<string | null>(null)
   const [source, setSource] = useState<string>(currentScript.trim() ? 'current' : '')
   const [scriptText, setScriptText] = useState(currentScript)
   const [scriptLoading, setScriptLoading] = useState(false)
-  const [lang, setLang] = useState<PodcastTTSLang>('en')
+  const [lang, setLang] = useState<PodcastTTSLang>(() => (currentScript.trim() ? scriptLangOf(currentScript) ?? 'en' : 'en'))
   const [selected, setSelected] = useState<number[]>(() => range(0, DEFAULT_SELECTION, Number.MAX_SAFE_INTEGER))
   const [withDirection, setWithDirection] = useState(true)
   const presets = useMemo(() => buildPresets(settings, lang), [settings, lang])
@@ -277,6 +304,15 @@ export function PodcastVoiceLab({ currentScript, settings, onAdoptGemini }: Prop
   useEffect(() => {
     if (source === 'current') {
       setScriptText(currentScript)
+      const detected = scriptLangOf(currentScript)
+      if (detected) setLang(detected)
+      return
+    }
+    if (source === SAMPLE_SOURCE.de || source === SAMPLE_SOURCE.en) {
+      const sampleLang: PodcastTTSLang = source === SAMPLE_SOURCE.de ? 'de' : 'en'
+      setScriptText(VOICE_LAB_SAMPLE_SCRIPTS[sampleLang])
+      setLang(sampleLang)
+      setSelected(range(0, DEFAULT_SELECTION, Number.MAX_SAFE_INTEGER))
       return
     }
     if (!source) return
@@ -289,13 +325,26 @@ export function PodcastVoiceLab({ currentScript, settings, onAdoptGemini }: Prop
         if (cancelled) return
         if (!ok) throw new Error(data.error || 'Skript konnte nicht geladen werden')
         setScriptText(data.script)
-        setLang(locale === 'de' ? 'de' : 'en')
+        setLang(scriptLangOf(data.script) ?? (locale === 'de' ? 'de' : 'en'))
         setSelected(range(0, DEFAULT_SELECTION, Number.MAX_SAFE_INTEGER))
       })
       .catch((err) => { if (!cancelled) setScriptsError(err instanceof Error ? err.message : String(err)) })
       .finally(() => { if (!cancelled) setScriptLoading(false) })
     return () => { cancelled = true }
   }, [source, currentScript])
+
+  // Sprache des Tests: Deutsch braucht deutschen Text. Ist das Skript nicht
+  // deutsch, kommt das deutsche Beispielskript; zurück auf Englisch die
+  // jüngste Folge (alle Folgen sind englisch) oder das englische Beispiel.
+  const scriptLang = useMemo(() => scriptLangOf(scriptText), [scriptText])
+  function changeLang(next: PodcastTTSLang) {
+    setLang(next)
+    if (next === 'de' && scriptLang !== 'de') setSource(SAMPLE_SOURCE.de)
+    if (next === 'en' && scriptLang === 'de') {
+      const episode = scripts.find((s) => s.lang !== 'de')
+      setSource(episode ? `${episode.postId}:${episode.locale}` : SAMPLE_SOURCE.en)
+    }
+  }
 
   // Objekt-URLs beim Verlassen freigeben.
   useEffect(() => () => {
@@ -409,19 +458,21 @@ export function PodcastVoiceLab({ currentScript, settings, onAdoptGemini }: Prop
             <Select value={source} onValueChange={setSource}>
               <SelectTrigger aria-label="Skript"><SelectValue placeholder={scripts.length ? 'Folge wählen' : 'Lade Folgen …'} /></SelectTrigger>
               <SelectContent>
+                <SelectItem value={SAMPLE_SOURCE.de}>Beispielskript Deutsch ({parseScriptText(VOICE_LAB_SAMPLE_SCRIPTS.de).length} Zeilen)</SelectItem>
+                <SelectItem value={SAMPLE_SOURCE.en}>Beispielskript Englisch ({parseScriptText(VOICE_LAB_SAMPLE_SCRIPTS.en).length} Zeilen)</SelectItem>
                 {currentScript.trim() && <SelectItem value="current">Aktuelles Skript aus dem Episode-Tab</SelectItem>}
                 {scripts.map((s) => (
                   <SelectItem key={`${s.postId}:${s.locale}`} value={`${s.postId}:${s.locale}`}>
-                    {formatDate(s.createdAt)} · {s.title ?? 'ohne Titel'} ({s.lines} Zeilen)
+                    {formatDate(s.createdAt)} · {s.title ?? 'ohne Titel'} ({s.lines} Zeilen, {s.lang === 'de' ? 'deutsch' : 'englisch'})
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Sprache der Besetzung</Label>
-            <Select value={lang} onValueChange={(v) => setLang(v as PodcastTTSLang)}>
-              <SelectTrigger className="w-36" aria-label="Sprache der Besetzung"><SelectValue /></SelectTrigger>
+            <Label className="text-xs text-muted-foreground">Sprache des Tests</Label>
+            <Select value={lang} onValueChange={(v) => changeLang(v as PodcastTTSLang)}>
+              <SelectTrigger className="w-36" aria-label="Sprache des Tests"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="en">Englisch</SelectItem>
                 <SelectItem value="de">Deutsch</SelectItem>
@@ -434,12 +485,18 @@ export function PodcastVoiceLab({ currentScript, settings, onAdoptGemini }: Prop
           </div>
         </div>
         {scriptsError && <p className="text-sm text-destructive">{scriptsError}</p>}
+        {lang === 'de' && scriptLang === 'en' && (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-yellow-500/30 bg-yellow-500/10 p-2 text-sm">
+            <span>Das gewählte Skript ist englisch. Für einen deutschen Test braucht es deutschen Text.</span>
+            <Button size="sm" variant="outline" onClick={() => setSource(SAMPLE_SOURCE.de)}>Deutsches Beispielskript laden</Button>
+          </div>
+        )}
 
         {/* Kits */}
         <div className="grid gap-4 md:grid-cols-2">
           {kits.map(({ id, kit, set }) => (
             <div key={id} className="space-y-2">
-              <KitEditor name={id} kit={kit} onChange={set} presets={presets} lang={lang} />
+              <KitEditor name={id} kit={kit} onChange={set} presets={presets} lang={lang} library={library.voices} />
               <div className="flex flex-wrap items-center gap-2">
                 <Button size="sm" onClick={() => renderKit(id)} disabled={busy[id] || selectedLines.length === 0}>
                   {busy[id] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
@@ -464,6 +521,10 @@ export function PodcastVoiceLab({ currentScript, settings, onAdoptGemini }: Prop
             </div>
           ))}
         </div>
+        <p className={library.error ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
+          {libraryStatusText(library)}. Bibliotheksstimmen sprechen muttersprachlich Deutsch; Google dokumentiert nicht, wie sie im
+          Aufruf stehen. Die erste vertonte Zeile zeigt, ob es klappt; ein Fehler steht dann in der Zeile.
+        </p>
         {adoptState && adoptState !== 'saving' && <p className="text-sm text-muted-foreground">{adoptState}</p>}
         {playing && (
           <Button size="sm" variant="outline" onClick={stop}>

@@ -8,7 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createElement as h } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
-import { PodcastVoiceLab, buildPresets, longestLines, resultKey, type VoiceLabSettings } from '@/components/admin/podcast-voice-lab'
+import { PodcastVoiceLab, buildPresets, longestLines, resultKey, scriptLangOf, type VoiceLabSettings } from '@/components/admin/podcast-voice-lab'
+import { VOICE_LAB_SAMPLE_SCRIPTS } from '@/lib/tts/voice-lab-samples'
 import { DEFAULT_GEMINI_VOICES } from '@/lib/tts/gemini-voices'
 import { parseScriptText } from '@/lib/tts/elevenlabs-tts'
 
@@ -51,8 +52,16 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
-async function render() {
+const LIBRARY = [
+  { id: 'de-DE-Lena', display_name: 'Lena', gender: 'female', language_code: 'de-DE', accent: 'Hochdeutsch', description: 'warm, ruhig' },
+  { id: 'de-DE-Jonas', display_name: 'Jonas', gender: 'male', language_code: 'de-DE' },
+]
+
+async function render(currentScript = SCRIPT) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input).includes('voices=')) {
+      return json({ languageCode: 'de-DE', voices: LIBRARY.map((v) => ({ id: v.id, name: v.display_name, gender: v.gender, languageCodes: [v.language_code], accent: v.accent ?? null, description: v.description ?? null })) })
+    }
     if (init?.method === 'POST') {
       const body = JSON.parse(String(init.body))
       return json({
@@ -70,7 +79,7 @@ async function render() {
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
-  await act(async () => { root!.render(h(PodcastVoiceLab, { currentScript: SCRIPT, settings })) })
+  await act(async () => { root!.render(h(PodcastVoiceLab, { currentScript, settings })) })
   await act(async () => { await Promise.resolve() })
   return fetchMock
 }
@@ -78,7 +87,9 @@ async function render() {
 describe('PodcastVoiceLab', () => {
   it('zeigt die Zeilen des aktuellen Skripts mit Sprecher und Anweisung, die ersten sechs gewählt', async () => {
     const fetchMock = await render()
-    expect(String(fetchMock.mock.calls[0][0])).toBe('/api/admin/podcast-voice-lab')
+    const urls = fetchMock.mock.calls.map(([u]) => String(u))
+    expect(urls).toContain('/api/admin/podcast-voice-lab')
+    expect(urls).toContain('/api/admin/podcast-voice-lab?voices=de-DE')
     const text = container!.textContent ?? ''
     expect(text).toContain('Stimmtest')
     expect(text).toContain('[indignant, speaking fast]')
@@ -110,7 +121,33 @@ describe('PodcastVoiceLab', () => {
   })
 })
 
+describe('Deutsch im Stimmtest', () => {
+  it('zeigt die geladene Stimmbibliothek de-DE mit Geschlechtern an', async () => {
+    await render()
+    expect(container!.textContent).toContain('Stimmbibliothek de-DE: 2 Stimmen (1 weiblich, 1 männlich)')
+  })
+
+  it('erkennt ein deutsches Skript und stellt den Test auf Deutsch', async () => {
+    await render(VOICE_LAB_SAMPLE_SCRIPTS.de)
+    const langTrigger = container!.querySelector('button[aria-label="Sprache des Tests"]')
+    expect(langTrigger?.textContent).toContain('Deutsch')
+    expect(container!.textContent).toContain('Nvidia leiht genau den Firmen Geld')
+    expect(container!.textContent).not.toContain('Das gewählte Skript ist englisch')
+  })
+})
+
 describe('Hilfsfunktionen', () => {
+  it('Beispielskripte: gleicher Aufbau, Sprache wird erkannt', () => {
+    const de = parseScriptText(VOICE_LAB_SAMPLE_SCRIPTS.de)
+    const en = parseScriptText(VOICE_LAB_SAMPLE_SCRIPTS.en)
+    expect(de).toHaveLength(12)
+    expect(de.map((l) => l.speaker)).toEqual(en.map((l) => l.speaker))
+    expect(de.map((l) => !!l.overlapping)).toEqual(en.map((l) => !!l.overlapping))
+    expect(scriptLangOf(VOICE_LAB_SAMPLE_SCRIPTS.de)).toBe('de')
+    expect(scriptLangOf(VOICE_LAB_SAMPLE_SCRIPTS.en)).toBe('en')
+    expect(scriptLangOf(SCRIPT)).toBe('en')
+  })
+
   it('Vorlagen: Live-Besetzung zuerst, Gemini mit der Besetzung der Sprache', () => {
     const presets = buildPresets({ ...settings, geminiVoices: { de: { host: 'Puck', guest: 'Algenib' }, en: DEFAULT_GEMINI_VOICES.en } }, 'de')
     expect(presets[0]).toMatchObject({ id: 'live', kit: { provider: 'openai', model: 'tts-1-hd', host: 'shimmer', guest: 'fable' } })

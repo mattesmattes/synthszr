@@ -9,6 +9,9 @@ import {
   extractGeminiAudio,
   generateSpeechGemini,
   GEMINI_INTERACTIONS_URL,
+  GEMINI_VOICES_URL,
+  listGeminiVoices,
+  normalizeLibraryVoice,
   rateLimitWaitMs,
   requestGeminiSpeech,
 } from '@/lib/tts/gemini-tts'
@@ -137,5 +140,52 @@ describe('WAV-Helfer', () => {
   it('misst WAV aus dem Kopf und MP3 mit der 128-kbps-Annahme des Mischers', () => {
     expect(estimateAudioDurationSec(pcm16ToWav(Buffer.alloc(96000)))).toBeCloseTo(2, 5)
     expect(estimateAudioDurationSec(Buffer.alloc(16384))).toBeCloseTo(1, 5)
+  })
+})
+
+describe('listGeminiVoices (erweiterte Stimmbibliothek)', () => {
+  it('fragt GET /v1beta/voices mit language_code, liest snake_case und camelCase und blättert mit page_token', async () => {
+    const fetchImpl = vi
+      .fn(async (_url: RequestInfo | URL, _init?: RequestInit) => jsonResponse({}))
+      .mockResolvedValueOnce(jsonResponse({
+        voices: [
+          { id: 'de-DE-Lena', display_name: 'Lena', gender: 'FEMALE', language_code: 'de-DE', accent: 'Hochdeutsch', description: 'warm' },
+          { id: 'Kore', display_name: 'Kore', gender: 'female', language_code: ['de-DE', 'en-US'] },
+        ],
+        next_page_token: 'p2',
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        voices: [
+          { id: 'de-DE-Jonas', displayName: 'Jonas', gender: 'male', languageCode: 'de-DE' },
+          { id: 'de-DE-Lena', display_name: 'Lena' },
+          { display_name: 'ohne ID' },
+        ],
+      }))
+    const voices = await listGeminiVoices({ languageCode: 'de-DE', apiKey: 'k', fetchImpl })
+    expect(voices.map((v) => [v.id, v.name, v.gender])).toEqual([
+      ['de-DE-Lena', 'Lena', 'female'],
+      ['Kore', 'Kore', 'female'],
+      ['de-DE-Jonas', 'Jonas', 'male'],
+    ])
+    expect(voices[1].languageCodes).toEqual(['de-DE', 'en-US'])
+    const first = new URL(String(fetchImpl.mock.calls[0][0]))
+    expect(first.origin + first.pathname).toBe(GEMINI_VOICES_URL)
+    expect(first.searchParams.get('language_code')).toBe('de-DE')
+    expect(new URL(String(fetchImpl.mock.calls[1][0])).searchParams.get('page_token')).toBe('p2')
+    expect((fetchImpl.mock.calls[0][1]?.headers as Record<string, string>)['x-goog-api-key']).toBe('k')
+  })
+
+  it('meldet Fehler mit Status, damit der Stimmtest sie zeigt', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ error: { code: 404, status: 'NOT_FOUND', message: 'Method not found.' } }, 404))
+    await expect(listGeminiVoices({ languageCode: 'de-DE', apiKey: 'k', fetchImpl })).rejects.toThrow(/Gemini voices API error: 404 - NOT_FOUND: Method not found\./)
+  })
+
+  it('normalisiert Geschlechter, ohne „female“ als „male“ zu lesen', () => {
+    expect(normalizeLibraryVoice({ id: 'a', gender: 'female' })?.gender).toBe('female')
+    expect(normalizeLibraryVoice({ id: 'a', gender: 'MALE' })?.gender).toBe('male')
+    expect(normalizeLibraryVoice({ id: 'a', gender: 'neutral' })?.gender).toBe('neutral')
+    expect(normalizeLibraryVoice({ id: 'a' })?.gender).toBeNull()
+    expect(normalizeLibraryVoice({ name: 'only-name' })?.id).toBe('only-name')
+    expect(normalizeLibraryVoice('x')).toBeNull()
   })
 })

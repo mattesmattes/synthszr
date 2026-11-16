@@ -785,6 +785,27 @@ Tab zum Vergleichen der Modell-Kits, Sprechanweisungen auf Gemini optimiert.
   „zweite Klammer“ nur noch für andere Klammern) und kürzt Anweisungen statt
   welche hinzuzufügen. Mixer-Analyse und Fingerabdruck ignorieren Klammern
   mitten in der Zeile.
+- **Geschlecht, de-DE-Bibliothek, deutsche Beispieltexte (2026-11-16,
+  Nachtrag):** Die 30 Standardstimmen tragen ihr Geschlecht (`gender` in
+  `GEMINI_TTS_VOICES`, Quelle Google Cloud „Chirp 3: HD“ mit denselben Namen:
+  14 weiblich, 16 männlich); alle Gemini-Pull-downs gruppieren nach
+  „weiblich“/„männlich“ (`geminiVoiceGroups`, `GeminiVoiceSelect`). Die
+  erweiterte Stimmbibliothek kommt über `listGeminiVoices`
+  (`GET /v1beta/voices?language_code=de-DE&page_size=200`, `page_token`,
+  snake_case oder camelCase) und `GET /api/admin/podcast-voice-lab?voices=de-DE`
+  (eine Stunde zwischengespeichert, Fehler als Text) in Stimmtest und
+  Gemini-Besetzung, mit Statuszeile „Stimmbibliothek de-DE: N Stimmen“.
+  Google dokumentiert nicht, wie eine Bibliotheksstimme im Aufruf steht; ihre
+  ID geht wie die Standardnamen in `speech_config [{voice}]` (wie eigene
+  Stimmen `voice_…`), ein Fehler erscheint in der Zeile des Stimmtests.
+  Job, Einstellungen und Stimmtest prüfen mit `isGeminiVoiceId`
+  (Standardname oder unverdächtige ID). Alle gespeicherten Folgen sind
+  englisch; der Stimmtest hat deshalb ein deutsches und ein inhaltsgleiches
+  englisches Beispielskript (`lib/tts/voice-lab-samples.ts`, zwölf Zeilen mit
+  Monolog, Lauten, Flüstern, Reinreden), erkennt die Sprache des Skripts
+  (`scriptLangOf`, Stoppwort-Heuristik aus `lib/agents/language.ts`) und lädt
+  bei „Sprache des Tests: Deutsch“ das deutsche Beispiel; die Stimmprobe im
+  Aufnahme-Tab lädt bei jedem Sprachwechsel den Probetext der Sprache.
 
 ## Recent Changes (2026-11-14)
 

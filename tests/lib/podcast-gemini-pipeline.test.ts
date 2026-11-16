@@ -98,7 +98,8 @@ describe('Audio-Job und Mischer', () => {
   it('prüft Gemini-Modell und -Stimmen beim Anlegen des Jobs', () => {
     expect(JOBS_ROUTE).toMatch(/provider === 'gemini'/)
     expect(JOBS_ROUTE).toMatch(/isGeminiTTSModel\(body\.model\)/)
-    expect(JOBS_ROUTE).toMatch(/isGeminiVoice\(body\.hostVoiceId\) \|\| !isGeminiVoice\(body\.guestVoiceId\)/)
+    // Standardstimme oder Bibliotheks-ID (de-DE-Stimmbibliothek, 2026-11-16)
+    expect(JOBS_ROUTE).toMatch(/isGeminiVoiceId\(body\.hostVoiceId\) \|\| !isGeminiVoiceId\(body\.guestVoiceId\)/)
   })
 })
 
@@ -113,6 +114,6 @@ describe('Podcast Studio', () => {
   it('speichert Anbieter und Gemini-Besetzung nur mit gültigen Werten', () => {
     expect(SETTINGS_API).toMatch(/podcast_tts_provider !== 'openai' && body\.podcast_tts_provider !== 'gemini'/)
     expect(SETTINGS_API).toMatch(/isGeminiTTSModel\(body\.gemini_tts_model\)/)
-    expect(SETTINGS_API).toMatch(/isGeminiVoice\(value\)/)
+    expect(SETTINGS_API).toMatch(/isGeminiVoiceId\(value\)/)
   })
 })
