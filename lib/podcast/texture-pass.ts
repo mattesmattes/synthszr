@@ -14,6 +14,7 @@
  * Aufruf scheitert, bleibt die erste Fassung (fail-soft, wie das Intermezzo).
  */
 import type { WornOut } from '@/lib/podcast/fingerprint'
+import { isVocalCue, SCRIPT_VOCAL_CUES } from '@/lib/tts/line-delivery'
 
 export type TextureLang = 'de' | 'en'
 
@@ -42,7 +43,11 @@ export interface TextureResult {
 }
 
 const MARKER_RE = /^\[\s*(ARTICLE\s+\d+|INTERMEZZO)\s*\]\s*$/i
-const SPEECH_RE = /^(HOST|GUEST)(?: \(overlapping\))?: \[[^\[\]]+\] \S/
+// Sprechanweisung am Zeilenanfang ist seit 2026-11-16 optional (Gemini: nur
+// wo sich der Klang ändert, lib/podcast/voice-directions.ts).
+const SPEECH_RE = /^(HOST|GUEST)(?: \(overlapping\))?: (?:\[[^\[\]]+\] )?\S/
+const LINE_HEAD_RE = /^(HOST|GUEST)(?:\s*\(overlapping\))?\s*:\s*(?:\[[^\]]*\]\s*)?/i
+const CUE_LIST = SCRIPT_VOCAL_CUES.map((c) => `[${c}]`).join(', ')
 const GREETING_RE = {
   en: /Hey, Hey and welcome to Synthesizer Daily[^!\n]*!/,
   de: /Hey, Hey und Willkommen bei Synthesizer Daily[^!\n]*!/,
@@ -66,7 +71,8 @@ function spokenText(body: string, joiner = ' '): string {
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => /^(HOST|GUEST)\b/i.test(l))
-    .map((l) => l.replace(/^(HOST|GUEST)(?:\s*\(overlapping\))?\s*:\s*(?:\[[^\]]*\]\s*)?/i, ''))
+    // Laut-Hinweise wie [laughs] sind keine Wörter (Längen-, Namen- und Echo-Prüfung).
+    .map((l) => l.replace(LINE_HEAD_RE, '').replace(/\s*\[[^\]]*\]\s*/g, ' ').trim())
     .join(joiner)
 }
 
@@ -172,9 +178,12 @@ export function validateTexture(original: string, revised: string, lang: Texture
 
   const lines = revised.split('\n').map((l) => l.trim()).filter(Boolean)
   const bad = lines.filter((l) => !MARKER_RE.test(l) && !SPEECH_RE.test(l))
-  if (bad.length) problems.push(`Format: ${bad.length} Zeile(n) ohne Sprecher/Sprechanweisung, z. B. "${bad[0].slice(0, 60)}"`)
-  const doubleBracket = lines.filter((l) => SPEECH_RE.test(l) && /\[/.test(l.replace(/^[^\]]*\]/, '')))
-  if (doubleBracket.length) problems.push(`zweite Klammer in ${doubleBracket.length} Zeile(n)`)
+  if (bad.length) problems.push(`Format: ${bad.length} Zeile(n) ohne Sprecher, z. B. "${bad[0].slice(0, 60)}"`)
+  // Mitten in der Zeile sind nur Laut-Hinweise erlaubt ([laughs], [short pause] …).
+  const strayBracket = lines.filter(
+    (l) => SPEECH_RE.test(l) && [...l.replace(LINE_HEAD_RE, '').matchAll(/\[([^\]]*)\]/g)].some((m) => !isVocalCue(m[1]))
+  )
+  if (strayBracket.length) problems.push(`zweite Klammer in ${strayBracket.length} Zeile(n)`)
 
   const mo = markers(original), mr = markers(revised)
   if (mo.join('|') !== mr.join('|')) problems.push(`Marker geändert (${mo.length} → ${mr.length})`)
@@ -232,7 +241,7 @@ KEEP EXACTLY (any change here makes your edit unusable):
 - Every [ARTICLE N] marker line, unchanged and in place.${greeting ? `\n- The greeting sentence, verbatim: ${greeting}` : ''}
 - Every fact, name and number: do not add, drop or change a single digit; keep every prediction and its date.
 - The protected lines listed below, verbatim.${opts.devices?.length ? `\n- Today's deliberate devices (listed under TODAY'S DEVICES) and every line that carries them. A nickname or running gag that recurs on purpose is one of them, not worn wording; keep it every time it appears.` : ''}
-- The format: every spoken line is \`HOST: [direction] text\` or \`GUEST: [direction] text\`, optionally with \` (overlapping)\` right after the speaker; exactly one bracket per line, at the start, in English.
+- The format: every spoken line is \`HOST: text\` or \`GUEST: text\`, optionally with \` (overlapping)\` right after the speaker and optionally one voice direction in brackets at the very start of the text, in English; inside a line only the sound cues ${CUE_LIST}.
 - The total length, within ten percent.
 - Every line of more than 100 words stays one unbroken line: the long riffs are the point. You may edit words inside it, never split it.
 
@@ -242,7 +251,7 @@ DO:
 3. Insert three to six short reactions (one to three words, no joke) inside explanations of 40 to 100 words: split such a line into two lines of the same speaker and put the other speaker's reaction in between, mid-thought. Most of them are Emma's, inside his explanations, and plain ("yeah", "right"); Synthesizer's are emphatic agreement or a two-word push, never passive assent ("mm-hm", "got it", "noted").
 4. Give most lines over 50 words one spoken mark: a restart, a self-correction, an aside, or a filler ("I mean,", "you know,", "look,", "like"); no filler more than five times in the script, never inside a number or a name. Never leave three balanced, finished sentences in a row.
 5. Language today: ${opts.coarseness}
-6. Vary voice directions that repeat more than three times; keep them as speech instructions (affect, tone, pacing).
+6. Voice directions are written for Gemini TTS: two to five English words on how the line sounds (feeling, pace, volume), only on lines where the sound changes. Never add one to a line without a direction. Replace gestures and conversation moves ("leaning in", "cutting in", "building", "rolling") with how the line sounds, shorten any direction of five or more qualities, and vary directions that repeat more than three times.
 7. Where a speaker labels their own move or stance instead of just making it (announcing a verdict, a crusade, a takeover, a tally or scoreboard), cut the label and keep the act. A game or segment may keep its name.${opts.echoes?.length ? `\n8. Say the passages listed under TOO CLOSE TO THE ARTICLE in the speaker's own spoken words: same facts, names and numbers, different wording.` : ''}
 
 DO NOT add new jokes, topics, facts or sincere moments, and do not explain your changes.`

@@ -723,6 +723,69 @@ Not-Aus: `update curation_runs set cancel_requested = true where id = …` —
 `advanceRun` schließt den Run beim nächsten Tick als `cancelled` ab, bevor er
 weiterarbeitet. `shadow_enabled = false` stoppt nur neue Kickoffs.
 
+## Recent Changes (2026-11-16)
+
+### Podcast: Gemini-TTS, Stimmtest, Sprechanweisungen für Gemini
+Hintergrund: OpenAI schaltet tts-1, tts-1-hd und gpt-4o-mini-tts am
+6. Januar 2027 ab; Produktion lief mit tts-1-hd (ignoriert alle Anweisungen).
+Betreiber 2026-11-16: Gemini-TTS mit Sprach- und Sprecherwahl zum Testen,
+Tab zum Vergleichen der Modell-Kits, Sprechanweisungen auf Gemini optimiert.
+- **Gemini-TTS** (`lib/tts/gemini-tts.ts`): Interactions-API
+  `POST https://generativelanguage.googleapis.com/v1beta/interactions`,
+  Header `x-goog-api-key` (`GOOGLE_GENERATIVE_AI_API_KEY`), Body
+  `input[user_input].content[text + speech_metadata.style]`,
+  `response_format {type: audio}`, `generation_config.speech_config [{voice}]`;
+  Audio aus `steps[model_output].content[audio].data` (sonst
+  `output_audio`/`outputs`), WAV 24 kHz mono. 429 wartet auf
+  `Retry-After`/`retryDelay` (max. 20 s), Timeout 90 s, `withRetry`
+  (`lib/tts/retry.ts`, aus dem Audio-Job gezogen). Modelle und 30 Stimmen in
+  `lib/tts/gemini-voices.ts` (Default Emma Kore, Synthesizer Charon; Preis
+  Flash ≈ 0,23 USD je Folge, Lite ≈ 0,15, ab 1.1.2027 doppelt). Ratenlimits
+  der 3.8-Modelle sind nicht dokumentiert: Gemini-Jobs laufen in Dreiergruppen.
+- **Eine Umsetzung für alle** (`lib/tts/line-delivery.ts`,
+  `prepareLineForTTS`): OpenAI unverändert (gpt-4o-mini-tts: Anweisung →
+  `instructions`; tts-1/-hd: entfernt); Gemini: Anweisung am Zeilenanfang →
+  `style`, Laute/Pausen (`SCRIPT_VOCAL_CUES`: laughs, chuckles, sighs,
+  gasps, breath, short pause, long pause; alte [beat] → `<short pause>`) →
+  Inline-Tags an der Stelle, andere Klammern weg. `renderLine`
+  (`lib/tts/render-line.ts`) vertont damit für Audio-Job und Stimmtest.
+- **Audio-Job** (`app/api/podcast/jobs/process`): verzweigt nach
+  `podcast_jobs.provider` (`gemini`, sonst OpenAI), Segmente als `.wav`
+  bzw. `.mp3`, Dauer über `estimateAudioDurationSec` (`lib/audio/wav.ts`).
+  Der Mischer dekodiert Segmente über `decodeAudio` (WAV oder MP3) und misst
+  das Intermezzo-Vorlauf-Fenster formatgerecht. **Testlauf ohne Post** ändert
+  Persönlichkeit, Episoden-Gedächtnis und Erweckungs-Slot nicht mehr (vorher
+  schrieben alte Tests 20 Gedächtniszeilen ohne Post). `POST /api/podcast/jobs`
+  prüft Gemini-Modell und -Stimmen.
+- **Einstellungen** (`getTTSSettings`, `PUT /api/admin/tts-settings`):
+  `podcast_tts_provider` (`openai` Default | `gemini`), `gemini_tts_model`,
+  `gemini_host_voice_de|en`, `gemini_guest_voice_de|en`. Admin → Audio →
+  Recording: Anbieter, Gemini-Besetzung je Sprache, Stimmprobe
+  (`components/admin/gemini-voice-settings.tsx`). Episode-Tab: Zeile
+  „Stimmen: …“ und Schalter „Testlauf: Audio nicht mit dem Post verknüpfen“.
+  Die Post-Route `app/api/podcast/[postId]` bleibt bei OpenAI.
+- **Tab „Stimmtest“** (`components/admin/podcast-voice-lab.tsx`, API
+  `app/api/admin/podcast-voice-lab`: GET Folgen/Skript, POST eine Zeile
+  vertonen, nur Admin, schreibt nichts): echtes Skript (letzte 15 Folgen
+  oder aktuelles Skript), bis zu zwölf Zeilen, zwei Kits (Vorlagen: Live,
+  Gemini Flash/Lite, OpenAI gpt-4o-mini-tts/tts-1-hd) mit Stimmen für Emma
+  und Synthesizer, Schalter „Sprechanweisung mitsenden“, je Zeile Abspielen
+  und „wie die Anweisung ankommt“; Gemini-Kit als Besetzung speichern.
+- **Sprechanweisungen für Gemini** (`lib/podcast/voice-directions.ts`,
+  `VOICE_DIRECTIONS_EN/DE` in beiden Skriptvorlagen statt des OpenAI-Formats
+  „Voice Affect / Tone / Pacing“). Befund an 20 Folgen: 2.523 Anweisungen,
+  Ø 2,1 Wörter, jede Zeile mit Klammer, darunter Gesprächszüge ohne Klang.
+  Nach Googles Doku jetzt: Anweisung nur, wo sich der Klang ändert (höchstens
+  etwa die Hälfte der Zeilen), zwei bis fünf englische Wörter zu Gefühl,
+  Tempo, Lautstärke; keine Namen, Akzente, Gesten, Gesprächszüge,
+  Format-Etiketten; Laute als Hinweis an der Stelle (höchstens einer je Zeile,
+  etwa zehn je Folge). Dialogregeln 1/4/5/10 und Beispiel, Stimmen-Paletten
+  und Self-Check (`voice-style.ts`) folgen dem; der Texturdurchgang akzeptiert
+  Zeilen ohne Anweisung und Laut-Hinweise mitten in der Zeile (Prüfung
+  „zweite Klammer“ nur noch für andere Klammern) und kürzt Anweisungen statt
+  welche hinzuzufügen. Mixer-Analyse und Fingerabdruck ignorieren Klammern
+  mitten in der Zeile.
+
 ## Recent Changes (2026-11-14)
 
 ### Podcast-Tonalität v2

@@ -12,17 +12,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { put } from '@vercel/blob'
-import {
-  parseScriptText,
-  stripDirectiveTags,
-  stripEmotionTags,
-  extractEmotionTag,
-  emotionToInstruction,
-  type OpenAIVoice,
-  type SegmentMetadata,
-} from '@/lib/tts/elevenlabs-tts'
+import { parseScriptText, type SegmentMetadata } from '@/lib/tts/elevenlabs-tts'
 import { concatenateWithCrossfade, mixingSettingsToCrossfadeOptions, type AudioSegment } from '@/lib/audio/crossfade'
+import { estimateAudioDurationSec } from '@/lib/audio/wav'
 import { getTTSSettings } from '@/lib/tts/openai-tts'
+import { isSpeakable, prepareLineForTTS, type TTSProviderId } from '@/lib/tts/line-delivery'
+import { defaultModelFor, renderLine } from '@/lib/tts/render-line'
+import { MIN_AUDIO_BYTES } from '@/lib/tts/retry'
 import { getPersonalityState, advanceState } from '@/lib/podcast/personality'
 import { extractEpisodeMemory, consumeMemoryAwakeningSlot } from '@/lib/podcast/memory'
 
@@ -31,158 +27,9 @@ export const maxDuration = 800
 
 // Parallel TTS batch size (to speed up generation while respecting rate limits)
 const TTS_BATCH_SIZE = 5
-
-// Retry settings for transient API errors
-const MAX_RETRIES = 3
-const INITIAL_RETRY_DELAY_MS = 1000
-
-// Minimum acceptable MP3 buffer size in bytes.
-// OpenAI TTS occasionally returns ~200-byte empty responses with HTTP 200.
-// At ~16 KB/sec for 128 kbps MP3, a real 1-second take is ≥ 16 KB; we set
-// a conservative floor of 2 KB so we don't false-positive on short
-// directives like "Ja." but still catch every silent take we've seen.
-const MIN_AUDIO_BYTES = 2048
-const SUSPECT_SHORT_AUDIO_MARKER = 'suspect-short-audio-buffer'
-
-/**
- * Retry wrapper with exponential backoff for transient API errors
- */
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  context: string,
-  maxRetries: number = MAX_RETRIES
-): Promise<T> {
-  let lastError: Error | null = null
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await fn()
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error))
-
-      // Check if it's a retryable error (5xx, connection errors, stream termination,
-      // or a suspect-short audio buffer — the silent-take failure mode)
-      const isRetryable =
-        lastError.message.includes('503') ||
-        lastError.message.includes('502') ||
-        lastError.message.includes('500') ||
-        lastError.message.includes('429') ||
-        lastError.message.includes('connection') ||
-        lastError.message.includes('ECONNREFUSED') ||
-        lastError.message.includes('timeout') ||
-        lastError.message.includes('terminated') ||
-        lastError.message.includes('ECONNRESET') ||
-        lastError.message.includes('fetch failed') ||
-        lastError.message.includes(SUSPECT_SHORT_AUDIO_MARKER)
-
-      if (!isRetryable || attempt === maxRetries) {
-        throw lastError
-      }
-
-      const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt)
-      console.log(`[Podcast Jobs] ${context} failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms: ${lastError.message}`)
-      await new Promise(resolve => setTimeout(resolve, delay))
-    }
-  }
-
-  throw lastError
-}
-
-// TTS Pronunciation replacements
-const TTS_PRONUNCIATIONS: Record<string, string> = {
-  'Synthszr': 'Synthesizer',
-  'synthszr': 'synthesizer',
-  'SYNTHSZR': 'SYNTHESIZER',
-}
-
-function prepareTTSText(text: string): string {
-  let result = text
-  for (const [from, to] of Object.entries(TTS_PRONUNCIATIONS)) {
-    result = result.replaceAll(from, to)
-  }
-  return result
-}
-
-async function generateSegmentOpenAI(
-  text: string,
-  voice: OpenAIVoice,
-  model: string = 'tts-1'
-): Promise<Buffer> {
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) throw new Error('OPENAI_API_KEY not set')
-
-  // gpt-4o-mini-tts: extract emotion tag → instructions parameter
-  // tts-1/tts-1-hd: strip emotion tags (not supported)
-  const isGpt4oMiniTts = model === 'gpt-4o-mini-tts'
-  let cleanText: string
-  let instructions: string | undefined
-
-  let emotionTag: string | null = null
-
-  if (isGpt4oMiniTts) {
-    const { emotion, cleanText: stripped } = extractEmotionTag(text)
-    emotionTag = emotion
-    // Strip remaining emotion tags from the text — only the first one becomes
-    // the instructions parameter, any mid-sentence tags would be spoken aloud
-    cleanText = prepareTTSText(stripEmotionTags(stripped))
-    instructions = emotionToInstruction(emotion)
-  } else {
-    cleanText = prepareTTSText(stripEmotionTags(text))
-  }
-
-  if (!cleanText.trim()) return Buffer.alloc(0)
-
-  console.log(`[TTS-OpenAI] model=${model}, voice=${voice}, len=${cleanText.length}${emotionTag ? `, emotion="${emotionTag}"` : ', tags=stripped'}`)
-
-  return withRetry(async () => {
-    const body: Record<string, unknown> = {
-      model,
-      voice,
-      input: cleanText,
-      response_format: 'mp3',
-    }
-    if (instructions) {
-      body.instructions = instructions
-    }
-
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 30_000)
-    try {
-      const response = await fetch('https://api.openai.com/v1/audio/speech', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`OpenAI TTS API error: ${response.status} - ${errorText}`)
-      }
-
-      const buf = Buffer.from(await response.arrayBuffer())
-      // Silent-take mitigation: OpenAI occasionally returns a tiny MP3
-      // (a few hundred bytes) without throwing. Treat as transient and
-      // let withRetry have another go.
-      if (buf.length < MIN_AUDIO_BYTES) {
-        throw new Error(
-          `${SUSPECT_SHORT_AUDIO_MARKER}: got ${buf.length}B for "${cleanText.slice(0, 60)}…"`
-        )
-      }
-      return buf
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        throw new Error(`OpenAI TTS timeout after 30000ms`)
-      }
-      throw err
-    } finally {
-      clearTimeout(timeoutId)
-    }
-  }, `OpenAI TTS (${voice})`)
-}
+// Gemini-TTS: Ratenlimits der 3.8-Modelle sind nicht dokumentiert, deshalb
+// vorsichtiger; 429 wartet in gemini-tts.ts auf Retry-After.
+const GEMINI_TTS_BATCH_SIZE = 3
 
 export async function POST(request: NextRequest) {
   // Nur Admin (einziger Aufrufer: Podcast-Studio /admin/audio). Verhindert, dass
@@ -254,15 +101,21 @@ export async function POST(request: NextRequest) {
       .replace(/[^a-z0-9]+/g, '-')
       .slice(0, 50)
 
-    console.log(`[Podcast Jobs] Generating ${lines.length} segments with OpenAI (parallel batches of ${TTS_BATCH_SIZE})`)
+    // Anbieter je Job: 'gemini' aus dem Podcast Studio, alles andere wie bisher
+    // OpenAI (die Spalte hat den Default 'elevenlabs' aus der Anfangszeit).
+    const provider: TTSProviderId = job.provider === 'gemini' ? 'gemini' : 'openai'
+    const ttsModel: string = job.model || defaultModelFor(provider)
+    const batchSize = provider === 'gemini' ? GEMINI_TTS_BATCH_SIZE : TTS_BATCH_SIZE
+
+    console.log(`[Podcast Jobs] Generating ${lines.length} segments with ${provider === 'gemini' ? 'Gemini' : 'OpenAI'} ${ttsModel} (parallel batches of ${batchSize})`)
 
     // Generate TTS + upload each segment immediately (don't accumulate in memory)
     const segmentUrls: string[] = new Array(lines.length).fill('')
     const segmentBuffers: Array<{ buffer: Buffer; speaker: 'HOST' | 'GUEST'; text: string }> = []
     let completedLines = 0
 
-    for (let batchStart = 0; batchStart < lines.length; batchStart += TTS_BATCH_SIZE) {
-      const batchEnd = Math.min(batchStart + TTS_BATCH_SIZE, lines.length)
+    for (let batchStart = 0; batchStart < lines.length; batchStart += batchSize) {
+      const batchEnd = Math.min(batchStart + batchSize, lines.length)
       const batch = lines.slice(batchStart, batchEnd)
 
       const batchStartTime = Date.now()
@@ -272,36 +125,29 @@ export async function POST(request: NextRequest) {
         const globalIndex = batchStart + batchIndex
         const voiceId = line.speaker === 'HOST' ? job.host_voice_id : job.guest_voice_id
 
-        // Strip directive tags ([beat], [short pause], etc.) before TTS — they're script annotations, not speech
-        const ttsText = stripDirectiveTags(line.text)
+        // Text und Anweisung je Anbieter (lib/tts/line-delivery.ts): OpenAI
+        // entfernt Pausen-Tags und Klammern, Gemini macht aus der Anweisung am
+        // Zeilenanfang `style` und aus Pausen/Lauten Inline-Tags.
+        const delivery = prepareLineForTTS({ provider, model: ttsModel, text: line.text })
 
-        // Skip TTS for lines that become empty after stripping (e.g., "HOST: [longer pause]")
-        if (!ttsText) {
-          console.log(`[Podcast Jobs] Skipping empty line ${globalIndex + 1} after directive strip`)
-          return null
-        }
-
-        // Defensive guard against hallucinated tags: if NOTHING but bracketed
-        // tags remains after we also strip every "[…]" block, OpenAI TTS
-        // returns 0 bytes (the cleanText becomes empty server-side).
-        // We've seen ChatGPT-generated scripts produce "[waiting]",
-        // "[pondering]", etc. — none of which are in DIRECTIVE_TAG_NAMES.
-        // Drop the line here so the silent-take guard doesn't have to.
-        const visibleAfterAllTags = ttsText.replace(/\[[^\]]*\]/g, '').trim()
-        if (!visibleAfterAllTags) {
+        // Defensive guard against hallucinated tags: lines that are nothing
+        // but bracketed tags ("HOST: [longer pause]", "[waiting]") would come
+        // back as 0 bytes and trip the silent-take guard. Drop them here.
+        if (!isSpeakable(delivery)) {
           console.log(
             `[Podcast Jobs] Skipping line ${globalIndex + 1} — only bracketed tags after strip: "${line.text.slice(0, 80)}"`
           )
           return null
         }
 
-        const buffer = await generateSegmentOpenAI(ttsText, voiceId as OpenAIVoice, job.model || 'gpt-4o-mini-tts')
+        const rendered = await renderLine({ provider, model: ttsModel, voice: voiceId, text: line.text }, delivery)
+        const buffer = rendered.buffer
 
-        // Upload segment immediately after generation
-        const fileName = `podcasts/${safeTitle}-${timestamp}-seg${globalIndex.toString().padStart(3, '0')}.mp3`
+        // Upload segment immediately after generation (Gemini: WAV, OpenAI: MP3)
+        const fileName = `podcasts/${safeTitle}-${timestamp}-seg${globalIndex.toString().padStart(3, '0')}.${rendered.format}`
         const blob = await put(fileName, buffer, {
           access: 'public',
-          contentType: 'audio/mpeg',
+          contentType: rendered.contentType,
         })
 
         completedLines++
@@ -336,7 +182,7 @@ export async function POST(request: NextRequest) {
       }
 
       const batchElapsed = Date.now() - batchStartTime
-      console.log(`[Podcast Jobs] Batch ${Math.floor(batchStart / TTS_BATCH_SIZE) + 1}: lines ${batchStart + 1}-${batchEnd}/${lines.length} in ${batchElapsed}ms`)
+      console.log(`[Podcast Jobs] Batch ${Math.floor(batchStart / batchSize) + 1}: lines ${batchStart + 1}-${batchEnd}/${lines.length} in ${batchElapsed}ms`)
 
       // Update progress + persist segment URLs so far (crash recovery)
       // TTS phase uses 0-90%, concatenation phase uses 90-100%
@@ -395,7 +241,7 @@ export async function POST(request: NextRequest) {
         intermezzoBefore: lines[i]?.intermezzoBefore,
       })
 
-      const segmentDuration = seg.buffer.length / (128 * 1024 / 8)
+      const segmentDuration = estimateAudioDurationSec(seg.buffer)
       segmentMetadata.push({
         index: i,
         speaker: seg.speaker,
@@ -508,41 +354,49 @@ export async function POST(request: NextRequest) {
       console.log(`[Podcast Jobs] Linked to post_podcasts for locales: ${SUPPORTED_LOCALES.join(', ')}`)
     }
 
-    // Evolve personality state AFTER successful audio generation
-    // This ensures test scripts (script-only, no audio) don't advance the personality.
-    const LOCALE_TO_TTS_LANG: Record<string, string> = { de: 'de', en: 'en', cs: 'en', nds: 'en' }
-    const personalityLocale = LOCALE_TO_TTS_LANG[job.source_locale] || 'en'
-    let nextEpisodeNumber = 1
-    try {
-      const personalityState = await getPersonalityState(personalityLocale)
-      nextEpisodeNumber = personalityState.episode_count + 1
-      await advanceState(personalityState, job.script)
-      console.log(`[Podcast Jobs] Personality advanced for locale "${personalityLocale}" (episode #${nextEpisodeNumber})`)
-    } catch (personalityError) {
-      // Non-fatal: don't fail the job if personality evolution fails
-      console.error(`[Podcast Jobs] Personality evolution failed (non-fatal):`, personalityError)
+    // Persönlichkeit, Episoden-Gedächtnis und Erweckungs-Slot nur für echte
+    // Folgen (mit Post). Ein Testlauf ohne Post (Stimmenvergleich, Beispiel-
+    // skript) würde sonst als Folge zählen und sich ins Gedächtnis schreiben
+    // (Befund 2026-11-16: 20 Gedächtniszeilen ohne Post aus alten Tests).
+    if (!job.post_id) {
+      console.log(`[Podcast Jobs] Job ${job.id} ohne Post (Testlauf): Persönlichkeit und Gedächtnis bleiben unverändert`)
+    } else {
+      // Evolve personality state AFTER successful audio generation
+      // This ensures test scripts (script-only, no audio) don't advance the personality.
+      const LOCALE_TO_TTS_LANG: Record<string, string> = { de: 'de', en: 'en', cs: 'en', nds: 'en' }
+      const personalityLocale = LOCALE_TO_TTS_LANG[job.source_locale] || 'en'
+      let nextEpisodeNumber = 1
+      try {
+        const personalityState = await getPersonalityState(personalityLocale)
+        nextEpisodeNumber = personalityState.episode_count + 1
+        await advanceState(personalityState, job.script)
+        console.log(`[Podcast Jobs] Personality advanced for locale "${personalityLocale}" (episode #${nextEpisodeNumber})`)
+      } catch (personalityError) {
+        // Non-fatal: don't fail the job if personality evolution fails
+        console.error(`[Podcast Jobs] Personality evolution failed (non-fatal):`, personalityError)
+      }
+
+      // Persistent episode memory — distil the just-shipped script into a
+      // structured row (topics, positions, gags, key moments) for use in
+      // future script generations. Fire-and-forget on a copy of the
+      // identifiers; failures stay non-fatal to the audio job.
+      extractEpisodeMemory({
+        jobId: job.id,
+        postId: job.post_id,
+        episodeNumber: nextEpisodeNumber,
+        locale: personalityLocale,
+        script: job.script,
+        recordedAt: new Date().toISOString(),
+      }).catch((memErr) => {
+        console.warn('[Podcast Jobs] Memory extraction failed (non-fatal):', memErr)
+      })
+
+      // Burn one memory-awakening announcement slot. The next script-gen
+      // for this locale only sees the awakening block while slots remain.
+      consumeMemoryAwakeningSlot(personalityLocale).catch((slotErr) => {
+        console.warn('[Podcast Jobs] Awakening slot decrement failed (non-fatal):', slotErr)
+      })
     }
-
-    // Persistent episode memory — distil the just-shipped script into a
-    // structured row (topics, positions, gags, key moments) for use in
-    // future script generations. Fire-and-forget on a copy of the
-    // identifiers; failures stay non-fatal to the audio job.
-    extractEpisodeMemory({
-      jobId: job.id,
-      postId: job.post_id || null,
-      episodeNumber: nextEpisodeNumber,
-      locale: personalityLocale,
-      script: job.script,
-      recordedAt: new Date().toISOString(),
-    }).catch((memErr) => {
-      console.warn('[Podcast Jobs] Memory extraction failed (non-fatal):', memErr)
-    })
-
-    // Burn one memory-awakening announcement slot. The next script-gen
-    // for this locale only sees the awakening block while slots remain.
-    consumeMemoryAwakeningSlot(personalityLocale).catch((slotErr) => {
-      console.warn('[Podcast Jobs] Awakening slot decrement failed (non-fatal):', slotErr)
-    })
 
     return NextResponse.json({
       success: true,

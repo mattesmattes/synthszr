@@ -55,7 +55,7 @@ THE DYNAMIC:
 - Humor comes from attitude: sarcasm, roasting each other, absurd analogies, one earthier joke. Never announce a joke.
 - Affection shows as jabs and backhanded compliments. Sincerity is one plain sentence from one of them near the end, undercut on the next line. No tender or pining exchanges, no paired heartfelt reflections, no poetry, no [soft and warm] voices.
 - Facts stay attached to their own story and source: never merge two reports, never inflate "many" into "half" or "most", never invent a quote.
-- Voice directions match the voices and follow today's temperature (cooler days get cooler directions). Emma's default is heated: [indignant, emphatic, fast], [worked up, talking fast, rolling], [scoffing, amused, quick], [sharp, fast, cutting in], [exasperated, laughing]; [deadpan, flat] at most three times. Synthesizer: [booming, emphatic, building], [conspiratorial, amused, leaning in], [indignant, fast], [earnest, slower, sincere].
+- Voice directions (see VOICE DIRECTIONS) match the voices and follow today's temperature (cooler days get cooler directions). They mark the lines where the sound changes, not every line. Emma's heated lines: [indignant, speaking fast], [worked up, talking fast], [scoffing, amused], [sharp and quick], [exasperated, laughing]; [dry and flat] at most three times. Synthesizer: [booming, emphatic], [hushed, conspiratorial], [indignant, fast], [slow and sincere].
 - Never mention real podcast hosts, other shows or their catchphrases, no nicknames like "Professor", no "That's the show." The show is Synthesizer Daily, the voices are Emma and Synthesizer.`
 
 export const VOICE_STYLE_DE = `**DIE BEIDEN STIMMEN (das entscheidet, wie jede Zeile klingt):**
@@ -97,7 +97,7 @@ DIE DYNAMIK:
 - Humor kommt aus der Haltung: Sarkasmus, sich gegenseitig aufziehen, absurde Vergleiche, ein derberer Witz. Nie einen Witz ankündigen.
 - Zuneigung zeigt sich als Seitenhieb und Kompliment mit Widerhaken. Ernst ist ein schlichter Satz von einem der beiden gegen Ende, in der nächsten Zeile gebrochen. Keine zärtlichen oder schmachtenden Wechsel, keine paarweisen Herzens-Reflexionen, keine Poesie, keine [soft and warm]-Stimmen.
 - Fakten bleiben bei ihrer Geschichte und Quelle: nie zwei Berichte vermischen, nie „viele" zu „die Hälfte" oder „die meisten" aufblasen, nie ein Zitat erfinden.
-- Die Sprechanweisungen passen zu den Stimmen und zur Temperatur des Tages (kühlere Tage, kühlere Anweisungen). Emmas Grundton ist hitzig: [indignant, emphatic, fast], [worked up, talking fast, rolling], [scoffing, amused, quick], [sharp, fast, cutting in], [exasperated, laughing]; [deadpan, flat] höchstens dreimal. Synthesizer: [booming, emphatic, building], [conspiratorial, amused, leaning in], [indignant, fast], [earnest, slower, sincere].
+- Die Sprechanweisungen (siehe SPRECHANWEISUNGEN) passen zu den Stimmen und zur Temperatur des Tages (kühlere Tage, kühlere Anweisungen). Sie markieren die Zeilen, in denen sich der Klang ändert, nicht jede Zeile. Emmas hitzige Zeilen: [indignant, speaking fast], [worked up, talking fast], [scoffing, amused], [sharp and quick], [exasperated, laughing]; [dry and flat] höchstens dreimal. Synthesizer: [booming, emphatic], [hushed, conspiratorial], [indignant, fast], [slow and sincere].
 - Nie echte Podcast-Hosts, andere Sendungen oder deren Schlagworte erwähnen, keine Spitznamen wie „Professor", kein „Das war die Sendung." Die Sendung heißt Synthesizer Daily, die Stimmen heißen Emma und Synthesizer.`
 
 /** Gesprächsführung und Folgenaufbau v2, ersetzt Quoten-Realismus und 4-Block-Struktur von v1. */
@@ -116,7 +116,7 @@ export const EPISODE_SHAPE_EN = `**EPISODE SHAPE:**
 □ At most three stories end on a teasing button; most end with Emma's verdict and a pivot; one or two plain backchannels inside his explanations
 □ One sincere sentence near the end, undercut at once; no tender exchanges
 □ No invented facts, quotes, sources or insider talk; no merged or inflated facts; numbers only from the article
-□ No [beat]/[pause] tags, no second bracket in a line, cut-offs end with ...
+□ Directions only where the sound changes (about half of the lines or fewer), two to five words, no names, accents, gestures or conversation moves; inside a line only the sound cues from VOICE DIRECTIONS, never [beat]/[pause]; cut-offs end with ...
 If any are missing: REVISE the script before outputting.`
 
 export const EPISODE_SHAPE_DE = `**AUFBAU DER FOLGE:**
@@ -135,5 +135,5 @@ export const EPISODE_SHAPE_DE = `**AUFBAU DER FOLGE:**
 □ Ein ernster Satz gegen Ende, sofort gebrochen; keine zärtlichen Wechsel
 □ **Genau EIN \`[INTERMEZZO]\`-Marker, plaziert zwischen News #4 und News #5, mit Selbstreflexions-Block davor/danach**
 □ Keine erfundenen Fakten, Zitate, Quellen oder Insider-Gerede; nichts vermischt oder aufgeblasen; Zahlen nur aus dem Artikel
-□ Keine [beat]/[pause]-Tags, keine zweite Klammer in einer Zeile, Abbrüche enden mit ...
+□ Anweisungen nur, wo sich der Klang ändert (etwa die Hälfte der Zeilen oder weniger), zwei bis fünf Wörter, keine Namen, Akzente, Gesten oder Gesprächszüge; mitten in der Zeile nur die Laut-Hinweise aus SPRECHANWEISUNGEN, nie [beat]/[pause]; Abbrüche enden mit ...
 Wenn eines fehlt: ÜBERARBEITE das Skript bevor du es ausgibst.`

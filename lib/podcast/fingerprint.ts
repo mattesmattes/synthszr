@@ -68,7 +68,9 @@ export function spokenLines(script: string): SpokenLine[] {
   const out: SpokenLine[] = []
   for (const raw of body.split('\n')) {
     const m = raw.trim().match(/^(?:HOST|GUEST)(?:\s*\(overlapping\))?\s*:\s*(?:\[([^\]]*)\]\s*)?(.*)$/i)
-    if (m && m[2].trim()) out.push({ direction: m[1]?.trim().toLowerCase() ?? null, text: m[2].trim() })
+    // Laut-Hinweise mitten in der Zeile ([laughs], [short pause]) zählen nicht als Wortlaut.
+    const text = m?.[2].replace(/\s*\[[^\]]*\]\s*/g, ' ').trim()
+    if (m && text) out.push({ direction: m[1]?.trim().toLowerCase() ?? null, text })
   }
   return out
 }

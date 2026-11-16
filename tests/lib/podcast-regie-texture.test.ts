@@ -191,10 +191,20 @@ GUEST: [conspiratorial] Fine.`
     expect(validateTexture(original, marker, 'en').problems.join()).toMatch(/Marker/)
     const greeting = original.replace('Hey, Hey and welcome', 'Hey and welcome')
     expect(validateTexture(original, greeting, 'en').problems.join()).toMatch(/Begrüßung/)
-    const format = original.replace('GUEST: [conspiratorial] Fine.', 'GUEST: Fine.')
+    const format = original.replace('GUEST: [conspiratorial] Fine.', 'Fine.')
     expect(validateTexture(original, format, 'en').problems.join()).toMatch(/Format/)
+    // Mitten in der Zeile sind nur Laut-Hinweise erlaubt (Gemini, 2026-11-16)
+    const stray = original.replace('GUEST: [conspiratorial] Fine.', 'GUEST: [conspiratorial] Fine. [points at the screen]')
+    expect(validateTexture(original, stray, 'en').problems.join()).toMatch(/zweite Klammer/)
     const short = original.split('\n').slice(0, 3).join('\n')
     expect(validateTexture(original, short, 'en').ok).toBe(false)
+  })
+
+  it('nimmt Zeilen ohne Anweisung und Laut-Hinweise an der Stelle an (Gemini, 2026-11-16)', () => {
+    const revised = original
+      .replace('GUEST: [conspiratorial] Fine.', 'GUEST: Fine. [chuckles]')
+      .replace('I mean, come on.', 'I mean, [short pause] come on.')
+    expect(validateTexture(original, revised, 'en')).toEqual({ ok: true, problems: [] })
   })
 
   it('trennt MOMENTS ab, liest geschützte Zitate und entfernt Vorreden', () => {
