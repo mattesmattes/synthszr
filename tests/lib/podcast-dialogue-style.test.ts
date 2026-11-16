@@ -26,7 +26,10 @@ describe('DIALOGUE_STYLE_RULES', () => {
     expect(rules).toContain('(overlapping)')
     expect(rules).toMatch(/\.\.\./)
     expect(rules).toMatch(/\[beat\]/) // wird als Verbot genannt …
-    expect(rules).not.toMatch(/\[short pause\]|\[paper rustle\]|\[sip\]/) // … die restlichen toten Tags tauchen gar nicht erst auf
+    // … seit Gemini-TTS (2026-11-16) ist [short pause] eine echte Pause und erlaubt;
+    // die toten Geräusch-Tags tauchen weiter gar nicht erst auf
+    expect(rules).toMatch(/\[short pause\]/)
+    expect(rules).not.toMatch(/\[paper rustle\]|\[sip\]/)
     expect(rules).not.toMatch(/at least \d+×|mind\. \d+×|exactly \d+|exakt \d+/i)
     expect(rules).toMatch(/Studio moments happen in speech|Studio-Momente passieren im Sprechen/) // Betreiber-Nachfrage 2026-10-21: gesprochene Studio-Momente bleiben
   })

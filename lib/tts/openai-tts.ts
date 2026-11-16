@@ -10,6 +10,14 @@
 
 import OpenAI from 'openai'
 import { createAdminClient } from '@/lib/supabase/admin'
+import {
+  DEFAULT_GEMINI_TTS_MODEL,
+  DEFAULT_GEMINI_VOICES,
+  isGeminiTTSModel,
+  isGeminiVoice,
+  type GeminiTTSModel,
+  type PodcastTTSProvider,
+} from '@/lib/tts/gemini-voices'
 
 // OpenAI TTS voices
 export type TTSVoice = 'alloy' | 'ash' | 'coral' | 'echo' | 'fable' | 'nova' | 'onyx' | 'sage' | 'shimmer'
@@ -34,6 +42,13 @@ export interface TTSSettings {
   podcast_duration_minutes: number
   // Dialogregeln für das englische Skript (null = Code-Default aus lib/podcast/dialogue-style.ts)
   podcast_dialogue_rules_en: string | null
+  // Sprachsynthese der Podcast-Jobs (Podcast Studio, seit 2026-11-16; Default OpenAI)
+  podcast_tts_provider: PodcastTTSProvider
+  gemini_tts_model: GeminiTTSModel
+  gemini_host_voice_de: string
+  gemini_guest_voice_de: string
+  gemini_host_voice_en: string
+  gemini_guest_voice_en: string
   // Mixing settings (JSON blob)
   mixing_settings: MixingSettings | null
 }
@@ -150,6 +165,12 @@ export async function getTTSSettings(): Promise<TTSSettings> {
       'podcast_duration_minutes',
       'podcast_dialogue_rules_en',
       'mixing_settings',
+      'podcast_tts_provider',
+      'gemini_tts_model',
+      'gemini_host_voice_de',
+      'gemini_guest_voice_de',
+      'gemini_host_voice_en',
+      'gemini_guest_voice_en',
     ])
 
   const settingsMap: Record<string, unknown> = {}
@@ -180,6 +201,13 @@ export async function getTTSSettings(): Promise<TTSSettings> {
     podcast_dialogue_rules_en: typeof settingsMap.podcast_dialogue_rules_en === 'string' && settingsMap.podcast_dialogue_rules_en.trim()
       ? settingsMap.podcast_dialogue_rules_en
       : null,
+    // Anbieter und Gemini-Besetzung; ungültige Werte fallen auf die Defaults
+    podcast_tts_provider: settingsMap.podcast_tts_provider === 'gemini' ? 'gemini' : 'openai',
+    gemini_tts_model: isGeminiTTSModel(settingsMap.gemini_tts_model) ? settingsMap.gemini_tts_model : DEFAULT_GEMINI_TTS_MODEL,
+    gemini_host_voice_de: isGeminiVoice(settingsMap.gemini_host_voice_de) ? settingsMap.gemini_host_voice_de : DEFAULT_GEMINI_VOICES.de.host,
+    gemini_guest_voice_de: isGeminiVoice(settingsMap.gemini_guest_voice_de) ? settingsMap.gemini_guest_voice_de : DEFAULT_GEMINI_VOICES.de.guest,
+    gemini_host_voice_en: isGeminiVoice(settingsMap.gemini_host_voice_en) ? settingsMap.gemini_host_voice_en : DEFAULT_GEMINI_VOICES.en.host,
+    gemini_guest_voice_en: isGeminiVoice(settingsMap.gemini_guest_voice_en) ? settingsMap.gemini_guest_voice_en : DEFAULT_GEMINI_VOICES.en.guest,
     // Mixing settings (stored as JSON string)
     mixing_settings: settingsMap.mixing_settings
       ? (typeof settingsMap.mixing_settings === 'string'

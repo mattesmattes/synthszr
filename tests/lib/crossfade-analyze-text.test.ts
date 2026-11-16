@@ -35,6 +35,13 @@ describe('analyzeText', () => {
     expect(analyzeText('[calm] That is the whole point.').endsWithTrailOff).toBe(false)
   })
 
+  it('ignoriert Laut-Hinweise mitten in der Zeile (Gemini-Skripte, 2026-11-16)', () => {
+    expect(analyzeText('[amused] Really? [laughs]').isQuestion).toBe(true)
+    expect(analyzeText('Exactly. [chuckles]').isShortReaction).toBe(true)
+    expect(analyzeText('So the board knew [short pause] and...').endsWithTrailOff).toBe(true)
+    expect(analyzeText('Yes [sighs] fine.').wordCount).toBe(2)
+  })
+
   it('erkennt Fragen und das alte [interrupting]-Tag weiterhin', () => {
     expect(analyzeText('[probing] And if one of those renters goes bust?').isQuestion).toBe(true)
     expect(analyzeText('[interrupting] Hold on, let me finish.').isInterrupting).toBe(true)

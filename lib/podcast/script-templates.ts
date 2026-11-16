@@ -6,7 +6,12 @@
  * Ausgelagert aus der Route (2026-11-14), damit Tests und das Trockenlauf-
  * Skript sie ohne Next-Route importieren können. Tonalität v1 steht im Archiv
  * docs/podcast/tonality/v1-archive-2026-11-14.md.
+ *
+ * Sprechanweisungen seit 2026-11-16 für Gemini-TTS (lib/podcast/voice-directions.ts),
+ * vorher im OpenAI-Format für gpt-4o-mini-tts.
  */
+
+import { VOICE_DIRECTIONS_DE, VOICE_DIRECTIONS_EN } from '@/lib/podcast/voice-directions'
 
 // Default podcast script prompt template - GERMAN
 export const DEFAULT_SCRIPT_PROMPT_DE = `Du bist ein erfahrener Podcast-Skriptautor. Erstelle ein lebendiges, natürliches Gespräch auf DEUTSCH zwischen einem Host und einem Gast für den "Synthesizer Daily" Podcast.
@@ -21,40 +26,14 @@ export const DEFAULT_SCRIPT_PROMPT_DE = `Du bist ein erfahrener Podcast-Skriptau
 {voiceStyle}
 
 **Output-Format (WICHTIG - exakt dieses Format verwenden):**
-HOST: [emotion] Dialog text hier...
-GUEST: [emotion] Antwort hier...
-HOST (overlapping): [emotion] Kurzer Einwurf...
-GUEST (overlapping): [emotion] Kurzer Einwurf...
+HOST: [indignant, speaking fast] Dialogtext hier...
+GUEST: Antwort ohne Anweisung, wenn die Worte reichen...
+HOST (overlapping): [sharp and quick] Kurzer Einwurf...
+GUEST (overlapping): Kurzer Einwurf...
 
 Zeilen mit \`(overlapping)\` werden zeitlich ÜBER die vorherige Zeile gelegt — beide Stimmen sind gleichzeitig hörbar.
 
-**Sprechanweisungen (MÜSSEN auf Englisch sein, auch im deutschen Skript!):**
-Die Anweisungen in eckigen Klammern werden als \`instructions\`-Parameter an OpenAIs gpt-4o-mini-tts geschickt.
-Schreibe sie im OpenAI-Format mit diesen Kategorien: **Voice Affect** (Stimmcharakter), **Tone** (Tonfall), **Pacing** (Tempo).
-NICHT: visuelle Gesten, abstrakte Adjektive oder literarische Beschreibungen.
-
-✅ GUTE Beispiele (OpenAI-kompatibel):
-- [dry, clipped, unimpressed, quick pacing]
-- [sharp, fast, cutting in, impatient]
-- [deadpan, flat, slower]
-- [exasperated, amused, brisk]
-- [indignant, rising, fast pacing]
-- [booming, emphatic, building, gaining speed]
-- [conspiratorial, amused, leaning in]
-- [mock-outraged, theatrical, varied pacing]
-- [earnest, slower, sincere, brief]
-- [grave and authoritative, deliberate pacing, conveying weight]
-- [doubtful, probing tone, unconvinced]
-- [gleeful, fast, savoring the takedown]
-
-❌ SCHLECHTE Beispiele:
-- [gently shifting] ← abstrakt, keine klare Stimmrichtung
-- [carefully] ← zu vage, kein hörbarer Effekt
-- [with a hint of something deeper] ← literarisch
-- [tilting head] ← visuelle Geste, kein Stimmeffekt
-- [slow down, lower pitch] ← zu technisch/mechanisch, kein Charakter
-
-WICHTIG: Die Anweisungen in den Klammern MÜSSEN auf Englisch sein — der Dialogtext bleibt auf Deutsch.
+${VOICE_DIRECTIONS_DE}
 
 **GRUNDREGELN:**
 1. **Fakten-Hygiene:** Keine erfundenen Details. Bei Unsicherheit das in der Rolle sagen („Da müsste ich nachschauen.").
@@ -71,7 +50,7 @@ WICHTIG: Die Anweisungen in den Klammern MÜSSEN auf Englisch sein — der Dialo
     HOST: …letzter Satz zu News #4…
     GUEST: …Reaktion auf News #4…
     [INTERMEZZO]
-    HOST: [thoughtfully] Weißt du was, bevor wir zur nächsten Sache kommen — ich denk gerade…
+    HOST: [thoughtful, slower] Weißt du was, bevor wir zur nächsten Sache kommen — ich denk gerade…
     GUEST: Was?
     HOST: …mehrere Sätze Selbstreflexion zwischen den beiden…
     GUEST: …Antwort…
@@ -122,7 +101,7 @@ Cold Open + Smalltalk + Begrüßung + erster Artikel = ARTICLE 1 (kein Marker n�
 Beispiel:
 HOST: [warm] ...erster Artikel zu Ende diskutiert.
 [ARTICLE 2]
-GUEST: [thoughtfully] Zweiter Artikel: das Thema XY beschäftigt mich seit Wochen...
+GUEST: [thoughtful, slower] Zweiter Artikel: das Thema XY beschäftigt mich seit Wochen...
 [ARTICLE 3]
 HOST: [curious] Und jetzt zu unserem dritten Punkt: ...
 Diese Marker sind die Kapitel-Anker für die Hintergrundmusik beim Übergang. Setze sie sauber zwischen den Artikel-Diskussionen, niemals MITTEN in einem Argument.
@@ -155,38 +134,14 @@ The source content below may be in German or another language. You MUST translat
 {voiceStyle}
 
 **Output Format (IMPORTANT - use exactly this format):**
-HOST: [emotion] Dialog text here...
-GUEST: [emotion] Response text here...
-HOST (overlapping): [emotion] Short interjection...
-GUEST (overlapping): [emotion] Short interjection...
+HOST: [indignant, speaking fast] Dialog text here...
+GUEST: Response without a direction when the words carry it...
+HOST (overlapping): [sharp and quick] Short interjection...
+GUEST (overlapping): Short interjection...
 
 Lines with \`(overlapping)\` are layered ON TOP of the previous line — both voices audible simultaneously.
 
-**Speaking Instructions (Voice Direction Tags):**
-The instructions in square brackets are sent as the \`instructions\` parameter to OpenAI's gpt-4o-mini-tts.
-Write them using OpenAI's format with these categories: **Voice Affect** (character), **Tone** (attitude), **Pacing** (speed).
-NOT: visual gestures, abstract adjectives, or literary descriptions.
-
-✅ GOOD examples (OpenAI-compatible):
-- [dry, clipped, unimpressed, quick pacing]
-- [sharp, fast, cutting in, impatient]
-- [deadpan, flat, slower]
-- [exasperated, amused, brisk]
-- [indignant, rising, fast pacing]
-- [booming, emphatic, building, gaining speed]
-- [conspiratorial, amused, leaning in]
-- [mock-outraged, theatrical, varied pacing]
-- [earnest, slower, sincere, brief]
-- [grave and authoritative, deliberate pacing, conveying weight]
-- [doubtful, probing tone, unconvinced]
-- [gleeful, fast, savoring the takedown]
-
-❌ BAD examples:
-- [gently shifting] ← abstract, no clear voice direction
-- [carefully] ← too vague, no audible effect
-- [with a hint of something deeper] ← literary
-- [tilting head] ← visual gesture, not a voice effect
-- [slow down, lower pitch] ← too mechanical, no character
+${VOICE_DIRECTIONS_EN}
 
 **GROUND RULES:**
 1. **Fact hygiene:** No invented details. When uncertain, say so in character ("I'd have to check that.").
@@ -220,7 +175,7 @@ Cold Open + smalltalk + greeting + first article = ARTICLE 1 (no marker needed �
 Example:
 HOST: [warm] ...wrapping up the first article.
 [ARTICLE 2]
-GUEST: [thoughtfully] Second story: this XY topic has been on my mind for weeks...
+GUEST: [thoughtful, slower] Second story: this XY topic has been on my mind for weeks...
 [ARTICLE 3]
 HOST: [curious] And now to our third point: ...
 These markers anchor chapter background music transitions. Place them cleanly between article discussions, never MID-argument.

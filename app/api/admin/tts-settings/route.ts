@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth/session'
 import { getTTSSettings, generatePreviewAudio, TTSVoice, TTSModel } from '@/lib/tts/openai-tts'
 import { DIALOGUE_STYLE_RULES_EN } from '@/lib/podcast/dialogue-style'
+import { isGeminiTTSModel, isGeminiVoice } from '@/lib/tts/gemini-voices'
 
 /**
  * GET /api/admin/tts-settings
@@ -48,7 +49,16 @@ interface UpdateSettingsRequest {
   podcast_dialogue_rules_en?: string | null
   // Mixing settings (JSON string)
   mixing_settings?: string
+  // Sprachsynthese der Podcast-Jobs (seit 2026-11-16)
+  podcast_tts_provider?: string
+  gemini_tts_model?: string
+  gemini_host_voice_de?: string
+  gemini_guest_voice_de?: string
+  gemini_host_voice_en?: string
+  gemini_guest_voice_en?: string
 }
+
+const GEMINI_VOICE_KEYS = ['gemini_host_voice_de', 'gemini_guest_voice_de', 'gemini_host_voice_en', 'gemini_guest_voice_en'] as const
 
 const VALID_VOICES: TTSVoice[] = ['alloy', 'echo', 'fable', 'nova', 'onyx', 'shimmer']
 const VALID_MODELS: TTSModel[] = ['tts-1', 'tts-1-hd', 'gpt-4o-mini-tts']
@@ -155,6 +165,30 @@ export async function PUT(request: NextRequest) {
     // Mixing settings (stored as JSON string)
     if (body.mixing_settings !== undefined) {
       updates.push({ key: 'mixing_settings', value: body.mixing_settings })
+    }
+
+    // Anbieter der Podcast-Jobs und Gemini-Besetzung
+    if (body.podcast_tts_provider !== undefined) {
+      if (body.podcast_tts_provider !== 'openai' && body.podcast_tts_provider !== 'gemini') {
+        return NextResponse.json({ error: 'Invalid podcast_tts_provider' }, { status: 400 })
+      }
+      updates.push({ key: 'podcast_tts_provider', value: body.podcast_tts_provider })
+    }
+
+    if (body.gemini_tts_model !== undefined) {
+      if (!isGeminiTTSModel(body.gemini_tts_model)) {
+        return NextResponse.json({ error: 'Invalid gemini_tts_model' }, { status: 400 })
+      }
+      updates.push({ key: 'gemini_tts_model', value: body.gemini_tts_model })
+    }
+
+    for (const key of GEMINI_VOICE_KEYS) {
+      const value = body[key]
+      if (value === undefined) continue
+      if (!isGeminiVoice(value)) {
+        return NextResponse.json({ error: `Invalid voice for ${key}` }, { status: 400 })
+      }
+      updates.push({ key, value })
     }
 
     // Apply updates

@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info, Pause, Sparkles, Clock, FileText, Headphones, Users, SlidersHorizontal, RotateCcw, Database, MessageSquare, BrainCircuit, ArrowRight, TrendingUp, BookOpen, History, Radio } from 'lucide-react'
+import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info, Pause, Sparkles, Clock, FileText, Headphones, Users, SlidersHorizontal, RotateCcw, Database, MessageSquare, BrainCircuit, ArrowRight, TrendingUp, BookOpen, History, Radio, FlaskConical } from 'lucide-react'
 import { StereoPodcastPlayer } from '@/components/stereo-podcast-player'
 import type { SegmentMetadata } from '@/lib/audio/stereo-mixer'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +20,17 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { AudioFileManager, type AudioFile } from '@/components/admin/audio-file-manager'
 import { PodcastTimeMachine } from '@/components/admin/podcast-time-machine'
 import { PodcastRegiePanel } from '@/components/admin/podcast-regie-panel'
+import { GeminiVoiceSettings, type GeminiCast } from '@/components/admin/gemini-voice-settings'
+import { PodcastVoiceLab } from '@/components/admin/podcast-voice-lab'
+import {
+  DEFAULT_GEMINI_TTS_MODEL,
+  DEFAULT_GEMINI_VOICES,
+  ttsLangOf,
+  type GeminiTTSModel,
+  type PodcastTTSLang,
+  type PodcastTTSProvider,
+} from '@/lib/tts/gemini-voices'
+import { GEMINI_MODEL_LABELS, OPENAI_PODCAST_VOICES } from '@/lib/tts/podcast-voices'
 import { EnvelopeEditor } from '@/components/admin/envelope-editor'
 import type { AudioEnvelope } from '@/lib/audio/envelope'
 import { legacyIntroToEnvelopes, legacyOutroToEnvelopes, legacyIntermezzoToEnvelopes } from '@/lib/audio/envelope'
@@ -47,6 +58,12 @@ interface TTSSettings {
   podcast_dialogue_rules_en: string | null
   podcast_dialogue_rules_default_en: string
   mixing_settings: MixingSettings | null
+  podcast_tts_provider?: PodcastTTSProvider
+  gemini_tts_model?: GeminiTTSModel
+  gemini_host_voice_de?: string
+  gemini_guest_voice_de?: string
+  gemini_host_voice_en?: string
+  gemini_guest_voice_en?: string
 }
 
 type CurveType = 'linear' | 'exponential'
@@ -162,22 +179,6 @@ const PODCAST_LOCALES: { code: PodcastLocale; name: string; ttsLang: 'de' | 'en'
   { code: 'en', name: 'English', ttsLang: 'en' },
   { code: 'cs', name: 'Čeština', ttsLang: 'en' },
   { code: 'nds', name: 'Plattdüütsch', ttsLang: 'en' },
-]
-
-const OPENAI_PODCAST_VOICES: Array<{ id: TTSVoice; name: string; description: string }> = [
-  { id: 'nova', name: 'Nova', description: 'Warm, engaging female' },
-  { id: 'shimmer', name: 'Shimmer', description: 'Expressive female' },
-  { id: 'alloy', name: 'Alloy', description: 'Balanced, neutral' },
-  { id: 'echo', name: 'Echo', description: 'Warm male' },
-  { id: 'fable', name: 'Fable', description: 'British accent' },
-  { id: 'onyx', name: 'Onyx', description: 'Deep, authoritative male' },
-  { id: 'coral', name: 'Coral', description: 'Warm, expressive' },
-  { id: 'ash', name: 'Ash', description: 'Clear, direct' },
-  { id: 'sage', name: 'Sage', description: 'Calm, composed' },
-  { id: 'ballad', name: 'Ballad', description: 'Melodic, storytelling' },
-  { id: 'verse', name: 'Verse', description: 'Versatile, dynamic' },
-  { id: 'marin', name: 'Marin', description: 'Warm, recommended' },
-  { id: 'cedar', name: 'Cedar', description: 'Natural, recommended' },
 ]
 
 const EXAMPLE_PODCAST_SCRIPT = `HOST: [cheerful and warm, genuinely happy, slightly faster pacing] Good morning and welcome to Synthszr Daily! I'm your host, and today we have some exciting market news to discuss.
@@ -582,7 +583,7 @@ function AudioPage() {
   const [ttsSuccess, setTtsSuccess] = useState(false)
 
   // Sync active tab with URL ?tab= param
-  const validTabs = useMemo(() => new Set(['episode', 'recording', 'character', 'timemachine', 'podigee']), [])
+  const validTabs = useMemo(() => new Set(['episode', 'recording', 'voicelab', 'character', 'timemachine', 'podigee']), [])
   const tabFromUrl = searchParams.get('tab')
   const activeTab = validTabs.has(tabFromUrl ?? '') ? tabFromUrl! : 'episode'
   const setActiveTab = useCallback((tab: string) => {
@@ -610,6 +611,11 @@ function AudioPage() {
   const [openaiHostVoice, setOpenaiHostVoice] = useState<TTSVoice>('shimmer')
   const [openaiGuestVoice, setOpenaiGuestVoice] = useState<TTSVoice>('fable')
   const [openaiModel, setOpenaiModel] = useState<TTSModel>('gpt-4o-mini-tts')
+  // Anbieter der Podcast-Jobs und Gemini-Besetzung (seit 2026-11-16)
+  const [ttsProvider, setTtsProvider] = useState<PodcastTTSProvider>('openai')
+  const [geminiCast, setGeminiCast] = useState<GeminiCast>({ model: DEFAULT_GEMINI_TTS_MODEL, voices: DEFAULT_GEMINI_VOICES })
+  // Testlauf: Audio nicht mit dem Post verknüpfen (keine Live-Folge, kein Gedächtnis)
+  const [testRun, setTestRun] = useState(false)
 
   // Stereo mixing data
   const [segmentUrls, setSegmentUrls] = useState<string[]>([])
@@ -973,6 +979,14 @@ function AudioPage() {
         if (data.podcast_guest_voice_en) {
           setOpenaiGuestVoice(data.podcast_guest_voice_en as TTSVoice)
         }
+        setTtsProvider(data.podcast_tts_provider === 'gemini' ? 'gemini' : 'openai')
+        setGeminiCast({
+          model: data.gemini_tts_model || DEFAULT_GEMINI_TTS_MODEL,
+          voices: {
+            de: { host: data.gemini_host_voice_de || DEFAULT_GEMINI_VOICES.de.host, guest: data.gemini_guest_voice_de || DEFAULT_GEMINI_VOICES.de.guest },
+            en: { host: data.gemini_host_voice_en || DEFAULT_GEMINI_VOICES.en.host, guest: data.gemini_guest_voice_en || DEFAULT_GEMINI_VOICES.en.guest },
+          },
+        })
       }
     } catch (error) {
       console.error('Error fetching TTS settings:', error)
@@ -1000,6 +1014,12 @@ function AudioPage() {
           podcast_guest_voice_en: openaiGuestVoice,
           podcast_duration_minutes: podcastDuration,
           podcast_dialogue_rules_en: dialogueRules.trim() && dialogueRules.trim() !== dialogueRulesDefault.trim() ? dialogueRules : null,
+          podcast_tts_provider: ttsProvider,
+          gemini_tts_model: geminiCast.model,
+          gemini_host_voice_de: geminiCast.voices.de.host,
+          gemini_guest_voice_de: geminiCast.voices.de.guest,
+          gemini_host_voice_en: geminiCast.voices.en.host,
+          gemini_guest_voice_en: geminiCast.voices.en.guest,
         }),
       })
       if (res.ok) {
@@ -1011,6 +1031,24 @@ function AudioPage() {
     } finally {
       setTtsSaving(false)
     }
+  }
+
+  // Stimmtest: Gemini-Besetzung eines Kits für eine Sprache speichern
+  async function adoptGeminiCast(lang: PodcastTTSLang, model: GeminiTTSModel, host: string, guest: string) {
+    const res = await fetch('/api/admin/tts-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        gemini_tts_model: model,
+        [`gemini_host_voice_${lang}`]: host,
+        [`gemini_guest_voice_${lang}`]: guest,
+      }),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.error || 'Speichern fehlgeschlagen')
+    }
+    setGeminiCast((prev) => ({ model, voices: { ...prev.voices, [lang]: { host, guest } } }))
   }
 
   function updateMixing(key: keyof MixingSettings, value: number | boolean | string | AudioEnvelope) {
@@ -1134,14 +1172,18 @@ function AudioPage() {
     setPodcastCurrentLine(0)
 
     try {
+      // Anbieter aus Admin → Audio → Recording; Gemini mit der Besetzung der Skriptsprache.
+      const useGemini = ttsProvider === 'gemini'
+      const geminiVoices = geminiCast.voices[ttsLangOf(selectedLocale)]
+      const linkToPost = !!selectedPostId && !testRun
       const requestBody = {
         script,
-        hostVoiceId: openaiHostVoice,
-        guestVoiceId: openaiGuestVoice,
-        provider: 'openai' as const,
-        model: openaiModel,
-        title: selectedPostId ? `podcast-${selectedPostId}` : `test-podcast-${Date.now()}`,
-        postId: selectedPostId || undefined,
+        hostVoiceId: useGemini ? geminiVoices.host : openaiHostVoice,
+        guestVoiceId: useGemini ? geminiVoices.guest : openaiGuestVoice,
+        provider: useGemini ? ('gemini' as const) : ('openai' as const),
+        model: useGemini ? geminiCast.model : openaiModel,
+        title: linkToPost ? `podcast-${selectedPostId}` : `test-${useGemini ? 'gemini' : 'openai'}-${Date.now()}`,
+        postId: linkToPost ? selectedPostId : undefined,
         sourceLocale: selectedLocale,
       }
 
@@ -1228,7 +1270,7 @@ function AudioPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full max-w-2xl grid-cols-5">
+        <TabsList className="grid w-full max-w-3xl grid-cols-6">
           <TabsTrigger value="episode" className="flex items-center gap-2">
             <Sparkles className="h-4 w-4" />
             Episode
@@ -1236,6 +1278,10 @@ function AudioPage() {
           <TabsTrigger value="recording" className="flex items-center gap-2">
             <Mic className="h-4 w-4" />
             Recording
+          </TabsTrigger>
+          <TabsTrigger value="voicelab" className="flex items-center gap-2">
+            <FlaskConical className="h-4 w-4" />
+            Stimmtest
           </TabsTrigger>
           <TabsTrigger value="character" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
@@ -1387,6 +1433,23 @@ function AudioPage() {
                 {scriptGenerated && describeRun(scriptRunInfo) && (
                   <p className="text-xs text-muted-foreground">{describeRun(scriptRunInfo)}</p>
                 )}
+              </div>
+
+              {/* Stimmen und Testlauf */}
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm">
+                <span className="text-muted-foreground">
+                  Stimmen:{' '}
+                  {ttsProvider === 'gemini'
+                    ? `${GEMINI_MODEL_LABELS[geminiCast.model] ?? geminiCast.model} · ${geminiCast.voices[ttsLangOf(selectedLocale)].host} / ${geminiCast.voices[ttsLangOf(selectedLocale)].guest}`
+                    : `OpenAI ${openaiModel} · ${openaiHostVoice} / ${openaiGuestVoice}`}
+                  {' '}(ändern unter Recording, vergleichen unter Stimmtest)
+                </span>
+                <div className="flex items-center gap-2">
+                  <Switch id="podcast-test-run" checked={testRun} onCheckedChange={setTestRun} disabled={!selectedPostId} />
+                  <Label htmlFor="podcast-test-run" className="text-sm">
+                    Testlauf: Audio nicht mit dem Post verknüpfen
+                  </Label>
+                </div>
               </div>
 
               {/* Generate Button & Status */}
@@ -1848,7 +1911,7 @@ function AudioPage() {
                 Podcast-Einstellungen
               </CardTitle>
               <CardDescription>
-                OpenAI gpt-4o-mini-tts mit Sprechanweisungen
+                Sprachsynthese der Podcast-Jobs (OpenAI oder Gemini) und Stimmen für Emma und Synthesizer
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -1859,11 +1922,31 @@ function AudioPage() {
                 </div>
               ) : ttsSettings ? (
                 <>
+                  {/* Anbieter der Podcast-Jobs */}
+                  <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b">
+                    <div>
+                      <Label className="text-base font-semibold">Anbieter der Podcast-Jobs</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Gilt für „Podcast generieren“ im Episode-Tab. OpenAI schaltet tts-1, tts-1-hd und gpt-4o-mini-tts am 6. Januar 2027 ab.
+                      </p>
+                    </div>
+                    <Select value={ttsProvider} onValueChange={(v) => setTtsProvider(v as PodcastTTSProvider)}>
+                      <SelectTrigger className="w-40" aria-label="Anbieter der Podcast-Jobs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="openai">OpenAI</SelectItem>
+                        <SelectItem value="gemini">Gemini</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   {/* Model Selection */}
                   <div className="space-y-3 p-4 bg-primary/5 rounded-lg border-2 border-primary/20">
                     <div className="flex items-center justify-between">
                       <div>
-                        <Label className="text-base font-semibold">OpenAI Model</Label>
+                        <Label className="text-base font-semibold flex items-center gap-2">
+                          OpenAI Model
+                          <Badge variant={ttsProvider === 'openai' ? 'default' : 'outline'}>{ttsProvider === 'openai' ? 'aktiv' : 'nicht aktiv'}</Badge>
+                        </Label>
                         <p className="text-sm text-muted-foreground">
                           ~$0.20/Podcast
                         </p>
@@ -1926,6 +2009,11 @@ function AudioPage() {
                     </div>
                   </div>
 
+                  {/* Gemini-Besetzung */}
+                  <div className="space-y-4 pb-4 border-b">
+                    <GeminiVoiceSettings value={geminiCast} onChange={setGeminiCast} active={ttsProvider === 'gemini'} />
+                  </div>
+
                   {/* Duration Slider */}
                   <div className="space-y-4 pb-4 border-b">
                     <div>
@@ -1971,6 +2059,28 @@ function AudioPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ================================================================ */}
+        {/* VOICE LAB TAB (Stimmtest)                                        */}
+        {/* ================================================================ */}
+        <TabsContent value="voicelab" className="space-y-6">
+          {ttsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Lade Einstellungen...</div>
+          ) : (
+            <PodcastVoiceLab
+              currentScript={podcastScript}
+              settings={{
+                provider: ttsProvider,
+                openaiModel,
+                openaiHost: openaiHostVoice,
+                openaiGuest: openaiGuestVoice,
+                geminiModel: geminiCast.model,
+                geminiVoices: geminiCast.voices,
+              }}
+              onAdoptGemini={adoptGeminiCast}
+            />
+          )}
         </TabsContent>
 
         {/* ================================================================ */}

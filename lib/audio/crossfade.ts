@@ -8,6 +8,7 @@
 import { MPEGDecoder } from 'mpg123-decoder'
 import type { AudioEnvelope } from './envelope'
 import { sampleEnvelope } from './envelope'
+import { estimateAudioDurationSec } from './wav'
 // @breezystack/lamejs is an ESM-compatible fork that works in serverless
 import { Mp3Encoder } from '@breezystack/lamejs'
 
@@ -536,11 +537,13 @@ export function analyzeText(text: string): {
 } {
   // Strip the voice direction for analysis. The first bracket is the TTS
   // instruction and free-form since 2026 ("[dry, measured]"); until 2026-10-21
-  // it counted as words, so short reactions were never recognised. Legacy
-  // single-word tags may also sit mid-line.
+  // it counted as words, so short reactions were never recognised. Since
+  // 2026-11-16 the scripts also place sound cues mid-line ("Yeah. [laughs]"),
+  // so every bracket goes; otherwise a cue at the end would hide a question
+  // mark or a trail-off.
   const cleanText = text
-    .replace(/^\s*\[[^\]]*\]\s*/, '')
-    .replace(/\[(?:cheerfully|thoughtfully|seriously|excitedly|skeptically|laughing|sighing|whispering|interrupting|curiously|dramatically|calmly|enthusiastically)\]\s*/gi, '')
+    .replace(/\s*\[[^\]]*\]\s*/g, ' ')
+    .replace(/\s{2,}/g, ' ')
     .trim()
 
   const words = cleanText.split(/\s+/).filter(w => w.length > 0)
@@ -1171,13 +1174,15 @@ function computeIntroOffsetSec(options: CrossfadeOptions): number {
 }
 
 /**
- * Compute the total duration of segments[0..articleStartIdx-1] from their MP3 buffers
- * (approximate — uses the 128kbps assumption that's already used elsewhere).
+ * Compute the total duration of segments[0..articleStartIdx-1] from their buffers.
+ * MP3 keeps the 128kbps assumption used elsewhere; WAV segments (Gemini-TTS)
+ * are measured from their header, sonst läge die Intermezzo-Schätzung um den
+ * Faktor drei daneben.
  */
 function computeSegmentsDurationSec(segments: AudioSegment[], untilIdx: number): number {
   let total = 0
   for (let i = 0; i < untilIdx; i++) {
-    total += segments[i].buffer.length / (128 * 1024 / 8)
+    total += estimateAudioDurationSec(segments[i].buffer)
   }
   return total
 }
@@ -1379,7 +1384,7 @@ async function concatenateLargeScale(
   if (includeIntro) {
     console.log(`[Crossfade] Loading and mixing intro with first segment...`)
     const intro = await loadIntro(introUrl)
-    const firstPcm = await decodeMP3(segments[0].buffer)
+    const firstPcm = await decodeAudio(segments[0].buffer)
     const firstStereo = applyStereoPosition(firstPcm, segments[0].speaker, stereoPositions)
 
     let introResult: Float32Array[]
@@ -1426,7 +1431,7 @@ async function concatenateLargeScale(
     let pendingDurationSec = 0
 
     for (let i = middleStart; i < segments.length; i++) {
-      let pcm = await decodeMP3(segments[i].buffer)
+      let pcm = await decodeAudio(segments[i].buffer)
 
       // Trim leading silence for overlapping segments
       if (segments[i].overlapping) {
@@ -1675,7 +1680,7 @@ export async function concatenateWithCrossfade(
 
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i]
-    const rawPcm = await decodeMP3(seg.buffer)
+    const rawPcm = await decodeAudio(seg.buffer)
     // Apply stereo panning: HOST slightly left, GUEST slightly right
     let pcm = applyStereoPosition(rawPcm, seg.speaker, stereoPositions)
 

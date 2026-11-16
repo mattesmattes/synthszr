@@ -10,12 +10,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/auth/session'
 import { parseScriptText, type PodcastLine } from '@/lib/tts/elevenlabs-tts'
+import { isGeminiTTSModel, isGeminiVoice } from '@/lib/tts/gemini-voices'
 
 interface CreateJobRequest {
   script: string | PodcastLine[]
   hostVoiceId: string
   guestVoiceId: string
-  provider?: 'elevenlabs' | 'openai'
+  provider?: 'elevenlabs' | 'openai' | 'gemini'
   model?: string
   title?: string
   postId?: string        // generated_posts.id - links to post_podcasts on completion
@@ -50,6 +51,17 @@ export async function POST(request: NextRequest) {
         { error: 'Script has no valid dialogue lines' },
         { status: 400 }
       )
+    }
+
+    // Gemini-TTS (Podcast Studio, seit 2026-11-16): Modell und Stimmen prüfen,
+    // bevor der 800-s-Worker mit falschen Werten startet.
+    if (body.provider === 'gemini') {
+      if (!isGeminiTTSModel(body.model)) {
+        return NextResponse.json({ error: 'Unbekanntes Gemini-TTS-Modell' }, { status: 400 })
+      }
+      if (!isGeminiVoice(body.hostVoiceId) || !isGeminiVoice(body.guestVoiceId)) {
+        return NextResponse.json({ error: 'Unbekannte Gemini-Stimme' }, { status: 400 })
+      }
     }
 
     // podcast_jobs ist RLS-gesperrt → service_role statt anon
