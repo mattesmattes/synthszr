@@ -120,9 +120,19 @@ export function toGeminiInlineTags(text: string): string {
     .trim()
 }
 
-/** Was tatsächlich gesprochen wird (ohne Inline-Tags in spitzen Klammern). */
+/** Genau die Inline-Tags, die toGeminiInlineTags erzeugt. */
+const GEMINI_TAGS = [...new Set(GEMINI_INLINE_TAGS.map(([, tag]) => tag))]
+
+/**
+ * Was tatsächlich gesprochen wird: ohne die Gemini-Inline-Tags. Kein
+ * HTML-Filter (der Text landet nie als HTML im Dokument); ersetzt wird nur
+ * die feste Tag-Liste, und zwar durch ein Leerzeichen, damit nichts
+ * zusammenwächst.
+ */
 export function spokenText(text: string): string {
-  return text.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
+  let out = text
+  for (const tag of GEMINI_TAGS) out = out.split(tag).join(' ')
+  return out.replace(/\s+/g, ' ').trim()
 }
 
 export function isSpeakable(delivery: LineDelivery): boolean {
