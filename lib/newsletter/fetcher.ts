@@ -223,6 +223,21 @@ export async function runNewsletterFetch(options?: {
 
     // Fetch emails - use targetDate if provided, otherwise since last crawl
     const gmailClient = new GmailClient(tokenData.refresh_token)
+
+    // Zugang vorab pruefen: Die Abrufe unten fangen Fehler pro Batch ab und
+    // liefern dann 0 Mails — bei ungueltigem Token (invalid_grant) sah das am
+    // 2026-11-07 aus wie „Post noch nicht da", und die Tagesanalyse lief mit
+    // altem Material los. Nur die Meldung loggen: das Fehlerobjekt von gaxios
+    // enthaelt den Refresh-Token im Klartext.
+    try {
+      await gmailClient.getProfile()
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err)
+      console.error(`[Newsletter Fetch] Gmail-Zugriff fehlgeschlagen: ${reason}`)
+      send({ type: 'error', phase: 'fetching', item: { title: `Gmail-Zugriff fehlgeschlagen: ${reason}`, status: 'error' } })
+      return { success: false, newsletters: 0, articles: 0, emailNotes: 0, errors: 1, totalCharacters: 0 }
+    }
+
     let afterDate: Date
     let beforeDate: Date | undefined
 

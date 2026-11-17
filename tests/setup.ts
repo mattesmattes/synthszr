@@ -13,3 +13,10 @@ delete process.env.KV_REST_API_URL
 delete process.env.KV_REST_API_TOKEN
 delete process.env.UPSTASH_REDIS_REST_URL
 delete process.env.UPSTASH_REDIS_REST_TOKEN
+
+// Den echten CRON_SECRET aus .env.local NIE in Tests durchreichen: die
+// API-Tests sprechen standardmaessig Production an (TEST_API_URL fehlt →
+// https://synthszr.vercel.app). Mit dem Secret loeste ein Testlauf am
+// 2026-11-07 dreimal den echten Scheduler aus — drei parallele Tagesanalysen,
+// drei Digests. Tests, die Cron-Auth pruefen, setzen eigene Werte.
+delete process.env.CRON_SECRET

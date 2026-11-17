@@ -8,7 +8,7 @@ import { expireOldItems as expireOldQueueItems, resetStuckSelectedItems, syncPub
 import { MAX_DIGEST_SECTIONS, MIN_ANALYSIS_LENGTH } from '@/lib/constants/thresholds'
 import { verifyCronAuth } from '@/lib/security/cron-auth'
 import { getModelForUseCase } from '@/lib/ai/model-config'
-import { isStepComplete, dependencyGate } from '@/lib/scheduler/gating'
+import { isStepComplete, dependencyGate, analysisGate, digestInsertOutcome } from '@/lib/scheduler/gating'
 import { DEFAULT_SCHEDULE_TIMEZONE, dayKeys, isValidTimeZone, localClock, localDay } from '@/lib/scheduler/clock'
 
 export const runtime = 'nodejs'
@@ -196,7 +196,13 @@ export async function GET(request: NextRequest) {
   if (config.dailyAnalysis.enabled) {
     const shouldRun = runAll || isTimeMatch(config.dailyAnalysis.hour, config.dailyAnalysis.minute, currentHour, currentMinute)
     const recentlyRan = !forceRun && await hasRunToday(supabase, 'daily_analysis', tz)
-    if (shouldRun && !recentlyRan) {
+    const fetchGate = analysisGate({ fetchEnabled: config.newsletterFetch.enabled, fetchState: results.newsletterFetch })
+    if (shouldRun && !recentlyRan && fetchGate === 'waiting') {
+      // Keine Tagesmarke: der naechste Tick versucht es erneut. Ohne dieses
+      // Warten lief die Analyse am 2026-11-07 mit Vortagsmaterial los.
+      console.log(`[Scheduler] Daily analysis waits for newsletter fetch (${results.newsletterFetch})`)
+      results.dailyAnalysis = 'waiting_for_fetch'
+    } else if (shouldRun && !recentlyRan) {
       console.log('[Scheduler] Triggering daily analysis and synthesis...')
       try {
         const digestResult = await runDailyAnalysisAndSynthesis(supabase, baseUrl, tz)
@@ -602,6 +608,13 @@ async function runDailyAnalysisAndSynthesis(supabase: ReturnType<typeof createAd
     })
     .select('id')
     .single()
+
+  if (digestInsertOutcome(insertError) === 'parallel_run') {
+    // Unique-Index (seit 2026-11-07): ein paralleler Lauf war schneller und
+    // fuehrt die Synthese selbst aus — hier nichts doppelt anstossen.
+    console.log(`[DailyAnalysis] Digest fuer ${digestDate} hat ein paralleler Lauf schon gespeichert — uebernommen`)
+    return { success: true }
+  }
 
   if (insertError || !newDigest) {
     console.error('[DailyAnalysis] Failed to save digest:', insertError)
