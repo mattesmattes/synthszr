@@ -438,18 +438,22 @@ Erstelle folgenden JSON-Plan:
   "introParagraph": "2-3 Sätze auf DEUTSCH. Direkter Einstieg mit konkreter Beobachtung, kein LLM-Stil."
 }`
 
-  // maxTokens 32000 (war 16000): Der Plan über bis zu 40 Items enthält jetzt 40
-  // Headings UND 40 takeAngles (je ein voller deutscher Satz); bei einem Anthropic-
-  // Planning-Modell (prod: Sonnet 5 via settings.llm_model_config) zieht thinking:true
-  // zusätzlich Thinking-Tokens aus demselben Budget (beim Code-Default gemini-2.5-flash
-  // ist thinking ein No-op, dann geht das volle Budget an die Ausgabe). Die alten 16000 waren für
-  // Headings allein OHNE Thinking dimensioniert; mit beiden neuen Kostentreibern
-  // gibt 32000 sicheren Puffer. Verifiziert: 40 einzigartige Items → 40/40
-  // Headings + 40/40 takeAngles, JSON vollständig geparst (kein Truncation).
+  // maxTokens 64000 (war 32000, davor 16000): Der Plan über bis zu 40 Items
+  // enthält 40 Headings, 40 takeAngles und 40 retrievalHints (je ein voller
+  // deutscher Satz); beim Anthropic-Planning-Modell (prod: Sonnet 5 via
+  // settings.llm_model_config, Default-Effort high) zieht thinking:true die
+  // Denk-Tokens aus DEMSELBEN Budget (beim Code-Default gemini-2.5-flash ist
+  // thinking ein No-op). PROD-BEFUND 2026-11-17: 32000 reichten seit Tagen nur
+  // knapp — erfolgreiche Läufe brauchten 27.900–31.100 Token, jeweils mehrere
+  // Versuche endeten bei genau 32000 mit abgeschnittenem JSON („leere Antwort …
+  // stop_reason: max_tokens“ bzw. „JSON.parse fehlgeschlagen (abgeschnitten)“);
+  // am 17.11. scheiterten alle 22 Versuche zweier Jobs (je 0,54 USD), es gab
+  // keinen Nacht-Artikel. Gestreamt wird ohnehin (thinking:true), Sonnet 5 kann
+  // bis 128000; bezahlt wird nur, was erzeugt wird.
   // thinking:true — die Winkel-Zuweisung mit Anti-Redundanz über den ganzen
   // Digest ist anspruchsvoller als reine Sortierung. temperature entfällt: mit
   // thinking (und bei Sonnet 5 generell) wird es von callModelNonStreaming ohnehin ignoriert.
-  const text = await callModelNonStreaming(planPrompt, planSystemPrompt, model, { thinking: true, maxTokens: 32000, useCase: 'article_planning' })
+  const text = await callModelNonStreaming(planPrompt, planSystemPrompt, model, { thinking: true, maxTokens: 64000, useCase: 'article_planning' })
 
   // JSON aus möglichen Markdown-Fences extrahieren. Robust auch gegen einen
   // geöffneten, aber nicht geschlossenen ```json-Block (führende Fence strippen,

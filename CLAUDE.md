@@ -723,6 +723,21 @@ Not-Aus: `update curation_runs set cancel_requested = true where id = …` —
 `advanceRun` schließt den Run beim nächsten Tick als `cancelled` ab, bevor er
 weiterarbeitet. `shadow_enabled = false` stoppt nur neue Kickoffs.
 
+## Recent Changes (2026-11-17)
+
+### Nacht-Artikel: Planungsbudget und Kappe für Wiederholungen
+- Befund: Am 17.11. entstand kein Nacht-Artikel. Der Planer (`planArticle`,
+  Use Case `article_planning`, prod Sonnet 5 mit thinking, Default-Effort high)
+  hatte `maxTokens` 32000 für Denken UND JSON-Plan; gute Läufe brauchten seit
+  Tagen 27.900–31.100 Token, mehrere Versuche je Tag endeten bei genau 32000
+  mit abgeschnittenem JSON. Am 17.11. scheiterten alle 22 Versuche zweier
+  Auto-Jobs (je 0,54 USD). Jetzt 64000 (`lib/claude/ghostwriter-pipeline.ts`,
+  gestreamt; bezahlt wird nur Erzeugtes).
+- Der Scheduler legte nach jedem gescheiterten Auto-Job beim nächsten Tick
+  einen neuen an (Tagesmarke erst mit fertigem Post). `createArticleJob`
+  (`lib/article-jobs/service.ts`) legt nach `MAX_FAILED_AUTO_JOBS` = 3
+  fehlgeschlagenen Jobs je Digest keinen weiteren an (`too_many_failed_jobs`).
+
 ## Recent Changes (2026-11-16)
 
 ### Podcast: Gemini-TTS, Stimmtest, Sprechanweisungen für Gemini

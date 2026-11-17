@@ -94,8 +94,17 @@ async function markTaskRun(supabase: AdminClient, taskKey: string) {
 }
 
 /**
+ * Höchstens so viele fehlgeschlagene Auto-Jobs je Digest. Der Scheduler legt
+ * nach jedem Fehlschlag beim nächsten Tick einen neuen Job an (die Tagesmarke
+ * setzt erst der fertige Post). Ohne Kappe lief das am 2026-11-17 den ganzen
+ * Morgen: je Job zwölf Planungsversuche à 0,54 USD, alle am selben Fehler.
+ */
+export const MAX_FAILED_AUTO_JOBS = 3
+
+/**
  * Enqueues an article job for a digest. Idempotent: no-op when a post or a
- * non-error job already exists for the digest, or when no items are available.
+ * non-error job already exists for the digest, when MAX_FAILED_AUTO_JOBS jobs
+ * for it already failed, or when no items are available.
  */
 export async function createArticleJob(opts: {
   digestId: string
@@ -122,6 +131,13 @@ export async function createArticleJob(opts: {
     .neq('status', 'error')
     .maybeSingle()
   if (existingJob) return { created: false, reason: 'job_exists' }
+
+  const { count: failedJobs } = await supabase
+    .from('article_jobs')
+    .select('id', { count: 'exact', head: true })
+    .eq('digest_id', opts.digestId)
+    .eq('status', 'error')
+  if ((failedJobs ?? 0) >= MAX_FAILED_AUTO_JOBS) return { created: false, reason: 'too_many_failed_jobs' }
 
   // Select + enrich items (shared helper — same selection as the manual flow)
   const { pipelineItems, usedItemIds } = await selectAndEnrichItems({ maxItems: opts.maxItems, dedupeTopics: true })
