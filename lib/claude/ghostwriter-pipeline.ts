@@ -28,7 +28,7 @@ import {
   DEAD_AI_PHRASES,
   BUSINESS_FLUFF,
 } from '@/lib/claude/anti-llm-patterns'
-import { capSummarySentences, shortenBySentences, BUNDLE_TAG_LINE_RE } from '@/lib/claude/bundle-length'
+import { capSummarySentences, capSummaryChars, shortenBySentences, BUNDLE_TAG_LINE_RE } from '@/lib/claude/bundle-length'
 import { stripLoneSurrogates, escapeQuellmaterialTag } from '@/lib/claude/sanitize'
 import { repoRetrievalParams } from '@/lib/mattes/repo-intensity'
 import { getModelCapabilities } from '@/lib/claude/model-capabilities'
@@ -59,7 +59,7 @@ import { isTrackingRedirectUrl } from '@/lib/utils/url-sanitizer'
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { bundleLabel, type BundleType } from '@/lib/i18n/bundle-labels'
+import { BUNDLE_TYPES, bundleLabel, isBundleType, type BundleType } from '@/lib/i18n/bundle-labels'
 import { withUsageLogging } from '@/lib/ai/usage-log'
 
 export interface PipelineItem {
@@ -113,24 +113,57 @@ export interface BundleUnitIndices {
 
 /**
  * Reihenfolge der Bündel-Typen im Artikel: Die Cover Story führt (die
- * gewichtigste Meldung des Tages), Themen und Deep Dives folgen, die
- * Nachlese steht hinten.
+ * gewichtigste Meldung des Tages), Themen, Deep Dives und Long Reads folgen,
+ * die Nachlese steht hinten.
  */
-const BUNDLE_TYPE_ORDER: BundleType[] = ['cover_story', 'topic', 'deep_dive', 'recap']
+const BUNDLE_TYPE_ORDER: readonly BundleType[] = BUNDLE_TYPES
+
+export type BundleLengthRule =
+  | { kind: 'sentences'; max: number }
+  | { kind: 'chars'; max: number }
 
 /**
- * Obergrenze der Bündel-Zusammenfassung in Sätzen, je Bündel-Typ.
+ * Obergrenze der Bündel-Zusammenfassung je Bündel-Typ.
  *
  * Betreiber-Vorgabe 2026-09-13: die Cover Story darf doppelt so lang werden
- * wie „Thema des Tages" — der Synthszr Take bleibt für ALLE Typen gleich kurz
- * (s. BUNDLE_SYSTEM_ADDENDUM unten, die Take-Regel ist dort fix und hängt
- * nicht von diesem Wert ab).
+ * wie „Thema des Tages" (50 statt 25 Sätze).
+ * Betreiber-Vorgabe 2026-11-23: „Long Read" begrenzt die Zusammenfassung auf
+ * 5.000 Zeichen (am Satzende gekappt). Der Synthszr Take bleibt für ALLE Typen
+ * gleich kurz (s. buildBundleSystemAddendum unten, die Take-Regel ist dort
+ * fix und hängt nicht von diesem Wert ab).
  */
-const BUNDLE_MAX_SENTENCES: Record<BundleType, number> = {
+export const BUNDLE_MAX_SENTENCES = {
   topic: 25,
   deep_dive: 25,
   recap: 25,
   cover_story: 50,
+} as const
+
+export const BUNDLE_MAX_CHARS = {
+  long_read: 5000,
+} as const
+
+export const BUNDLE_LENGTH_RULES: Record<BundleType, BundleLengthRule> = {
+  topic: { kind: 'sentences', max: BUNDLE_MAX_SENTENCES.topic },
+  deep_dive: { kind: 'sentences', max: BUNDLE_MAX_SENTENCES.deep_dive },
+  recap: { kind: 'sentences', max: BUNDLE_MAX_SENTENCES.recap },
+  cover_story: { kind: 'sentences', max: BUNDLE_MAX_SENTENCES.cover_story },
+  long_read: { kind: 'chars', max: BUNDLE_MAX_CHARS.long_read },
+}
+
+/** Deckelt die Zusammenfassung eines Bündel-Abschnitts auf das typspezifische Limit (Take bleibt unangetastet). */
+export function capBundleSummary(section: string, bundleType: BundleType): string {
+  const rule = BUNDLE_LENGTH_RULES[bundleType]
+  return rule.kind === 'chars'
+    ? capSummaryChars(section, rule.max)
+    : capSummarySentences(section, rule.max)
+}
+
+/** Bündel-Hinweiszeile für ein Item im Planungs-Prompt (`planArticle`), für alle Bundle-Typen. */
+export function formatPlanBundleTag(bundleType: BundleType | null | undefined): string {
+  if (!bundleType || !BUNDLE_TYPE_ORDER.includes(bundleType)) return ''
+  const label = bundleLabel(bundleType, 'de')
+  return `\n   BÜNDEL: ${label} (gehört mit anderen "BÜNDEL: ${label}"-Items zusammen)`
 }
 
 /**
@@ -175,11 +208,11 @@ export function computeBundleGroups(items: PipelineItem[]): { topic: number[]; r
   const topic: number[] = []
   const recap: number[] = []
   items.forEach((item, i) => {
-    // Deep Dives und Cover Stories zaehlen fuer den Plan wie Themen — alle
-    // drei fuehren den Artikel an. Die feinere Unterscheidung (Reihenfolge,
-    // Laenge) macht computeBundleUnits/BUNDLE_MAX_SENTENCES.
-    if (item.bundle_type === 'topic' || item.bundle_type === 'deep_dive' || item.bundle_type === 'cover_story') topic.push(i + 1)
-    else if (item.bundle_type === 'recap') recap.push(i + 1)
+    // Cover Stories, Deep Dives und Long Reads zaehlen fuer den Plan wie Themen —
+    // alle vier fuehren den Artikel an. Die feinere Unterscheidung (Reihenfolge,
+    // Laenge) macht computeBundleUnits/BUNDLE_LENGTH_RULES.
+    if (item.bundle_type === 'recap') recap.push(i + 1)
+    else if (isBundleType(item.bundle_type)) topic.push(i + 1)
   })
   return { topic, recap }
 }
@@ -351,11 +384,7 @@ export async function planArticle(items: PipelineItem[], model: AIModel): Promis
 
   const itemList = items
     .map((item, i) => {
-      const bundleTag = item.bundle_type === 'topic'
-        ? '\n   BÜNDEL: Themen-Schwerpunkt (gehört mit anderen "BÜNDEL: Themen-Schwerpunkt"-Items zusammen)'
-        : item.bundle_type === 'recap'
-          ? '\n   BÜNDEL: Rückblick (gehört mit anderen "BÜNDEL: Rückblick"-Items zusammen)'
-          : ''
+      const bundleTag = formatPlanBundleTag(item.bundle_type)
       return `${i + 1}. TITEL: ${item.title}\n   QUELLE: ${item.source_display_name || item.source_identifier}\n   INHALT: ${escapeQuellmaterialTag(stripLoneSurrogates((item.content || '').slice(0, 600)).replace(/\n/g, ' '))}${bundleTag}`
     })
     .join('\n\n')
@@ -730,20 +759,31 @@ async function shortenHeadingViaModel(heading: string, model: AIModel): Promise<
 // Der Bündel-Modus überschreibt gezielt die EIN-Thema-Regel des Section-Prompts:
 // hier werden mehrere Quellen zusammengeführt, statt eine Meldung zu fokussieren.
 //
-// PARAMETRISIERT NACH BUNDLE_MAX_SENTENCES (seit „Cover Story", 2026-09-13):
-// die Obergrenze der Zusammenfassung haengt vom Bündel-Typ ab, die Take-Regel
-// darunter bleibt für ALLE Typen wörtlich identisch — sie ist bewusst NICHT
-// von maxSentences abgeleitet, damit ein längeres Bündel den Take nie mitzieht.
-function buildBundleSystemAddendum(bundleType: BundleType): string {
-  const maxSentences = BUNDLE_MAX_SENTENCES[bundleType]
+// PARAMETRISIERT NACH BUNDLE_LENGTH_RULES (seit „Cover Story", 2026-09-13, und
+// „Long Read", 2026-11-23): die Obergrenze der Zusammenfassung haengt vom
+// Bündel-Typ ab (Sätze oder Zeichen), die Take-Regel darunter bleibt für ALLE
+// Typen wörtlich identisch — sie ist bewusst NICHT von der Länge abgeleitet,
+// damit ein längeres Bündel den Take nie mitzieht.
+const formatDeNumber = (n: number): string =>
+  String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+
+export function buildBundleSystemAddendum(bundleType: BundleType): string {
+  const rule = BUNDLE_LENGTH_RULES[bundleType]
+  const summaryRule = rule.kind === 'chars'
+    ? `Die Zusammenfassung ist ein ausführlicher Long-Read-Bericht mit einer Ziellänge von ca. ${formatDeNumber(rule.max)} Zeichen (Richtwert ${formatDeNumber(Math.round(rule.max * 0.9))}–${formatDeNumber(rule.max)} Zeichen, harte Obergrenze ${formatDeNumber(rule.max)} Zeichen — Text darüber wird am Satzende abgeschnitten). Bleibe ein NÜCHTERNER, faktenreicher Bericht ohne Wertung: schöpfe Hintergründe, Zusammenhänge, Akteure, Zahlen und Details aus den Quellen in voller Tiefe aus, ohne mit Füllsätzen zu strecken. Jede Wertung gehört in den Synthszr Take.`
+    : `Die Zusammenfassung darf ausführlicher sein (bis zu ~${rule.max} Sätze), bleibt aber ein NÜCHTERNER Bericht ohne Wertung. Jede Wertung gehört in den Synthszr Take.`
+  const lengthPhrase = rule.kind === 'chars'
+    ? `bis zu ${formatDeNumber(rule.max)} Zeichen lang ist`
+    : `bis zu ${rule.max} Sätze hat`
+
   return `
 
 BÜNDEL-MODUS (überschreibt die EIN-Thema-Regel oben):
 - Dieser Abschnitt ist ein ausführlicher Leitartikel, der MEHRERE Quellen zusammenfasst. Anders als bei einer Einzelmeldung führst du hier ALLE Quellen redundanzfrei zusammen: decke JEDEN unterschiedlichen Aspekt ab, wiederhole Redundantes NICHT.
-- Die Zusammenfassung darf ausführlicher sein (bis zu ~${maxSentences} Sätze), bleibt aber ein NÜCHTERNER Bericht ohne Wertung. Jede Wertung gehört in den Synthszr Take.
+- ${summaryRule}
 - Gliedere diese längere Zusammenfassung in MEHRERE Absätze, getrennt durch eine Leerzeile: pro thematischem Block bzw. Aspekt/Quelle ein eigener Absatz (Richtwert 3-6 Sätze je Absatz). KEIN einziger Textblock über viele Sätze — der Leitartikel muss durch Absätze gegliedert und lesbar sein. Nur die Zusammenfassung wird so gegliedert; der Synthszr Take bleibt EIN Absatz.
 - DER SYNTHSZR TAKE HAT DIESELBE FORM WIE IN JEDEM ANDEREN ABSCHNITT: 50 bis 75 Wörter, ein Absatz. Er wächst NICHT mit der Zahl der Quellen und NICHT mit der Länge der Zusammenfassung darüber.
-- Das ist die häufigste Abweichung in diesem Modus: Weil die Zusammenfassung hier bis zu ${maxSentences} Sätze hat, wirkt ein Take von 60 Wörtern daneben knapp — er ist es nicht, er ist richtig. Widerstehe dem Sog, den Take mitwachsen zu lassen. Was über das Wortbudget hinausgeht, wird abgeschnitten.
+- Das ist die häufigste Abweichung in diesem Modus: Weil die Zusammenfassung hier ${lengthPhrase}, wirkt ein Take von 60 Wörtern daneben knapp — er ist es nicht, er ist richtig. Widerstehe dem Sog, den Take mitwachsen zu lassen. Was über das Wortbudget hinausgeht, wird abgeschnitten.
 - Genau EIN Take mit EINEM Blickwinkel, nicht mehrere aneinandergereihte Takes zu den einzelnen Quellen. Mehr Quellen heißt nicht mehr Meinung, sondern dieselbe Haltung auf breiterer Grundlage.
 - Company-Tags wie gewohnt (max 3 relevanteste über alle Quellen), ABER gib KEINE Quellen-Pfeil-Zeile aus (kein "→ [Quelle](URL)"): die Quellenangaben (Haupt- und Nebenquellen) werden deterministisch nach der Generierung ergänzt.
 - NENNE DIE PUBLIKATIONEN NICHT IM FLIESSTEXT. Keine Wendungen wie "wie TechCrunch berichtet", "laut Reuters", "einem Bericht der Financial Times zufolge". Der Abschnitt fasst mehrere Quellen zusammen; würde jede beim Namen genannt, zerfiele der Text in eine Aufzählung von Presseschauen. Die Quellenangaben stehen ohnehin vollständig unter dem Abschnitt.
@@ -1048,9 +1088,11 @@ export async function writeBundleSection(
   const premarketCompanyList = context.relevantCompanies.premarket.join(', ') || '(keine erkannt)'
 
   // Quellen-Blöcke fürs Prompt — alle gleichrangig, gleiches Content-Budget.
+  // Ein 5.000-Zeichen-Long-Read braucht auch bei 1-2 Quellen genug Rohmaterial,
+  // damit die Tiefe aus den Quellen kommt statt aus Füllsätzen.
   // JEDER content-Slice MUSS durch stripLoneSurrogates, sonst macht ein an der
   // Grenze zerschnittenes Surrogate den Anthropic-Body zu 400-Invalid-JSON.
-  const BUNDLE_SOURCE_CONTENT_CHARS = 4000
+  const BUNDLE_SOURCE_CONTENT_CHARS = bundleType === 'long_read' ? 12000 : 4000
   const sourceBlocks = items.map((it, i) => {
     const name = it.source_display_name || it.source_identifier
     return `[QUELLE ${i + 1}] ${name}${it.source_url ? ` | URL: ${it.source_url}` : ''}\n${escapeQuellmaterialTag(stripLoneSurrogates((it.content || 'Kein Inhalt verfügbar.').slice(0, BUNDLE_SOURCE_CONTENT_CHARS)))}`
@@ -1134,11 +1176,12 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   trimmed = await enforceHeadingLength(trimmed, (h) => shortenHeadingViaModel(h, model))
 
   // Quellen-Block deterministisch neu setzen: Tag-Zeile des Modells extrahieren
-  // (damit der Cap nur den Bericht zählt), Zusammenfassung hart auf 25 Sätze
-  // deckeln (Take bleibt unangetastet), dann Haupt-+Nebenquellen vor den Take
-  // einfügen.
+  // (damit der Cap nur den Bericht zählt), Zusammenfassung hart auf
+  // BUNDLE_LENGTH_RULES[bundleType] (25 Sätze / 50 Sätze Cover Story / 5.000
+  // Zeichen Long Read) deckeln (Take bleibt unangetastet), dann Haupt-+Neben-
+  // quellen vor den Take einfügen.
   const { tags, rest } = extractBundleTagLine(trimmed)
-  const capped = capSummarySentences(rest, 25)
+  const capped = capBundleSummary(rest, bundleType)
   const sourceBlock = buildBundleSourceBlock(tags, primary, secondary)
   let withSources = insertBeforeTake(capped, sourceBlock)
 
@@ -1152,8 +1195,9 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
 
   // Take hart auf das Wortbudget — NACH dem Umschreiben der Schlussfigur, sonst
   // arbeitete diese an einem Satz, der gleich wegfällt. Gerade hier nötig: Über
-  // dem Take stehen bis zu 25 Sätze Zusammenfassung, und das Modell lässt ihn
-  // danebenstehend mitwachsen, trotz ausdrücklicher Anweisung im Prompt.
+  // dem Take stehen je nach Typ bis zu 50 Sätze bzw. 5.000 Zeichen
+  // Zusammenfassung, und das Modell lässt ihn danebenstehend mitwachsen,
+  // trotz ausdrücklicher Anweisung im Prompt.
   withSources = sanitizeLexTags(capTake(withSources))
 
   // Beide Marker in EINER Heading-Zeile: zuerst die IDs ALLER Member in
@@ -1546,9 +1590,9 @@ export function buildBundleWriteUnits(orderedItems: PipelineItem[], plan: Articl
     // loescht, was er nicht will.
     //
     // NICHT fuer die Nachlese: Sie ist ein Rueckblick, keine Leitmeldung, fuer
-    // die eine Einzelfassung sinnvoll waere. Cover Story zaehlt dazu (sogar
-    // die gewichtigste Leitmeldung) — dieselbe Logik wie topic/deep_dive.
-    if (einheit.bundleType === 'topic' || einheit.bundleType === 'deep_dive' || einheit.bundleType === 'cover_story') {
+    // die eine Einzelfassung sinnvoll waere. Cover Story, Thema, Deep Dive und
+    // Long Read erhalten jeweils eine alternative Einzelfassung.
+    if (einheit.bundleType !== 'recap') {
       // Dieselbe Wahl wie beim Quellenblock: die inhaltsstaerkste Quelle traegt
       // die Meldung am besten allein.
       const staerkste = teile.reduce((a, b) =>
@@ -1934,7 +1978,7 @@ AI-TELLS UMSCHREIBEN (nur diese, minimal-invasiv, Aussage erhalten — NICHT den
 
 NICHT VERÄNDERN:
 8. Englische Fachbegriffe (Token, Reasoning, API, Fine-Tuning, Open Source, Benchmark, Model, Inference, Training) NICHT eindeutschen. Firmen-, Produkt- und Eigennamen unverändert lassen.
-9. Markdown-Formatierung (##, **, {Company}, {lex:...}, →, Synthszr Take:) unverändert lassen. Auch die Absatzstruktur — die Leerzeilen zwischen Absätzen — WÖRTLICH belassen: mehrere Absätze NICHT zu einem Block zusammenziehen und keine neuen Absätze einfügen. HTML-Kommentare am Ende von Überschriftszeilen — "<!-- data-queue-item-ids:… -->" (kommagetrennte IDs) und "<!-- data-bundle-type:… -->" (Werte wie topic, recap, deep_dive, cover_story), einzeln oder beide nebeneinander in derselben Zeile und in genau dieser Reihenfolge — ZEICHENGENAU und an exakt derselben Stelle belassen: niemals löschen, verschieben, umbrechen, kürzen, zusammenfassen oder verändern, auch nicht einzelne IDs darin. Sie tragen ein strukturelles Signal und dürfen nicht verloren gehen.
+9. Markdown-Formatierung (##, **, {Company}, {lex:...}, →, Synthszr Take:) unverändert lassen. Auch die Absatzstruktur — die Leerzeilen zwischen Absätzen — WÖRTLICH belassen: mehrere Absätze NICHT zu einem Block zusammenziehen und keine neuen Absätze einfügen. HTML-Kommentare am Ende von Überschriftszeilen — "<!-- data-queue-item-ids:… -->" (kommagetrennte IDs) und "<!-- data-bundle-type:… -->" (Werte wie topic, recap, deep_dive, cover_story, long_read), einzeln oder beide nebeneinander in derselben Zeile und in genau dieser Reihenfolge — ZEICHENGENAU und an exakt derselben Stelle belassen: niemals löschen, verschieben, umbrechen, kürzen, zusammenfassen oder verändern, auch nicht einzelne IDs darin. Sie tragen ein strukturelles Signal und dürfen nicht verloren gehen.
 10. Ansonsten Stil, Ton, Argument und Inhalt LASSEN — greife nur die oben gelisteten Tells an.
 
 Gib NUR den korrigierten Text zurück, keine Erklärungen oder Kommentare.`

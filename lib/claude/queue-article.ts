@@ -162,6 +162,35 @@ export function capByUnits<T extends { total_score?: number; bundle_type?: strin
   return out
 }
 
+/**
+ * Zählt die ABSCHNITTE (Einheiten) einer Item-Liste — identisch zur
+ * Gruppierung in `capByUnits` und `computeBundleUnits`: je (bundle_type,
+ * techmeme_story)-Gruppe 1 Einheit (ohne Story: 1 Einheit je bundle_type),
+ * plus jede ungelabelte Einzelmeldung als 1 Einheit.
+ */
+export function countSelectionUnits<
+  T extends { bundle_type?: string | null; metadata?: Record<string, unknown> | null },
+>(items: T[]): number {
+  const { bundled, single } = splitBundled(items)
+  const gruppen = new Set<string>()
+  for (const item of bundled) {
+    const story = item.metadata?.techmeme_story
+    gruppen.add(`${item.bundle_type}::${typeof story === 'string' ? story : ''}`)
+  }
+  return gruppen.size + single.length
+}
+
+/**
+ * Führt gekappte manuelle Auswahl (`cappedManual`, bereits durch `capByUnits`)
+ * mit nachgeladenen Balanced-Items zusammen, ohne das Quellen-Limit
+ * (`BUNDLE_SOURCES_MAX`) oder die Einheiten-Obergrenze (`maxUnits`) zu brechen.
+ */
+export function mergeSelectionWithFill<
+  T extends { total_score?: number; bundle_type?: string | null; metadata?: Record<string, unknown> | null },
+>(cappedManual: T[], fillItems: T[], maxUnits: number): T[] {
+  return capByUnits([...cappedManual, ...fillItems], maxUnits)
+}
+
 export function toPipelineItem(item: {
   id: string
   title: string
@@ -235,6 +264,7 @@ export async function selectAndEnrichItems(opts: {
     source_display_name: string | null
     source_url: string | null
     source_identifier: string
+    total_score?: number
     bundle_type?: BundleType | null
     // Trägt die Techmeme-Story, aus der bundleKeyOf den Gruppierungsschlüssel
     // liest — ohne sie fielen fünf Themen wieder zu einem Abschnitt zusammen.
@@ -257,22 +287,25 @@ export async function selectAndEnrichItems(opts: {
       // Abschnitt, ganz gleich ob es aus drei oder zwölf Quellen entsteht. Ein
       // schlichtes slice() schnitte mitten durch die Themen des Tages.
       selectedItems = capByUnits(manuallySelected, maxItems)
+      const selectedUnits = countSelectionUnits(selectedItems)
       if (selectedItems.length < manuallySelected.length) {
-        console.log(`[Ghostwriter-Queue] Capped from ${manuallySelected.length} to ${selectedItems.length} items (${maxItems} Abschnitte)`)
+        console.log(`[Ghostwriter-Queue] Capped from ${manuallySelected.length} to ${selectedItems.length} items (${selectedUnits}/${maxItems} Abschnitte)`)
       }
 
-      // Fill up with balanced items if selected < maxItems
-      if (selectedItems.length < maxItems) {
-        const neededCount = maxItems - manuallySelected.length
-        console.log(`[Ghostwriter-Queue] Need ${neededCount} more items from balanced selection to reach ${maxItems}`)
+      // Fill up with balanced items if selected UNITS < maxItems
+      const neededCount = maxItems - selectedUnits
+      if (neededCount > 0) {
+        console.log(`[Ghostwriter-Queue] Need ${neededCount} more items from balanced selection to reach ${maxItems} units (currently ${selectedUnits} units / ${selectedItems.length} items)`)
 
         const balancedSelection = await getBalancedSelection(neededCount)
         console.log(`[Ghostwriter-Queue] getBalancedSelection(${neededCount}) returned ${balancedSelection.length} items`)
 
         if (balancedSelection.length > 0) {
-          // Filter out items that are already in manuallySelected
+          // Filter out items already in manuallySelected (including those trimmed by capByUnits)
           const selectedIds = new Set(manuallySelected.map(i => i.id))
-          const additionalItems = balancedSelection.filter(s => !selectedIds.has(s.id))
+          const additionalItems = balancedSelection
+            .filter(s => !selectedIds.has(s.id))
+            .slice(0, neededCount)
           console.log(`[Ghostwriter-Queue] After filtering duplicates: ${additionalItems.length} additional items`)
 
           if (additionalItems.length > 0) {
@@ -282,15 +315,15 @@ export async function selectAndEnrichItems(opts: {
 
             if (!result.error && result.items.length > 0) {
               console.log(`[Ghostwriter-Queue] Added ${result.items.length} items from balanced selection`)
-              selectedItems = [...manuallySelected, ...result.items]
+              selectedItems = mergeSelectionWithFill(selectedItems, result.items, maxItems)
             }
           }
         }
       } else {
-        console.log(`[Ghostwriter-Queue] SKIPPED fill: manuallySelected (${manuallySelected.length}) >= maxItems (${maxItems})`)
+        console.log(`[Ghostwriter-Queue] SKIPPED fill: selectedUnits (${selectedUnits}) >= maxItems (${maxItems})`)
       }
 
-      console.log(`[Ghostwriter-Queue] Total items after fill: ${selectedItems.length}`)
+      console.log(`[Ghostwriter-Queue] Total items after fill: ${selectedItems.length} (${countSelectionUnits(selectedItems)} units)`)
     } else {
       // Fallback to balanced selection if no items manually selected
       console.log(`[Ghostwriter-Queue] No manually selected items (all filtered or none exist), using balanced selection for ${maxItems} items`)

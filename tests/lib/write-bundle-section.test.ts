@@ -9,6 +9,11 @@ import {
   ensureBundleMarker,
   ensureQueueIdMarker,
   reinjectBundleMarkers,
+  capBundleSummary,
+  buildBundleSystemAddendum,
+  BUNDLE_MAX_SENTENCES,
+  BUNDLE_MAX_CHARS,
+  BUNDLE_LENGTH_RULES,
 } from '@/lib/claude/ghostwriter-pipeline'
 import { extractBundleMarkers } from '@/lib/utils/markdown-to-tiptap'
 
@@ -275,5 +280,76 @@ describe('reinjectBundleMarkers (Whole-Text-Proofread-Backstop)', () => {
     expect(out).toBe(
       '## Eins <!-- data-queue-item-ids:x -->\n\nA.\n\n## Zwei <!-- data-queue-item-ids:a,b --> <!-- data-bundle-type:topic -->\n\nB.',
     )
+  })
+})
+
+describe('capBundleSummary (BUNDLE_LENGTH_RULES)', () => {
+  const sentences = (n: number) => Array.from({ length: n }, (_, i) => `Satz ${i + 1}.`).join(' ')
+
+  it('lässt Cover Story mit 40 Sätzen unangetastet und kappt 55 Sätze erst bei 50 (Take unberührt)', () => {
+    expect(BUNDLE_MAX_SENTENCES.cover_story).toBe(50)
+    const take = 'Synthszr Take: Take eins. Take zwei.'
+
+    const s40 = `## Cover\n\n${sentences(40)}\n\n${take}`
+    const out40 = capBundleSummary(s40, 'cover_story')
+    expect(out40).toContain('Satz 40.')
+    expect(out40).toContain(take)
+
+    const s55 = `## Cover\n\n${sentences(55)}\n\n${take}`
+    const out55 = capBundleSummary(s55, 'cover_story')
+    expect(out55).toContain('Satz 50.')
+    expect(out55).not.toContain('Satz 51.')
+    expect(out55).toContain(take)
+  })
+
+  it.each(['topic', 'deep_dive', 'recap'] as const)(
+    'kappt %s bei 25 Sätzen (30 → 25, Take unberührt)',
+    (bundleType) => {
+      expect(BUNDLE_MAX_SENTENCES[bundleType]).toBe(25)
+      const take = 'Synthszr Take: Take eins. Take zwei.'
+      const section = `## Bündel\n\n${sentences(30)}\n\n${take}`
+      const out = capBundleSummary(section, bundleType)
+      expect(out).toContain('Satz 25.')
+      expect(out).not.toContain('Satz 26.')
+      expect(out).toContain(take)
+    },
+  )
+
+  it('lässt Long Read mit ~4.500 Zeichen unangetastet und kappt ~6.000 Zeichen auf ≤ 5.000 am Satzende (Absätze & Take unberührt)', () => {
+    expect(BUNDLE_MAX_CHARS.long_read).toBe(5000)
+    expect(BUNDLE_LENGTH_RULES.long_read).toEqual({ kind: 'chars', max: 5000 })
+
+    const take = 'Synthszr Take: Take eins. Take zwei. Take drei.'
+    const unit = 'Dieser Berichtssatz enthält genau sechzig Zeichen inklusive. ' // 61 chars
+
+    const p4500 = Array.from({ length: 24 }, () => unit).join('').trim()
+    const body4500 = `${p4500}\n\n${p4500}\n\n${p4500}`
+    expect(body4500.length).toBeLessThanOrEqual(5000)
+    expect(body4500.length).toBeGreaterThan(4000)
+    const s4500 = `## Long Read\n\n${body4500}\n\n${take}`
+    expect(capBundleSummary(s4500, 'long_read')).toBe(s4500)
+
+    const p2000 = Array.from({ length: 33 }, () => unit).join('').trim()
+    const body6000 = `${p2000}\n\n${p2000}\n\n${p2000}`
+    expect(body6000.length).toBeGreaterThan(5500)
+    const out = capBundleSummary(`## Long Read\n\n${body6000}\n\n${take}`, 'long_read')
+
+    expect(out).toContain(take)
+    const [beforeTake] = out.split(`\n\n${take}`)
+    const cappedBody = beforeTake.replace(/^## Long Read\n\n/, '')
+    expect(cappedBody.length).toBeLessThanOrEqual(5000)
+    expect(cappedBody.length).toBeGreaterThan(4800)
+    expect(cappedBody).toContain('\n\n')
+    expect(cappedBody.endsWith('.')).toBe(true)
+  })
+})
+
+describe('buildBundleSystemAddendum', () => {
+  it('verlangt bei long_read 5.000 Zeichen statt Satz-Angabe und behält die Take-Wortbudget-Regel', () => {
+    const addendum = buildBundleSystemAddendum('long_read')
+    expect(addendum).toContain('5.000 Zeichen')
+    expect(addendum).not.toContain('25 Sätze')
+    expect(addendum).not.toContain('50 Sätze')
+    expect(addendum).toContain('50 bis 75 Wörter')
   })
 })

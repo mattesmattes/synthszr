@@ -1266,7 +1266,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
                           {item.source_display_name || item.source_identifier}
                         </p>
                         {/* Bündel-Tags: setzen news_queue.bundle_type; wirken erst bei Neu-Generierung */}
-                        <div className="flex items-center gap-1 mt-1.5">
+                        <div className="flex flex-wrap items-center gap-1 mt-1.5">
                           <button
                             type="button"
                             onClick={() => handleBundleType(item.id, 'cover_story')}
@@ -1305,6 +1305,19 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
                             }`}
                           >
                             Deep Dive
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleBundleType(item.id, 'long_read')}
+                            disabled={bundleLoadingId === item.id}
+                            title="Long Read (5.000 Zeichen)"
+                            className={`text-[9px] px-1.5 h-[18px] rounded-full border font-medium whitespace-nowrap shrink-0 transition-colors ${
+                              item.bundle_type === 'long_read'
+                                ? 'bg-orange-400 text-black border-orange-500'
+                                : 'bg-transparent text-muted-foreground border-muted-foreground/30 hover:border-orange-500 hover:text-orange-600'
+                            }`}
+                          >
+                            Long Read
                           </button>
                           <button
                             type="button"

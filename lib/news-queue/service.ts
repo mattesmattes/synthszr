@@ -4,6 +4,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import type { BundleType } from '@/lib/i18n/bundle-labels'
 import type {
   NewsQueueItem,
   NewsQueueItemInsert,
@@ -295,7 +296,7 @@ export async function addToQueue(
      * Story-Zugehörigkeit bereits — sie nachträglich zu setzen hieße, die eben
      * geschriebenen Zeilen über ihre URL wiederzufinden.
      */
-    bundleType?: 'topic' | 'recap' | 'deep_dive' | 'cover_story' | null
+    bundleType?: BundleType | null
     /** Abweichender Anfangsstatus (Techmeme-Themen starten auf 'selected'). */
     status?: 'pending' | 'selected'
     synthesisScore?: number

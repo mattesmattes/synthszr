@@ -2,11 +2,14 @@
 //
 // Bundle-Artikel fassen mehrere News-Queue-Items in einer Section zusammen;
 // ohne Grenze wächst die Zusammenfassung mit der Anzahl gebündelter Items.
-// Dieses Modul deckelt sie hart auf eine Satzzahl (Cap) bzw. kürzt sie um
-// genau einen Satz (Retry nach zu langer Generierung) — beides rein
-// regelbasiert, ohne LLM-Aufruf. Der 18-Satz-Cap gilt NUR für die
-// Zusammenfassung (Bericht-Teil); der Synthszr Take zählt nicht mit und
-// bleibt bei capSummarySentences unangetastet.
+// Dieses Modul deckelt sie hart auf eine Satzzahl (`capSummarySentences`,
+// typspezifisch via `BUNDLE_LENGTH_RULES` — 25 bzw. 50 für Cover Story) oder
+// eine Zeichenzahl (`capSummaryChars` — 5.000 Zeichen für Long Read) bzw.
+// kürzt normale Sektionen bei aktiven Bündeln um `count` Sätze (Standard-
+// Kompensation 2 Sätze in der Zusammenfassung) — beides rein regelbasiert,
+// ohne LLM-Aufruf. Der Satz-/Zeichen-Cap gilt NUR für die Zusammenfassung
+// (Bericht-Teil); der Synthszr Take zählt nicht mit und bleibt bei
+// capSummarySentences / capSummaryChars unangetastet.
 //
 // Satz-Splitting und Take-Marker-Erkennung werden aus take-ending.ts
 // wiederverwendet statt dupliziert.
@@ -87,6 +90,54 @@ export function capSummarySentences(section: string, maxSentences: number): stri
 
   const marker = parts.prefix.match(TAKE_MARKER_RE)![0]
   return `${withHeading(heading, capBody(body, maxSentences))}\n\n${marker}${parts.take}`
+}
+
+// Cappt den Body auf ≤ maxChars Zeichen (am letzten vollständigen Satz, der
+// noch ins Budget passt) und erhält dabei Absatzgrenzen (`\n\n`). Behält
+// mindestens den allerersten Satz, damit der Bericht nie leer wird.
+function capBodyChars(body: string, maxChars: number): string {
+  const keptParagraphs: string[] = []
+  let totalLen = 0
+
+  for (const para of splitParagraphs(body)) {
+    const paraSep = keptParagraphs.length > 0 ? 2 : 0 // '\n\n'
+    const keptSentences: string[] = []
+
+    for (const sentence of splitSentences(para)) {
+      const sentSep = keptSentences.length > 0 ? 1 : 0 // ' '
+      const extra = (keptSentences.length === 0 ? paraSep : 0) + sentSep + sentence.length
+      if (totalLen + extra > maxChars) {
+        if (keptParagraphs.length === 0 && keptSentences.length === 0) {
+          keptSentences.push(sentence)
+          totalLen += extra
+        }
+        if (keptSentences.length > 0) keptParagraphs.push(keptSentences.join(' '))
+        return keptParagraphs.join('\n\n')
+      }
+      keptSentences.push(sentence)
+      totalLen += extra
+    }
+
+    if (keptSentences.length > 0) keptParagraphs.push(keptSentences.join(' '))
+  }
+
+  return keptParagraphs.join('\n\n')
+}
+
+/** Kürzt NUR die Zusammenfassung auf ≤ maxChars Zeichen (am Satzende); der Take bleibt vollständig. */
+export function capSummaryChars(section: string, maxChars: number): string {
+  const parts = splitAtTake(section)
+  if (!parts) {
+    const { heading, body } = splitHeading(section)
+    if (body.length <= maxChars) return section
+    return withHeading(heading, capBodyChars(body, maxChars))
+  }
+
+  const { heading, body } = splitHeading(parts.prefix.replace(TAKE_MARKER_RE, ''))
+  if (body.length <= maxChars) return section
+
+  const marker = parts.prefix.match(TAKE_MARKER_RE)![0]
+  return `${withHeading(heading, capBodyChars(body, maxChars))}\n\n${marker}${parts.take}`
 }
 
 /**

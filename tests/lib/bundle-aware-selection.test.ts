@@ -14,7 +14,13 @@
  * Abschnitt. 48 gebündelte Quellen ergeben fünf Abschnitte, nicht 48.
  */
 import { describe, expect, it } from 'vitest'
-import { splitBundled, capByUnits, BUNDLE_SOURCES_MAX } from '@/lib/claude/queue-article'
+import {
+  splitBundled,
+  capByUnits,
+  countSelectionUnits,
+  mergeSelectionWithFill,
+  BUNDLE_SOURCES_MAX,
+} from '@/lib/claude/queue-article'
 
 interface Zeile {
   id: string
@@ -145,5 +151,79 @@ describe('capByUnits mit Handmarkierungen', () => {
     const out = capByUnits([...zwoelf, ...hand], 2)
     expect(out.filter((z) => z.id.startsWith('s1-'))).toHaveLength(5)
     expect(out.filter((z) => z.id.startsWith('hand-'))).toHaveLength(6)
+  })
+})
+
+describe('countSelectionUnits', () => {
+  it('zaehlt Techmeme-Stories getrennt nach (bundle_type, techmeme_story) plus Einzelmeldungen', () => {
+    const s1 = Array.from({ length: 5 }, (_, i) => q(`s1-${i}`, 9, 'topic', 's1'))
+    const s2 = Array.from({ length: 5 }, (_, i) => q(`s2-${i}`, 8, 'topic', 's2'))
+    const einzeln = [q('e1', 7), q('e2', 6), q('e3', 5)]
+    expect(countSelectionUnits([...s1, ...s2, ...einzeln])).toBe(5)
+  })
+
+  it('fasst von Hand markierte Items ohne Story-Schluessel je Label als 1 Einheit zusammen', () => {
+    const hand = Array.from({ length: 4 }, (_, i) => q(`hand-${i}`, 8, 'topic'))
+    expect(countSelectionUnits(hand)).toBe(1)
+  })
+
+  it('trennt verschiedene Labels und Einzelmeldungen sauber', () => {
+    const items = [
+      q('c1', 9, 'cover_story', 's1'),
+      q('t1', 8, 'topic', 's2'),
+      q('l1', 8, 'long_read', 's3'),
+      q('r1', 7, 'recap', 's4'),
+      q('e1', 6),
+      q('e2', 5),
+    ]
+    expect(countSelectionUnits(items)).toBe(6)
+  })
+
+  it('gibt 0 fuer leere Liste zurueck', () => {
+    expect(countSelectionUnits([])).toBe(0)
+  })
+})
+
+describe('mergeSelectionWithFill', () => {
+  it('erhaelt die BUNDLE_SOURCES_MAX=5-Kappung auf Techmeme-Stories (keine Wiederbelebung)', () => {
+    const zwoelf = Array.from({ length: 12 }, (_, i) => q(`s1-${i}`, 9 - i * 0.1, 'topic', 's1'))
+    const capped = capByUnits(zwoelf, 5)
+    expect(capped).toHaveLength(5)
+
+    const fill = [q('f1', 7), q('f2', 6)]
+    const merged = mergeSelectionWithFill(capped, fill, 5)
+    expect(merged).toHaveLength(7)
+    expect(merged.filter((z) => z.bundle_type === 'topic')).toHaveLength(5)
+  })
+
+  it('laesst Auffuellen bis maxUnits zu, wenn 1 Story (5 Quellen = 1 Einheit) weniger als maxUnits belegt', () => {
+    const s1 = Array.from({ length: 5 }, (_, i) => q(`s1-${i}`, 9, 'topic', 's1'))
+    const capped = capByUnits(s1, 5)
+    expect(countSelectionUnits(capped)).toBe(1)
+
+    const fill = [q('f1', 7), q('f2', 6), q('f3', 5), q('f4', 4)]
+    const merged = mergeSelectionWithFill(capped, fill, 5)
+    expect(merged).toHaveLength(9)
+    expect(countSelectionUnits(merged)).toBe(5)
+  })
+
+  it('erzwingt BUNDLE_SOURCES_MAX=5 auch wenn ein nachgeladenes Item dasselbe Label + Story traegt', () => {
+    const s1 = Array.from({ length: 5 }, (_, i) => q(`s1-${i}`, 9 - i * 0.1, 'topic', 's1'))
+    const capped = capByUnits(s1, 5)
+    const staleFill = [q('s1-stale', 1, 'topic', 's1'), q('f1', 7)]
+    const merged = mergeSelectionWithFill(capped, staleFill, 5)
+    expect(merged.map((z) => z.id)).not.toContain('s1-stale')
+    expect(merged.filter((z) => z.bundle_type === 'topic')).toHaveLength(5)
+    expect(merged.map((z) => z.id)).toContain('f1')
+  })
+
+  it('behaelt alle von Hand markierten Items neben Fill-Items ohne 5er-Deckel', () => {
+    const hand = Array.from({ length: 7 }, (_, i) => q(`hand-${i}`, 5 - i * 0.1, 'long_read'))
+    const capped = capByUnits(hand, 4)
+    const fill = [q('f1', 7), q('f2', 6), q('f3', 5)]
+    const merged = mergeSelectionWithFill(capped, fill, 4)
+    expect(merged.filter((z) => z.id.startsWith('hand-'))).toHaveLength(7)
+    expect(merged.filter((z) => z.id.startsWith('f'))).toHaveLength(3)
+    expect(countSelectionUnits(merged)).toBe(4)
   })
 })

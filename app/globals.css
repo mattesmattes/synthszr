@@ -351,6 +351,11 @@
   background: #ddd6fe;
   color: #5b21b6;
 }
+.ProseMirror:not(.tiptap-content) h2[data-bundle-type="long_read"]::before {
+  content: "Long Read";
+  background: #ffedd5;
+  color: #9a3412;
+}
 .ProseMirror:not(.tiptap-content) h2[data-bundle-type="recap"]::before {
   content: "Nachlese";
   background: #cffafe;

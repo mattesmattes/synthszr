@@ -102,14 +102,18 @@ describe('enforceBundleOrdering mit mehreren Buendeln', () => {
     expect(ordering).toEqual([2, 5, 3, 1, 4])
   })
 
-  it('stellt Themen vor Deep Dives und diese vor die Nachlese', () => {
+  it('stellt Themen vor Deep Dives, Long Reads und diese vor die Nachlese', () => {
     const items = [
       item('r', 'recap', 'r1'),
+      item('l', 'long_read', 'l1'),
       item('d', 'deep_dive', 'd1'),
       item('t', 'topic', 't1'),
+      item('c', 'cover_story', 'c1'),
     ]
-    const ordering = enforceBundleOrdering([1, 2, 3], computeBundleUnits(items))
-    expect(ordering).toEqual([3, 2, 1])
+    const units = computeBundleUnits(items)
+    expect(units.map((u) => u.bundleType)).toEqual(['cover_story', 'topic', 'deep_dive', 'long_read', 'recap'])
+    const ordering = enforceBundleOrdering([1, 2, 3, 4, 5], units)
+    expect(ordering).toEqual([5, 4, 3, 2, 1])
   })
 
   it('laesst eine Reihenfolge ohne Buendel unangetastet', () => {
@@ -124,5 +128,11 @@ describe('computeBundleGroups bleibt fuer den Plan erhalten', () => {
     const groups = computeBundleGroups(items)
     expect(groups.topic).toEqual([1, 2])
     expect(groups.recap).toEqual([3])
+  })
+
+  it('zaehlt long_read in topic (damit hasBundles aktiv wird)', () => {
+    const groups = computeBundleGroups([item('l', 'long_read')])
+    expect(groups.topic).toEqual([1])
+    expect(groups.recap).toEqual([])
   })
 })

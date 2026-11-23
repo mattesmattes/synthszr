@@ -29,6 +29,18 @@ describe('convertTiptapToHtml — bundle label badge', () => {
     expect(html).toContain('border-radius:999px')
   })
 
+  it('renders the badge for bundleType "long_read"', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        { type: 'heading', attrs: { level: 2, bundleType: 'long_read' }, content: [{ type: 'text', text: 'Foo' }] },
+      ],
+    }
+    const html = convertTiptapToHtml(doc, 'de')
+    expect(html).toContain('Long Read')
+    expect(html).toContain('border-radius:999px')
+  })
+
   it('renders no badge for a heading without bundleType', () => {
     const doc = {
       type: 'doc',

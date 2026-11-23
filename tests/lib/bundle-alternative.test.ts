@@ -50,6 +50,13 @@ describe('Alternativ-Abschnitt zu Bündeln', () => {
     expect(units.filter((u) => u.kind === 'single')).toHaveLength(1)
   })
 
+  it('gilt auch fuer Long Reads', () => {
+    const units = buildBundleWriteUnits([item('a', 'long_read', 'l1'), item('b', 'long_read', 'l1')], plan(2))
+    const singles = units.filter((u) => u.kind === 'single')
+    expect(singles).toHaveLength(1)
+    expect('alternativeTo' in singles[0] && singles[0].alternativeTo).toBe('l1')
+  })
+
   it('gilt NICHT fuer die Nachlese', () => {
     const units = buildBundleWriteUnits([item('a', 'recap', 'r1'), item('b', 'recap', 'r1')], plan(2))
     expect(units.filter((u) => u.kind === 'single')).toHaveLength(0)

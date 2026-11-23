@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { readStatusSnapshot, recordQueueEvents } from '@/lib/news-queue/events'
+import { isBundleType } from '@/lib/i18n/bundle-labels'
 
 /**
  * Setzt das Label (bundle_type) einer News.
@@ -17,11 +18,9 @@ export async function PATCH(request: NextRequest) {
   const session = await getSession()
   if (!session?.isAdmin) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
   const { id, bundle_type } = await request.json()
-  // Zulaessige Werte an EINER Stelle — dieselbe Liste wie der DB-Constraint
-  // (Migration 20260913080000). Ohne 'cover_story' haette die Route den neuen
-  // Knopf mit 400 abgelehnt, waehrend die Oberflaeche ihn anbietet.
-  const ERLAUBT = ['topic', 'recap', 'deep_dive', 'cover_story']
-  if (!id || (bundle_type !== null && !ERLAUBT.includes(bundle_type))) {
+  // Zulässige Werte über isBundleType / BUNDLE_TYPES (dieselbe Liste wie der
+  // DB-Constraint, Migration 20261123210000).
+  if (!id || (bundle_type !== null && !isBundleType(bundle_type))) {
     return NextResponse.json({ error: 'Ungültige Parameter' }, { status: 400 })
   }
 

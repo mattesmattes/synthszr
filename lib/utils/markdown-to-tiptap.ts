@@ -65,7 +65,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // unbekannter Wert wird wie ein unbekannter Schlüssel behandelt: entfernt,
 // aber nicht gesetzt (der Renderer bundle-label.ts:25 zeigt ihn ohnehin nicht).
 const BUNDLE_TYPES: ReadonlySet<string> = new Set(
-  Object.keys({ topic: true, recap: true, deep_dive: true, cover_story: true } satisfies Record<BundleType, true>),
+  Object.keys({ topic: true, recap: true, deep_dive: true, cover_story: true, long_read: true } satisfies Record<BundleType, true>),
 )
 const CURATION_TIERS: ReadonlySet<string> = new Set(
   Object.keys({ recommended: true, bench: true, held: true } satisfies Record<CurationTier, true>),

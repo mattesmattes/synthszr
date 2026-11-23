@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeBundleGroups, enforceBundleOrdering } from '@/lib/claude/ghostwriter-pipeline'
+import { computeBundleGroups, enforceBundleOrdering, formatPlanBundleTag } from '@/lib/claude/ghostwriter-pipeline'
 
 const items = (types: (string|null)[]) => types.map((t, i) => ({ id: `${i+1}`, title: `T${i+1}`, content: 'c', source_identifier: 's', source_url: null, source_display_name: null, bundle_type: t })) as any
 
@@ -20,5 +20,20 @@ describe('enforceBundleOrdering', () => {
       { bundleType: 'recap' as const, key: 'recap', indices: [1] },
     ]
     expect(enforceBundleOrdering([2, 3, 1, 4], g)).toEqual([4, 1, 2, 3])
+  })
+})
+
+describe('formatPlanBundleTag', () => {
+  it('erzeugt BÜNDEL-Hinweise für alle Bundle-Typen', () => {
+    expect(formatPlanBundleTag('cover_story')).toContain('BÜNDEL: Cover Story')
+    expect(formatPlanBundleTag('topic')).toContain('BÜNDEL: Thema des Tages')
+    expect(formatPlanBundleTag('deep_dive')).toContain('BÜNDEL: Deep Dive')
+    expect(formatPlanBundleTag('long_read')).toContain('BÜNDEL: Long Read')
+    expect(formatPlanBundleTag('recap')).toContain('BÜNDEL: Nachlese')
+  })
+
+  it('gibt bei null oder undefined einen leeren String zurück', () => {
+    expect(formatPlanBundleTag(null)).toBe('')
+    expect(formatPlanBundleTag(undefined)).toBe('')
   })
 })

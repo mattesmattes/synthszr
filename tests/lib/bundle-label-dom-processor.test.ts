@@ -35,4 +35,14 @@ describe('processBundleLabels', () => {
 
     expect(container.querySelectorAll('.bundle-label-badge')).toHaveLength(1)
   })
+
+  it('inserts "Long Read" badge for data-bundle-type="long_read"', () => {
+    const lrDom = new JSDOM('<div id="lr"><h2 data-bundle-type="long_read">Vertiefung</h2><p>text</p></div>')
+    ;(globalThis as unknown as { document: Document }).document = lrDom.window.document as unknown as Document
+    const container = lrDom.window.document.getElementById('lr') as unknown as HTMLElement
+    processBundleLabels(container, 'de')
+
+    const badge = container.querySelector('.bundle-label-badge')
+    expect(badge?.textContent).toBe('Long Read')
+  })
 })

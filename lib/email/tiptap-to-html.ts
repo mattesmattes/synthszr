@@ -13,7 +13,7 @@ import { SITE_URL } from '@/lib/seo/site'
 import { stripLexTags } from '@/lib/glossary/mentions'
 import { PODCAST_APPLE, PODCAST_SPOTIFY } from '@/lib/podcast/platform-links'
 import { applyDateToHeadline } from '@/lib/tip-promos/headline'
-import { bundleLabel, type BundleType } from '@/lib/i18n/bundle-labels'
+import { bundleLabel, isBundleType } from '@/lib/i18n/bundle-labels'
 
 /**
  * Macht einen relativen Pfad absolut.
@@ -1401,12 +1401,12 @@ function convertNodeToHtml(node: TiptapNode, locale: string = 'de'): string {
         headingHtml = `${favicon}<a href="${srcUrl}" style="color: inherit; text-decoration: none;">${headingHtml}</a>`
       }
 
-      // Bundle-Label ("Thema des Tages" / "Nachlese" / "Deep Dive") — vom
-      // Assembly (Task 5/7) als bundleType-Attribut auf das Abschnitts-H2
+      // Bundle-Label ("Cover Story" / "Thema des Tages" / "Deep Dive" / "Long Read" / "Nachlese") —
+      // vom Assembly (Task 5/7) als bundleType-Attribut auf das Abschnitts-H2
       // geschrieben.
       const bundleType = node.attrs?.bundleType as string | undefined
-      const badgeHtml = (bundleType === 'topic' || bundleType === 'recap' || bundleType === 'deep_dive' || bundleType === 'cover_story')
-        ? `<div style="display:inline-block;background:#000;color:#fff;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:4px 10px;border-radius:999px;margin:0 0 6px 0;">${escapeHtml(bundleLabel(bundleType as BundleType, locale))}</div><br/>`
+      const badgeHtml = isBundleType(bundleType)
+        ? `<div style="display:inline-block;background:#000;color:#fff;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:4px 10px;border-radius:999px;margin:0 0 6px 0;">${escapeHtml(bundleLabel(bundleType, locale))}</div><br/>`
         : ''
 
       return `${badgeHtml}<h${level} style="font-size: ${fontSize}; margin: 16px 0 8px 0;">${headingHtml}</h${level}>`

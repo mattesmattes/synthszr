@@ -263,6 +263,28 @@ export function TiptapEditor({ content, onChange }: TiptapEditorProps) {
             >
               Deep Dive
             </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              title="Als 'Long Read' markieren (Bündel, 5.000 Zeichen)"
+              onClick={() =>
+                editor
+                  .chain()
+                  .focus()
+                  .updateAttributes("heading", {
+                    bundleType: editor.getAttributes("heading").bundleType === "long_read" ? null : "long_read",
+                  })
+                  .run()
+              }
+              className={cn(
+                "h-7 px-2 text-[11px]",
+                editor.getAttributes("heading").bundleType === "long_read" &&
+                  "bg-orange-100 text-orange-800 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-300",
+              )}
+            >
+              Long Read
+            </Button>
           </>
         )}
         <div className="mx-1 w-px bg-border" />

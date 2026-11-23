@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { capSummarySentences, shortenBySentences } from '@/lib/claude/bundle-length'
+import { capSummarySentences, capSummaryChars, shortenBySentences } from '@/lib/claude/bundle-length'
 
 const S = (summary: string, take: string) => `## H\n\n${summary}\n\nSynthszr Take: ${take}`
 
@@ -39,6 +39,42 @@ describe('capSummarySentences', () => {
     expect(out).toContain('A5.\n\nB1.') // Absatzgrenze zwischen A und B erhalten
     expect(out).toContain('B5.')
     expect(out).not.toContain('C1.') // über dem Cap → geschnitten
+  })
+})
+
+describe('capSummaryChars', () => {
+  it('lässt Zusammenfassung ≤ maxChars unverändert (inkl. Absätze & Take)', () => {
+    const summary = 'Absatz eins mit Fakten.\n\nAbsatz zwei mit Details.'
+    const input = S(summary, 'Take eins. Take zwei.')
+    expect(capSummaryChars(input, 5000)).toBe(input)
+  })
+
+  it('kürzt Zusammenfassung > maxChars strikt am Satzende, erhält Absätze, Heading & Take', () => {
+    const s = 'Ein langer Berichtssatz mit konkreten Fakten und Zahlen. '
+    const p1 = `${s}P1-Ende.`
+    const p2 = `${s}${s}P2-Ende.`
+    const p3 = `${s}P3-Ende.`
+    const take = 'Take eins. Take zwei. Take drei.'
+    const out = capSummaryChars(S(`${p1}\n\n${p2}\n\n${p3}`, take), 220)
+
+    expect(out).toMatch(/^## H\n\n/)
+    expect(out).toContain(`Synthszr Take: ${take}`)
+
+    const [beforeTake] = out.split('\n\nSynthszr Take:')
+    const body = beforeTake.replace(/^## H\n\n/, '')
+    expect(body.length).toBeLessThanOrEqual(220)
+    expect(body).toContain('\n\n')
+    expect(body.endsWith('.')).toBe(true)
+    expect(body).not.toContain('P3-Ende.')
+  })
+
+  it('behält mindestens den ersten Satz, falls dieser allein > maxChars ist', () => {
+    const first = `${'Wort '.repeat(40)}Ende.`
+    const second = 'Zweiter Satz.'
+    const out = capSummaryChars(S(`${first} ${second}`, 'T.'), 50)
+    expect(out).toContain(first)
+    expect(out).not.toContain(second)
+    expect(out).toContain('Synthszr Take: T.')
   })
 })
 
