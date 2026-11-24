@@ -50,6 +50,7 @@ export interface TakeInput {
   takeAngle?: string
   exemplarsBlock?: string
   mattesBlock?: string
+  recentTakesBlock?: string
 }
 
 export function buildTakeUserPrompt(input: TakeInput): string {
@@ -61,6 +62,7 @@ export function buildTakeUserPrompt(input: TakeInput): string {
   parts.push(`QUELLENAUSZUG (nur für Zahlen und Namen):\n<newsletter_quellmaterial>\n${input.sourceExcerpt.trim() || 'Kein Auszug verfügbar.'}\n</newsletter_quellmaterial>`)
   if (input.mattesBlock) parts.push(input.mattesBlock)
   if (input.exemplarsBlock) parts.push(input.exemplarsBlock)
+  if (input.recentTakesBlock) parts.push(input.recentTakesBlock)
   parts.push('Schreibe jetzt den Take.')
   return parts.join('\n\n')
 }

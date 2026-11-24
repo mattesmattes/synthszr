@@ -32,6 +32,16 @@ import { capSummarySentences, capSummaryChars, shortenBySentences, BUNDLE_TAG_LI
 import { stripLoneSurrogates, escapeQuellmaterialTag } from '@/lib/claude/sanitize'
 import { repoRetrievalParams } from '@/lib/mattes/repo-intensity'
 import { getModelCapabilities } from '@/lib/claude/model-capabilities'
+import { prepareTextForEmbedding } from '@/lib/embeddings/generator'
+import {
+  loadRecentPublishedSections,
+  findMatchingRecentSections,
+  formatRecentCoverageForPrompt,
+  formatRecentTakesForPrompt,
+  type EmbeddedRecentSection,
+  type RecentSectionMatch,
+} from '@/lib/posts/recent-sections'
+import { runDeltaPass, type DeltaPassMode } from '@/lib/claude/delta-pass'
 import {
   getActiveLearnedPatterns,
   findSimilarEditExamples,
@@ -555,6 +565,7 @@ export async function writeSection(
     takeAngle?: string
     retrievalHint?: string
     repoIntensity?: number
+    recentSections?: EmbeddedRecentSection[]
   },
 ): Promise<string> {
   const publicCompanyList = context.relevantCompanies.public.join(', ') || '(keine erkannt)'
@@ -591,9 +602,10 @@ export async function writeSection(
   let mattesBlock = ''
   let historyBlock = ''
   let exemplarBlock = ''
+  let recentMatches: RecentSectionMatch[] = []
   const exemplarQuery = [heading, context.takeAngle, item.title].filter(Boolean).join(' ')
-  // Voice grounding (Mattes corpus) and historical callbacks (past Synthszr
-  // posts) run in parallel — both are non-fatal and must not serialize latency.
+  // Voice grounding (Mattes corpus), historical callbacks (past Synthszr
+  // posts), and 3-day section-level delta lookup run in parallel — all non-fatal.
   await Promise.all([
     (async () => {
       if (!repoParams || !mattesQuery) return // Repo-Intensität 0 oder kein Hint → kein Korpus-Retrieval
@@ -628,7 +640,23 @@ export async function writeSection(
         console.warn('[Pipeline] History retrieval failed (continuing):', err)
       }
     })(),
+    (async () => {
+      if (!context.recentSections || context.recentSections.length === 0) return
+      try {
+        const queryText = prepareTextForEmbedding(heading, stripLoneSurrogates((item.content || '').slice(0, 2500)))
+        recentMatches = await findMatchingRecentSections(queryText, context.recentSections)
+        if (recentMatches.length > 0) {
+          const maxSim = recentMatches[0].similarity
+          console.log(`[RecentSections] ${recentMatches.length} Vorbericht(e) der letzten 3 Tage für "${heading.slice(0, 40)}…" (max sim=${maxSim.toFixed(2)})`)
+        }
+      } catch (err) {
+        console.warn('[RecentSections] Einzel-Abgleich fehlgeschlagen (continuing):', err)
+      }
+    })(),
   ])
+
+  const recentBlock = formatRecentCoverageForPrompt(recentMatches)
+  const recentTakesBlock = formatRecentTakesForPrompt(recentMatches)
 
   // Dynamic per-item prompt only — format template + checkliste are in SECTION_SYSTEM_PROMPT,
   // vocabulary + edit learning + thesis are in cacheableUserPrefix
@@ -646,7 +674,7 @@ COMPANY-TAGS:${tagSourcePart ? `
 QUELLFORMAT: → ${tagSourcePart}` : `
 KEINE QUELLE — nur Company-Tags, kein Pfeil.`}
 PUBLIC: ${publicCompanyList}
-PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${historyBlock ? `\n\n${historyBlock}` : ''}${exemplarBlock ? `\n\n${exemplarBlock}` : ''}`
+PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${historyBlock ? `\n\n${historyBlock}` : ''}${recentBlock ? `\n\n${recentBlock}` : ''}${exemplarBlock ? `\n\n${exemplarBlock}` : ''}`
 
   const text = await callModelNonStreaming(userPrompt, SECTION_SYSTEM_PROMPT, model, {
     cacheableUserPrefix: context.cacheableUserPrefix,
@@ -668,6 +696,15 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
     trimmed = `## ${heading}\n\n${trimmed}`
   }
 
+  // Post-Write-Delta-Loop (nur bei Vorberichten aus den letzten 3 Tagen):
+  // reduziert Wiederholungen und schärft neue Aspekte, fail-open.
+  trimmed = await applyDeltaPass(trimmed, {
+    heading,
+    recentMatches,
+    sourceText: item.content || item.title,
+    mode: 'single',
+  })
+
   // Längen-Durchsetzung: Die ~90-Zeichen-Regel im Prompt ist weich; gelegentlich
   // rutscht eine überlange Überschrift durch. Deterministisch angestoßen (nur wenn
   // zu lang) kürzt Opus sie hier nach, ohne den Fließtext anzufassen. Non-fatal.
@@ -681,7 +718,7 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   // Stufe 4 der Take-Reform (2026-10-19): der Take entsteht in einem eigenen
   // Durchgang aus der fertigen Zusammenfassung; Cap und "Wer"-Rewrite unten
   // bleiben als Sicherheitsnetz.
-  trimmed = await applyTakePass(trimmed, { heading, sourceText: item.content || item.title, takeAngle: context.takeAngle, mattesBlock, exemplarBlock })
+  trimmed = await applyTakePass(trimmed, { heading, sourceText: item.content || item.title, takeAngle: context.takeAngle, mattesBlock, exemplarBlock, recentTakesBlock })
 
   trimmed = sanitizeLexTags(capTake(joinCompanyTagToSummary(trimmed)))
 
@@ -697,6 +734,50 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
   return ensureQueueIdMarker(trimmed, [item.id])
 }
 
+const SECTION_DELTA_TIMEOUT_MS = 25_000
+
+/**
+ * Zweiter Durchgang auf Abschnittsebene: prüft einen Abschnitt gegen die
+ * gefundenen Vorberichte der letzten 3 Tage (nur bei Treffern), um
+ * Wiederholungen abzubauen und neue Aspekte hervorzuheben. Fail-open.
+ */
+async function applyDeltaPass(
+  section: string,
+  input: { heading: string; recentMatches: RecentSectionMatch[]; sourceText: string; mode: DeltaPassMode },
+): Promise<string> {
+  if (input.recentMatches.length === 0) return section
+  try {
+    const model = await getModelForUseCase('ghostwriter_delta') as AIModel
+    const res = await withTimeout(
+      runDeltaPass(
+        {
+          section,
+          heading: input.heading,
+          recentMatches: input.recentMatches,
+          sourceText: input.sourceText,
+          mode: input.mode,
+        },
+        {
+          call: (user, system) => callModelNonStreaming(user, system, model, {
+            thinking: false,
+            temperature: 0.2,
+            maxTokens: input.mode === 'single' ? 3000 : 6000,
+            useCase: 'ghostwriter_delta',
+          }),
+        },
+      ),
+      SECTION_DELTA_TIMEOUT_MS,
+      { section, changed: false, verdict: 'fallback' as const },
+    )
+    const topSim = input.recentMatches[0]?.similarity ?? 0
+    console.log(`[DeltaPass] "${input.heading.slice(0, 45)}" (${input.recentMatches.length} Vorberichte, max sim=${topSim.toFixed(2)}) → ${res.verdict}`)
+    return res.section
+  } catch (err) {
+    console.warn('[DeltaPass] übersprungen (fail-open):', err instanceof Error ? err.message : err)
+    return section
+  }
+}
+
 /**
  * Take-Durchgang (Stufe 4): schreibt den Take des Abschnitts aus der fertigen
  * Zusammenfassung neu — eigener Aufruf mit Blickwinkel, Vorbildern und
@@ -706,7 +787,7 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
  */
 async function applyTakePass(
   section: string,
-  input: { heading: string; sourceText: string; takeAngle?: string; mattesBlock: string; exemplarBlock: string },
+  input: { heading: string; sourceText: string; takeAngle?: string; mattesBlock: string; exemplarBlock: string; recentTakesBlock?: string },
 ): Promise<string> {
   const summary = summaryForTakePass(section)
   if (!summary) return section
@@ -720,6 +801,7 @@ async function applyTakePass(
         takeAngle: input.takeAngle,
         exemplarsBlock: input.exemplarBlock || undefined,
         mattesBlock: input.mattesBlock || undefined,
+        recentTakesBlock: input.recentTakesBlock || undefined,
       },
       {
         call: (user, system) => callModelNonStreaming(user, system, model, { thinking: true, effort: 'medium', maxTokens: 6000, useCase: 'ghostwriter_take' }),
@@ -1074,6 +1156,7 @@ export async function writeBundleSection(
     takeAngle?: string
     retrievalHint?: string
     repoIntensity?: number
+    recentSections?: EmbeddedRecentSection[]
   },
 ): Promise<string> {
   // pickPrimaryAndSecondarySources bestimmt NUR NOCH, welche Quelle als
@@ -1119,6 +1202,7 @@ export async function writeBundleSection(
   let mattesBlock = ''
   let historyBlock = ''
   let exemplarBlock = ''
+  let recentMatches: RecentSectionMatch[] = []
   const exemplarQuery = [heading, context.takeAngle, primary.title].filter(Boolean).join(' ')
   await Promise.all([
     (async () => {
@@ -1148,7 +1232,24 @@ export async function writeBundleSection(
         console.warn('[Pipeline] History retrieval failed (bundle, continuing):', err)
       }
     })(),
+    (async () => {
+      if (!context.recentSections || context.recentSections.length === 0) return
+      try {
+        const combined = items.map((it) => stripLoneSurrogates((it.content || it.title).slice(0, 1000))).join('\n\n').slice(0, 3000)
+        const queryText = prepareTextForEmbedding(heading, combined)
+        recentMatches = await findMatchingRecentSections(queryText, context.recentSections)
+        if (recentMatches.length > 0) {
+          const maxSim = recentMatches[0].similarity
+          console.log(`[RecentSections] ${recentMatches.length} Vorbericht(e) der letzten 3 Tage für Bündel "${heading.slice(0, 40)}…" (max sim=${maxSim.toFixed(2)})`)
+        }
+      } catch (err) {
+        console.warn('[RecentSections] Bündel-Abgleich fehlgeschlagen (continuing):', err)
+      }
+    })(),
   ])
+
+  const recentBlock = formatRecentCoverageForPrompt(recentMatches)
+  const recentTakesBlock = formatRecentTakesForPrompt(recentMatches)
 
   const angleBlock = context.takeAngle
     ? `\n\nBLICKWINKEL FÜR DEN TAKE (nur den Take, nicht die Zusammenfassung; der Typ vor dem Doppelpunkt ist die analytische Linse): ${context.takeAngle}`
@@ -1169,7 +1270,7 @@ ${sourceBlocks.join('\n\n')}
 
 COMPANY-TAGS (nur {Company}-Tags, KEINE Quellen-Pfeil-Zeile — Quellen werden separat ergänzt):
 PUBLIC: ${publicCompanyList}
-PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${historyBlock ? `\n\n${historyBlock}` : ''}${exemplarBlock ? `\n\n${exemplarBlock}` : ''}`
+PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${historyBlock ? `\n\n${historyBlock}` : ''}${recentBlock ? `\n\n${recentBlock}` : ''}${exemplarBlock ? `\n\n${exemplarBlock}` : ''}`
 
   const text = await callModelNonStreaming(userPrompt, buildBundleSystemPrompt(bundleType), model, {
     cacheableUserPrefix: context.cacheableUserPrefix,
@@ -1178,12 +1279,24 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
     maxTokens: 16000,
   })
 
-  // Heading sicherstellen + Längen-Durchsetzung (vor der Marker-Injektion, damit
-  // die ≤90-Zeichen-Prüfung nicht den HTML-Kommentar mitzählt).
+  // Heading sicherstellen + Post-Write-Delta-Loop + Längen-Durchsetzung (vor Marker-Injektion).
   let trimmed = text.trim()
   if (!trimmed.startsWith('##')) {
     trimmed = `## ${heading}\n\n${trimmed}`
   }
+
+  const bundleRule = BUNDLE_LENGTH_RULES[bundleType]
+  const lengthHint = bundleRule.kind === 'chars'
+    ? `bis zu ${formatDeNumber(bundleRule.max)} Zeichen`
+    : `bis zu ${bundleRule.max} Sätze`
+  const mergedSourceText = items.map((it) => it.content || it.title).join('\n\n')
+  trimmed = await applyDeltaPass(trimmed, {
+    heading,
+    recentMatches,
+    sourceText: mergedSourceText,
+    mode: { kind: 'bundle', bundleType, lengthHint },
+  })
+
   trimmed = await enforceHeadingLength(trimmed, (h) => shortenHeadingViaModel(h, model))
 
   // Quellen-Block deterministisch neu setzen: Tag-Zeile des Modells extrahieren
@@ -1198,7 +1311,7 @@ PREMARKET: ${premarketCompanyList}${mattesBlock ? `\n\n${mattesBlock}` : ''}${hi
 
   // Stufe 4 der Take-Reform: eigener Take-Durchgang (wie writeSection).
   withSources = await applyTakePass(withSources, {
-    heading, sourceText: items.map((it) => it.content || it.title).join('\n\n'), takeAngle: context.takeAngle, mattesBlock, exemplarBlock,
+    heading, sourceText: mergedSourceText, takeAngle: context.takeAngle, mattesBlock, exemplarBlock, recentTakesBlock,
   })
 
   // "Wer …"-Schlussfigur deterministisch durchsetzen (wie writeSection).
@@ -1472,40 +1585,57 @@ export interface SectionContext {
   companiesPerItem: Map<string, { public: string[]; premarket: string[] }>
   metadataBlock: string
   loadedPatterns: LearnedPattern[]
+  recentSections?: EmbeddedRecentSection[]
 }
 
 /**
  * Builds the per-run context shared across every section call: edit-learning
- * patterns/examples, the company map, the cacheable user prefix and the
- * metadata block. Extracted from runGhostwriterPipeline so the resumable job
- * pipeline can rebuild the same context on a later cron tick.
+ * patterns/examples, 3-day published section embeddings, the company map, the
+ * cacheable user prefix and the metadata block. Extracted from
+ * runGhostwriterPipeline so the resumable job pipeline can rebuild the same
+ * context on a later cron tick.
  */
 export async function buildSectionContext(
   items: PipelineItem[],
   plan: ArticlePlan,
   vocabularyContext: string | undefined,
+  options: { includeRecentSections?: boolean } = {},
 ): Promise<SectionContext> {
-  // ── Edit Learning: Load patterns and examples ──────────────────────────────
+  // ── Edit Learning + 3-day recent coverage (run in parallel, non-fatal) ────
   let editLearningContext = ''
   let loadedPatterns: LearnedPattern[] = []
-  try {
-    const [patterns, examples] = await Promise.all([
-      getActiveLearnedPatterns(0.4, 20),
-      findSimilarEditExamples(
-        items.map(i => i.title).join(' ').slice(0, 2000), 3, 7
-      ),
-    ])
-    loadedPatterns = patterns
-    if (patterns.length > 0 || examples.length > 0) {
-      const enhancement = buildPromptEnhancement(patterns, examples)
-      if (enhancement) {
-        editLearningContext = enhancement
-        console.log(`[Pipeline] Edit learning: ${patterns.length} patterns, ${examples.length} examples`)
+  let recentSections: EmbeddedRecentSection[] = []
+  const includeRecent = options.includeRecentSections !== false
+
+  await Promise.all([
+    (async () => {
+      try {
+        const [patterns, examples] = await Promise.all([
+          getActiveLearnedPatterns(0.4, 20),
+          findSimilarEditExamples(
+            items.map(i => i.title).join(' ').slice(0, 2000), 3, 7
+          ),
+        ])
+        loadedPatterns = patterns
+        if (patterns.length > 0 || examples.length > 0) {
+          const enhancement = buildPromptEnhancement(patterns, examples)
+          if (enhancement) {
+            editLearningContext = enhancement
+            console.log(`[Pipeline] Edit learning: ${patterns.length} patterns, ${examples.length} examples`)
+          }
+        }
+      } catch (err) {
+        console.error('[Pipeline] Failed to load Edit Learning patterns:', err)
       }
-    }
-  } catch (err) {
-    console.error('[Pipeline] Failed to load Edit Learning patterns:', err)
-  }
+    })(),
+    (async () => {
+      if (!includeRecent) return
+      recentSections = await loadRecentPublishedSections()
+      if (recentSections.length > 0) {
+        console.log(`[Pipeline] Recent 3-day coverage: ${recentSections.length} sections loaded`)
+      }
+    })(),
+  ])
 
   // ── Pre-extract relevant companies per item (avoids sending all 492 names per call) ──
   const companiesPerItem = new Map<string, { public: string[]; premarket: string[] }>()
@@ -1527,7 +1657,7 @@ export async function buildSectionContext(
     .join('\n')
   const metadataBlock = `---\nTITLE: ${plan.articleTitle}\nEXCERPT:\n${excerptLines}\nCATEGORY: ${plan.category || 'AI & Tech'}\n---\n\n${plan.introParagraph}\n\n`
 
-  return { cacheableUserPrefix, companiesPerItem, metadataBlock, loadedPatterns }
+  return { cacheableUserPrefix, companiesPerItem, metadataBlock, loadedPatterns, recentSections }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1645,7 +1775,7 @@ function writeUnit(
   unit: BundleWriteUnit,
   model: AIModel,
   companiesPerItem: Map<string, { public: string[]; premarket: string[] }>,
-  shared: { cacheableUserPrefix: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'; repoIntensity?: number },
+  shared: { cacheableUserPrefix: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'; repoIntensity?: number; recentSections?: EmbeddedRecentSection[] },
 ): Promise<string> {
   if (unit.kind === 'bundle') {
     return writeBundleSection(unit.items, unit.bundleType, unit.heading, model, {
@@ -1655,6 +1785,7 @@ function writeUnit(
       takeAngle: unit.takeAngle,
       retrievalHint: unit.retrievalHint,
       repoIntensity: shared.repoIntensity,
+      recentSections: shared.recentSections,
     })
   }
   return writeSection(unit.item, unit.heading, model, {
@@ -1664,6 +1795,7 @@ function writeUnit(
     takeAngle: unit.takeAngle,
     retrievalHint: unit.retrievalHint,
     repoIntensity: shared.repoIntensity,
+    recentSections: shared.recentSections,
   })
 }
 
@@ -1731,7 +1863,7 @@ export async function writeSectionsBatch(
       // Hard per-section timeout: one slow/hung section must not drag the whole
       // batch past the function limit (Job stalled at cursor=0 otherwise).
       let section = await withTimeout(
-        writeUnit(unit, model, ctx.companiesPerItem, { cacheableUserPrefix: ctx.cacheableUserPrefix, effort, repoIntensity }),
+        writeUnit(unit, model, ctx.companiesPerItem, { cacheableUserPrefix: ctx.cacheableUserPrefix, effort, repoIntensity, recentSections: ctx.recentSections }),
         SECTION_WRITE_TIMEOUT_MS,
         `## ${heading}\n\n*Zeitüberschreitung beim Schreiben dieses Abschnitts.*\n`,
       ).catch(err => `## ${heading}\n\n*Fehler: ${err instanceof Error ? err.message : String(err)}*\n`)
@@ -1863,8 +1995,8 @@ export async function* runGhostwriterPipeline(
 
   yield { type: 'planned', itemCount: items.length }
 
-  // ── Build shared section context (edit-learning, companies, prefix, metadata) ──
-  const { cacheableUserPrefix, companiesPerItem, metadataBlock, loadedPatterns } =
+  // ── Build shared section context (edit-learning, 3-day coverage, companies, prefix, metadata) ──
+  const { cacheableUserPrefix, companiesPerItem, metadataBlock, loadedPatterns, recentSections } =
     await buildSectionContext(items, plan, vocabularyContext)
 
   // Emit metadata block immediately so client can show title/excerpt
@@ -1910,7 +2042,7 @@ export async function* runGhostwriterPipeline(
       }
 
       try {
-        results[i] = await writeUnit(unit, model, companiesPerItem, { cacheableUserPrefix, effort, repoIntensity })
+        results[i] = await writeUnit(unit, model, companiesPerItem, { cacheableUserPrefix, effort, repoIntensity, recentSections })
         // Kompensation: bei aktiven Bündeln wird jeder NORMALE Abschnitt (nicht die
         // Bündel-Section selbst) um zwei Sätze der Zusammenfassung gekürzt; der Take
         // bleibt unangetastet (s. writeSectionsBatch, Take-Reform 2026-10-19).

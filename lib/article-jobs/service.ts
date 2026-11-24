@@ -571,8 +571,8 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
       }
       const plan = normalizeArticlePlan(job.plan, job.selected_items.length)
       const { vocabulary } = await buildVocabularyContext(job.vocabulary_intensity)
-      // Only metadataBlock is needed here; vocabularyContext is irrelevant for finalize.
-      const ctx = await buildSectionContext(job.selected_items, plan, undefined)
+      // Only metadataBlock is needed here; vocabularyContext and 3-day recent coverage are irrelevant for finalize.
+      const ctx = await buildSectionContext(job.selected_items, plan, undefined, { includeRecentSections: false })
       const fullMarkdown = await finalizeArticle(
         ctx.metadataBlock,
         job.written_sections ?? [],

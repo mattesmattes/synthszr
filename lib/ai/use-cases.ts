@@ -32,6 +32,7 @@ export type UseCase =
   | 'glossary_review'
   | 'glossary_translation'
   | 'ghostwriter_take'
+  | 'ghostwriter_delta'
   | 'wrapup'
   | 'wrapup_research'
   | 'agent_house'
@@ -204,6 +205,12 @@ export const USE_CASE_DEFINITIONS: Record<UseCase, UseCaseInfo> = {
     description: 'Abschliessender Meinungsabsatz eines Artikels (bisher am Ghostwriter-Modell mitgehangen)',
     defaultModel: 'claude-opus-5',
     allowedProviders: ['anthropic'],
+  },
+  ghostwriter_delta: {
+    label: 'Ghostwriter — 3-Tage-Delta-Prüfung',
+    description: 'Prüft tagesaktuelle News-Abschnitte gegen Vorberichte der letzten 3 Tage und reduziert Wiederholungen zugunsten neuer Aspekte',
+    defaultModel: 'claude-sonnet-5',
+    allowedProviders: ['anthropic', 'openai', 'google'],
   },
   wrapup: {
     label: 'Wochenrückblick',

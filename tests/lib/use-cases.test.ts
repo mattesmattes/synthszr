@@ -29,6 +29,7 @@ const EXPECTED_USE_CASES: UseCase[] = [
   'glossary_review',
   'glossary_translation',
   'ghostwriter_take',
+  'ghostwriter_delta',
   'wrapup',
   'wrapup_research',
   'agent_house',

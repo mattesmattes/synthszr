@@ -85,6 +85,13 @@ describe('buildTakeUserPrompt / TAKE_SYSTEM_PROMPT', () => {
     for (const needle of ['H', 'Zusammenfassung S.', 'Quelle Q.', 'Engpass: X', 'SO SCHREIBT MATTES', 'MATTES-KONTEXT']) expect(u).toContain(needle)
   })
 
+  it('fuegt recentTakesBlock ein, wenn vorhanden, und laesst ihn weg, wenn leer', () => {
+    const ohne = buildTakeUserPrompt({ heading: 'H', summary: 'S', sourceExcerpt: 'Q' })
+    expect(ohne).not.toContain('BISHERIGE SYNTHSZR TAKES')
+    const mit = buildTakeUserPrompt({ heading: 'H', summary: 'S', sourceExcerpt: 'Q', recentTakesBlock: 'BISHERIGE SYNTHSZR TAKES: Alt.' })
+    expect(mit).toContain('BISHERIGE SYNTHSZR TAKES: Alt.')
+  })
+
   it('System-Prompt ist kompakt: Form, Argument, Lesbarkeit, Verbote (Betreiber 2026-10-21: weniger Regeln, fluessigere Takes)', () => {
     expect(TAKE_SYSTEM_PROMPT.length).toBeLessThan(2900)
     // Betreiber 2026-10-22: „nicht aus Analystenperspektive, Flughöhe stimmt nicht" — die Rolle war nirgends definiert.
