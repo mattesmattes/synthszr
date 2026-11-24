@@ -321,6 +321,13 @@ function hasMatchedRow(data: unknown): boolean {
   return Boolean(data) && (!Array.isArray(data) || data.length > 0)
 }
 
+/** Vergleicht zwei ISO-8601-Zeitpunkte unabhängig vom Format (`Z` vs. `+00:00`, gekürzte Nachkommastellen). */
+function sameInstant(a: string, b: string): boolean {
+  const ta = Date.parse(a)
+  const tb = Date.parse(b)
+  return Number.isFinite(ta) && Number.isFinite(tb) ? ta === tb : a === b
+}
+
 /**
  * Inserts the assembled markdown as a draft generated_post. Mirrors the manual
  * saveAsDraft flow (parse frontmatter → markdown→TipTap → URL sanitize).
@@ -585,7 +592,7 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
         .eq('id', job.id)
         .maybeSingle()
       const freshRow = fresh as { phase?: string | null; last_advanced_at?: string | null; generated_post_id?: string | null } | null
-      if (freshRow && (freshRow.phase !== 'finalizing' || (freshRow.last_advanced_at && freshRow.last_advanced_at !== currentClaimAt))) {
+      if (freshRow && (freshRow.phase !== 'finalizing' || (freshRow.last_advanced_at && !sameInstant(freshRow.last_advanced_at, currentClaimAt)))) {
         console.warn(`[ArticleJobs] Lease lost before persistDraftPost for job ${job.id} — skipping insert`)
         return 'lease_lost'
       }

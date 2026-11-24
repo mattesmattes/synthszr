@@ -184,6 +184,45 @@ describe('advanceArticleJob — Claim und Lease', () => {
     expect(lexUpdate?.generated_post_id).toBe('existing-post-99')
   })
 
+  it('finalizing akzeptiert Postgres-+00:00-Timestamps für denselben Zeitpunkt und erkennt fremde Leases weiterhin', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date('2026-11-24T12:42:57.710Z'))
+      state.job = job({
+        phase: 'finalizing',
+        digest_id: null,
+        plan: {
+          thesis: 't', ordering: [1], headings: { '1': 'H' }, takeAngles: {}, retrievalHints: {},
+          articleTitle: 'T', excerptBullets: ['a', 'b', 'c'], category: 'AI & Tech', introParagraph: 'Intro',
+        },
+        written_sections: ['## H\n\nText.\n\n'],
+        cursor: 1,
+      })
+
+      // 1) Gleicher Zeitpunkt in Postgres-+00:00-Format mit gekürzter Null → gültiger Lease
+      state.freshJob = {
+        phase: 'finalizing',
+        last_advanced_at: '2026-11-24T12:42:57.71+00:00',
+        generated_post_id: null,
+      }
+      expect(await advanceArticleJob('job-1')).toBe('finalized')
+      expect(state.postInserts).toHaveLength(1)
+
+      // 2) Abweichender Zeitpunkt → weiterhin lease_lost und kein Insert
+      state.updates = []
+      state.postInserts = []
+      state.freshJob = {
+        phase: 'finalizing',
+        last_advanced_at: '2026-11-24T12:43:10.000+00:00',
+        generated_post_id: null,
+      }
+      expect(await advanceArticleJob('job-1')).toBe('lease_lost')
+      expect(state.postInserts).toHaveLength(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('createManualArticleJob deaktiviert fillFromBalanced standardmaessig (nur manuell gewaehlte Items)', async () => {
     await createManualArticleJob({
       maxItems: 26,
