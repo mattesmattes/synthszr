@@ -32,7 +32,7 @@ export const maxDuration = 800
 const LOOP_BUDGET_MS = 240_000
 
 /** Ergebnisse, nach denen es im selben Aufruf nichts mehr zu tun gibt. */
-const STOP_RESULTS = new Set(['no_job', 'claimed_elsewhere', 'tick_error', 'lexicon_done', 'done', 'error', 'unknown_phase'])
+const STOP_RESULTS = new Set(['no_job', 'claimed_elsewhere', 'lease_lost', 'tick_error', 'lexicon_done', 'done', 'error', 'unknown_phase'])
 
 export async function GET(request: NextRequest) {
   const authResult = verifyCronAuth(request)

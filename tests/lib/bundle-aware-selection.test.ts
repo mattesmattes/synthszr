@@ -19,6 +19,8 @@ import {
   capByUnits,
   countSelectionUnits,
   mergeSelectionWithFill,
+  bundleKeyOf,
+  stripBundleLabelsForFill,
   BUNDLE_SOURCES_MAX,
 } from '@/lib/claude/queue-article'
 
@@ -225,5 +227,66 @@ describe('mergeSelectionWithFill', () => {
     expect(merged.filter((z) => z.id.startsWith('hand-'))).toHaveLength(7)
     expect(merged.filter((z) => z.id.startsWith('f'))).toHaveLength(3)
     expect(countSelectionUnits(merged)).toBe(4)
+  })
+})
+
+describe('Manuelle Labels ueber mehrere Techmeme-Stories hinweg', () => {
+  it('bundleKeyOf gibt nur fuer topic eine Story zurueck; long_read/cover_story/deep_dive/recap und null liefern null', () => {
+    const meta = { techmeme_story: 'jensen-returns' }
+    expect(bundleKeyOf(meta, 'topic')).toBe('jensen-returns')
+    expect(bundleKeyOf(meta, null)).toBeNull()
+    expect(bundleKeyOf(meta, 'long_read')).toBeNull()
+    expect(bundleKeyOf(meta, 'cover_story')).toBeNull()
+    expect(bundleKeyOf(meta, 'deep_dive')).toBeNull()
+    expect(bundleKeyOf(meta, 'recap')).toBeNull()
+  })
+
+  it('capByUnits & countSelectionUnits fassen 9 long_read-Items ueber 4 Techmeme-Stories als 1 Einheit zusammen und behalten alle 9', () => {
+    const items = [
+      q('h1', 9, 'long_read', 'story-1'),
+      q('h2', 8.9, 'long_read', 'story-1'),
+      q('h3', 8.8, 'long_read', 'story-2'),
+      q('h4', 8.7, 'long_read', 'story-2'),
+      q('h5', 8.6, 'long_read', 'story-3'),
+      q('h6', 8.5, 'long_read', 'story-3'),
+      q('h7', 8.4, 'long_read', 'story-4'),
+      q('h8', 8.3, 'long_read', 'story-4'),
+      q('h9', 8.2, 'long_read'),
+    ]
+    expect(countSelectionUnits(items)).toBe(1)
+    const out = capByUnits(items, 10)
+    expect(out).toHaveLength(9)
+    expect(countSelectionUnits(out)).toBe(1)
+  })
+
+  it('fasst cover_story, deep_dive und recap ueber verschiedene Stories als jeweils 1 Einheit zusammen, waehrend topic je Story bei 5 kappt', () => {
+    const items = [
+      ...Array.from({ length: 6 }, (_, i) => q(`t-s1-${i}`, 9 - i * 0.1, 'topic', 's1')),
+      ...Array.from({ length: 6 }, (_, i) => q(`t-s2-${i}`, 8 - i * 0.1, 'topic', 's2')),
+      q('c1', 7, 'cover_story', 's1'),
+      q('c2', 6.9, 'cover_story', 's3'),
+      q('d1', 6.8, 'deep_dive', 's1'),
+      q('d2', 6.7, 'deep_dive', 's4'),
+      q('r1', 6.6, 'recap', 's1'),
+      q('r2', 6.5, 'recap', 's5'),
+    ]
+    expect(countSelectionUnits(items)).toBe(5)
+    const out = capByUnits(items, 10)
+    expect(out.filter((z) => z.id.startsWith('t-s1-'))).toHaveLength(BUNDLE_SOURCES_MAX)
+    expect(out.filter((z) => z.id.startsWith('t-s2-'))).toHaveLength(BUNDLE_SOURCES_MAX)
+    expect(out.filter((z) => z.bundle_type === 'cover_story')).toHaveLength(2)
+    expect(out.filter((z) => z.bundle_type === 'deep_dive')).toHaveLength(2)
+    expect(out.filter((z) => z.bundle_type === 'recap')).toHaveLength(2)
+  })
+
+  it('stripBundleLabelsForFill entfernt veraltete bundle_type-Labels ohne Eingabe-Mutation', () => {
+    const items = [
+      { id: '1', bundle_type: 'topic' as const },
+      { id: '2', bundle_type: null },
+      { id: '3', bundle_type: 'long_read' as const },
+    ]
+    const stripped = stripBundleLabelsForFill(items)
+    expect(stripped.map((i) => i.bundle_type)).toEqual([null, null, null])
+    expect(items[0].bundle_type).toBe('topic')
   })
 })

@@ -86,6 +86,23 @@ describe('attachManualToStories', () => {
     expect(embed).not.toHaveBeenCalled()
   })
 
+  it('ruft keine Embeddings ab fuer long_read/cover_story/deep_dive/recap auch mit techmeme_story', async () => {
+    const embed = vi.fn()
+    const items = [
+      zeile('l1', 'long_read', 'story-a'),
+      zeile('l2', 'long_read'),
+      zeile('c1', 'cover_story', 'story-b'),
+      zeile('c2', 'cover_story'),
+      zeile('d1', 'deep_dive', 'story-c'),
+      zeile('d2', 'deep_dive'),
+      zeile('r1', 'recap', 'story-d'),
+      zeile('r2', 'recap'),
+    ]
+    const out = await attachManualToStories(items, { embed })
+    expect(embed).not.toHaveBeenCalled()
+    expect(out).toEqual(items)
+  })
+
   it('bettet nur die gelabelten Meldungen ein und hängt die passende an', async () => {
     const embed = vi.fn(async (texts: string[]) => texts.map((t) => (t.includes('hand') || t.includes('b1') ? [0, 1] : [1, 0])))
     const items = [zeile('a1', 'topic', 'story-a'), zeile('b1', 'topic', 'story-b'), zeile('einzel', null), zeile('hand', 'topic')]

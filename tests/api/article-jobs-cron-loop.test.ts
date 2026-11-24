@@ -30,8 +30,8 @@ describe('GET /api/cron/article-jobs', () => {
     expect(body).toEqual({ ok: true, result: 'lexicon_done', results: ['planned', 'writing_progress', 'writing_done', 'finalized', 'lexicon_done'] })
   })
 
-  it('stoppt sofort bei no_job, claimed_elsewhere und tick_error', async () => {
-    for (const r of ['no_job', 'claimed_elsewhere', 'tick_error']) {
+  it('stoppt sofort bei no_job, claimed_elsewhere, lease_lost und tick_error', async () => {
+    for (const r of ['no_job', 'claimed_elsewhere', 'lease_lost', 'tick_error']) {
       mocks.advance.mockReset(); mocks.advance.mockResolvedValue(r)
       const res = await GET(req())
       expect(mocks.advance).toHaveBeenCalledTimes(1)

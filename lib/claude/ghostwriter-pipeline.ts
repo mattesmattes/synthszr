@@ -118,6 +118,14 @@ export interface BundleUnitIndices {
  */
 const BUNDLE_TYPE_ORDER: readonly BundleType[] = BUNDLE_TYPES
 
+/**
+ * Nur diese Bündel-Typen teilen sich anhand von `bundle_key` (Techmeme-Story)
+ * in mehrere Abschnitte desselben Labels auf. Alle anderen Labels
+ * (`cover_story`, `deep_dive`, `long_read`, `recap`) sind reine Betreiber-
+ * Bündel und ergeben je Label genau EINEN Abschnitt über alle markierten Quellen.
+ */
+export const STORY_SCOPED_BUNDLE_TYPES: ReadonlySet<BundleType> = new Set(['topic'])
+
 export type BundleLengthRule =
   | { kind: 'sentences'; max: number }
   | { kind: 'chars'; max: number }
@@ -183,7 +191,7 @@ export function computeBundleUnits(items: PipelineItem[]): BundleUnitIndices[] {
   items.forEach((item, i) => {
     const typ = item.bundle_type
     if (!typ || !BUNDLE_TYPE_ORDER.includes(typ)) return
-    const key = item.bundle_key || typ
+    const key = STORY_SCOPED_BUNDLE_TYPES.has(typ) && item.bundle_key ? item.bundle_key : typ
     const id = `${typ}::${key}`
     const vorhanden = units.get(id)
     if (vorhanden) vorhanden.indices.push(i + 1)
@@ -1092,7 +1100,10 @@ export async function writeBundleSection(
   // damit die Tiefe aus den Quellen kommt statt aus Füllsätzen.
   // JEDER content-Slice MUSS durch stripLoneSurrogates, sonst macht ein an der
   // Grenze zerschnittenes Surrogate den Anthropic-Body zu 400-Invalid-JSON.
-  const BUNDLE_SOURCE_CONTENT_CHARS = bundleType === 'long_read' ? 12000 : 4000
+  const BUNDLE_SOURCE_CONTENT_CHARS =
+    bundleType === 'long_read'
+      ? Math.min(12000, Math.max(4000, Math.floor(48000 / Math.max(1, items.length))))
+      : 4000
   const sourceBlocks = items.map((it, i) => {
     const name = it.source_display_name || it.source_identifier
     return `[QUELLE ${i + 1}] ${name}${it.source_url ? ` | URL: ${it.source_url}` : ''}\n${escapeQuellmaterialTag(stripLoneSurrogates((it.content || 'Kein Inhalt verfügbar.').slice(0, BUNDLE_SOURCE_CONTENT_CHARS)))}`
@@ -1696,7 +1707,7 @@ export async function writeSectionsBatch(
   budgetMs: number,
   startedAt: number,
   proofreadModel?: AIModel,
-  onBatch?: (nextCursor: number, newSections: string[]) => Promise<void>,
+  onBatch?: (nextCursor: number, newSections: string[]) => Promise<void | boolean>,
   repoIntensity?: number,
 ): Promise<WriteBatchResult> {
   // Bundle groups collapse N items → 1 section, so we iterate WRITE UNITS, not
@@ -1757,7 +1768,14 @@ export async function writeSectionsBatch(
     i += batch.length
     // Persist progress after each batch so a parallel status poll shows live
     // section-by-section progress (and resume is batch-granular, not just per-tick).
-    if (onBatch) { try { await onBatch(i, [...out]) } catch (err) { console.warn('[Pipeline] onBatch persist failed:', err) } }
+    if (onBatch) {
+      try {
+        const keepGoing = await onBatch(i, [...out])
+        if (keepGoing === false) break
+      } catch (err) {
+        console.warn('[Pipeline] onBatch persist failed:', err)
+      }
+    }
     if (Date.now() - startedAt > budgetMs) break   // Budget erschöpft -> Rest im nächsten Tick
   }
   return { sections: out, nextCursor: i, done: i >= units.length }

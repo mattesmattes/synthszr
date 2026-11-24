@@ -387,7 +387,13 @@ export default function CreateArticlePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ useSelected: true, maxItems: maxQueueItems, vocabularyIntensity, repoIntensity }),
+        body: JSON.stringify({
+          useSelected: true,
+          maxItems: maxQueueItems,
+          fillFromBalanced: queueStats.selected > 0 && maxQueueItems > queueStats.selected,
+          vocabularyIntensity,
+          repoIntensity,
+        }),
       })
       if (!createRes.ok) {
         const err = await createRes.json().catch(() => ({}))

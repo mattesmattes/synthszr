@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
     queueItemIds: body.queueItemIds,
     useSelected: body.useSelected ?? true,
     maxItems: body.maxItems ?? 25,
+    fillFromBalanced: typeof body.fillFromBalanced === 'boolean' ? body.fillFromBalanced : undefined,
     vocabularyIntensity: body.vocabularyIntensity ?? 50,
     repoIntensity: body.repoIntensity ?? 40,
     model,

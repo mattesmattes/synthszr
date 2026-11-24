@@ -38,7 +38,7 @@ interface Zuordenbar {
 
 /** Handmarkierung = gelabelt, aber ohne Techmeme-Story. */
 function istHandmarkierung(item: Zuordenbar): boolean {
-  return !!item.bundle_type && !bundleKeyOf(item.metadata)
+  return !!item.bundle_type && !bundleKeyOf(item.metadata, item.bundle_type)
 }
 
 /**
@@ -55,7 +55,7 @@ export function assignManualToStories<T extends Zuordenbar>(items: T[], embeddin
     let besteStory: string | null = null
     let besteAehnlichkeit = -Infinity
     items.forEach((kandidat, j) => {
-      const story = bundleKeyOf(kandidat.metadata)
+      const story = bundleKeyOf(kandidat.metadata, kandidat.bundle_type)
       const emb = embeddings[j]
       if (!story || kandidat.bundle_type !== item.bundle_type || !emb || emb.length !== eigenes.length) return
       const sim = cosineSimilarity(eigenes, emb)
@@ -82,7 +82,7 @@ export async function attachManualToStories<T extends Zuordenbar>(
   items: T[],
   opts: { embed?: Embedder; threshold?: number } = {},
 ): Promise<T[]> {
-  const labelsMitStory = new Set(items.filter((i) => i.bundle_type && bundleKeyOf(i.metadata)).map((i) => i.bundle_type))
+  const labelsMitStory = new Set(items.filter((i) => i.bundle_type && bundleKeyOf(i.metadata, i.bundle_type)).map((i) => i.bundle_type))
   const kandidaten = items.filter((i) => istHandmarkierung(i) && labelsMitStory.has(i.bundle_type))
   if (kandidaten.length === 0) return items
 
@@ -103,7 +103,7 @@ export async function attachManualToStories<T extends Zuordenbar>(
   const zugeordnet = assignManualToStories(relevant, embeddings, opts.threshold ?? DEFAULT_DEDUP_THRESHOLD)
   const byId = new Map(zugeordnet.map((i) => [i.id, i]))
   for (const k of kandidaten) {
-    const story = bundleKeyOf(byId.get(k.id)?.metadata)
+    const story = bundleKeyOf(byId.get(k.id)?.metadata, k.bundle_type)
     console.log(`[BundleAttach] "${k.title.slice(0, 50)}" (${k.bundle_type}) → ${story ?? 'eigener Abschnitt'}`)
   }
   return items.map((i) => byId.get(i.id) ?? i)

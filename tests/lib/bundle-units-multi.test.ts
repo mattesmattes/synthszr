@@ -72,6 +72,45 @@ describe('computeBundleUnits', () => {
     expect(units[0].bundleType).toBe('deep_dive')
   })
 
+  it('fasst 9 long_read-Items ueber 4 verschiedene bundle_keys plus eins ohne Key zu GENAU EINER Einheit zusammen', () => {
+    const items = [
+      item('1', 'long_read', 'story-a'),
+      item('2', 'long_read', 'story-a'),
+      item('3', 'long_read', 'story-b'),
+      item('4', 'long_read', 'story-b'),
+      item('5', 'long_read', 'story-c'),
+      item('6', 'long_read', 'story-c'),
+      item('7', 'long_read', 'story-d'),
+      item('8', 'long_read', 'story-d'),
+      item('9', 'long_read'),
+    ]
+    const units = computeBundleUnits(items)
+    expect(units).toHaveLength(1)
+    expect(units[0]).toEqual({
+      bundleType: 'long_read',
+      key: 'long_read',
+      indices: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+    })
+  })
+
+  it('fasst auch cover_story, deep_dive und recap ueber verschiedene bundle_keys je Label zu einer Einheit zusammen', () => {
+    const items = [
+      item('c1', 'cover_story', 'story-a'),
+      item('c2', 'cover_story', 'story-b'),
+      item('d1', 'deep_dive', 'story-a'),
+      item('d2', 'deep_dive', 'story-b'),
+      item('r1', 'recap', 'story-a'),
+      item('r2', 'recap', 'story-b'),
+    ]
+    const units = computeBundleUnits(items)
+    expect(units).toHaveLength(3)
+    expect(units.map((u) => [u.bundleType, u.indices])).toEqual([
+      ['cover_story', [1, 2]],
+      ['deep_dive', [3, 4]],
+      ['recap', [5, 6]],
+    ])
+  })
+
   it('ignoriert Items ohne Buendel-Typ', () => {
     expect(computeBundleUnits([item('a', null), item('b', null)])).toHaveLength(0)
   })

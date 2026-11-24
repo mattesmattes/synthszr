@@ -171,6 +171,7 @@ export async function createManualArticleJob(opts: {
   queueItemIds?: string[]
   useSelected?: boolean
   maxItems: number
+  fillFromBalanced?: boolean
   model: string
   effort: string
   vocabularyIntensity: number
@@ -182,6 +183,7 @@ export async function createManualArticleJob(opts: {
     queueItemIds: opts.queueItemIds,
     useSelected: opts.useSelected ?? true,
     maxItems: opts.maxItems,
+    fillFromBalanced: opts.fillFromBalanced ?? false,
   })
   if (pipelineItems.length === 0) return { error: 'no_items' }
 
@@ -207,10 +209,10 @@ export async function createManualArticleJob(opts: {
   return { jobId: data.id, itemCount: pipelineItems.length }
 }
 
-/** A job counts as browser-driven (and off-limits to the cron) if it was
- *  advanced within this window. Longer than any single advance (≤300s) + poll
- *  gap, so an in-flight phase never looks idle. */
-const LEASE_STALE_MS = 6 * 60 * 1000
+/** A job counts as actively leased (and off-limits to other drivers) if it was
+ *  claimed or heartbeated within this window. Must exceed Vercel maxDuration (800s)
+ *  so a slow 64k-token planning or writing call can never be stolen mid-flight. */
+export const LEASE_STALE_MS = 15 * 60 * 1000
 
 /**
  * Oldest open (pending|processing) job the cron may advance — EXCLUDING jobs a
@@ -315,12 +317,21 @@ export async function markJobError(id: string, message: string): Promise<void> {
     .eq('id', id)
 }
 
+function hasMatchedRow(data: unknown): boolean {
+  return Boolean(data) && (!Array.isArray(data) || data.length > 0)
+}
+
 /**
  * Inserts the assembled markdown as a draft generated_post. Mirrors the manual
  * saveAsDraft flow (parse frontmatter → markdown→TipTap → URL sanitize).
  * Returns the new post id.
  */
 async function persistDraftPost(supabase: AdminClient, job: ArticleJob, fullMarkdown: string): Promise<string> {
+  if (job.generated_post_id) {
+    console.log(`[ArticleJobs] persistDraftPost: job already has post (${job.generated_post_id}), reusing`)
+    return job.generated_post_id
+  }
+
   const { parseArticleContent, generateSlug, stripHtmlComments } = await import('@/lib/utils/parse-article-content')
   const { sanitizeTiptapUrls } = await import('@/lib/utils/url-verifier')
   const { buildUniqueSlug } = await import('@/lib/article-jobs/unique-slug')
@@ -328,18 +339,20 @@ async function persistDraftPost(supabase: AdminClient, job: ArticleJob, fullMark
   // Idempotency: a previous finalize tick may have inserted the draft and then
   // timed out before persisting status=done, leaving the job 'processing'. On the
   // next tick we'd otherwise insert a SECOND draft and collide on the unique slug.
-  // Reuse the existing draft for this digest instead of re-inserting.
-  const { data: existingDraft } = await supabase
-    .from('generated_posts')
-    .select('id')
-    .eq('digest_id', job.digest_id)
-    .eq('status', 'draft')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-  if (existingDraft) {
-    console.log(`[ArticleJobs] persistDraftPost: draft for digest already exists (${existingDraft.id}), reusing`)
-    return existingDraft.id
+  // Reuse the existing draft for this digest instead of re-inserting (only when digest_id is non-null).
+  if (job.digest_id) {
+    const { data: existingDraft } = await supabase
+      .from('generated_posts')
+      .select('id')
+      .eq('digest_id', job.digest_id)
+      .eq('status', 'draft')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    if (existingDraft) {
+      console.log(`[ArticleJobs] persistDraftPost: draft for digest already exists (${existingDraft.id}), reusing`)
+      return existingDraft.id
+    }
   }
 
   const { metadata, body } = parseArticleContent(fullMarkdown)
@@ -440,13 +453,15 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
   }
 
   const startedAt = Date.now()
+  const claimAt = new Date(startedAt).toISOString()
+  let currentClaimAt = claimAt
   // Claim per Compare-and-Set (2026-10-19): der Lease (last_advanced_at) wird nur
   // gesetzt, wenn gerade keiner läuft — null oder älter als LEASE_STALE_MS.
   // Seit der Server den Job allein treibt (Minuten-Cron UND 15-Minuten-
   // Scheduler rufen advanceArticleJob), könnten zwei Treiber denselben Job
   // gleichzeitig vorantreiben; ein verlorener Claim ist kein Fehler. Am Ende
   // jeder erfolgreichen Phase wird der Lease wieder freigegeben (null), damit
-  // der nächste Tick sofort weitermacht statt sechs Minuten zu warten.
+  // der nächste Tick sofort weitermacht.
   const staleBefore = new Date(startedAt - LEASE_STALE_MS).toISOString()
   const { data: claimed } = await supabase
     .from('article_jobs')
@@ -454,7 +469,7 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
       status: 'processing',
       attempts: job.attempts + 1,
       started_at: job.started_at ?? new Date().toISOString(),
-      last_advanced_at: new Date().toISOString(),
+      last_advanced_at: claimAt,
     })
     .eq('id', job.id)
     .in('status', ['pending', 'processing'])
@@ -466,10 +481,17 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
     if (job.phase === 'planning') {
       const planningModel = (await getModelForUseCase('article_planning')) as AIModel
       const plan = await planArticle(job.selected_items, planningModel)
-      await supabase
+      const { data: updated } = await supabase
         .from('article_jobs')
-        .update({ plan, phase: 'writing', cursor: 0, last_advanced_at: null })
+        .update({ plan, phase: 'writing', cursor: 0, written_sections: [], last_advanced_at: null })
         .eq('id', job.id)
+        .eq('phase', 'planning')
+        .eq('last_advanced_at', currentClaimAt)
+        .select('id')
+      if (!hasMatchedRow(updated)) {
+        console.warn(`[ArticleJobs] Lease lost during planning for job ${job.id} — discarding stale plan`)
+        return 'lease_lost'
+      }
       return 'planned'
     }
 
@@ -490,6 +512,7 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
       // proofread in finalize that exceeded the 300s limit on long articles.
       const proofreadModel = (await getModelForUseCase('proofreading')) as AIModel
       const prevWritten = job.written_sections ?? []
+      let leaseLost = false
       const res = await writeSectionsBatch(
         orderedItems,
         plan,
@@ -500,17 +523,29 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
         150_000,
         startedAt,
         proofreadModel,
-        // Persist after each batch → the client's status poll shows live progress.
+        // Persist after each batch → the client's status poll shows live progress + renew lease heartbeat.
         async (nextCursor, newSections) => {
-          await supabase
+          const nextBeat = new Date(Math.max(Date.now(), Date.parse(currentClaimAt) + 1)).toISOString()
+          const { data: batchUpdated } = await supabase
             .from('article_jobs')
-            .update({ written_sections: [...prevWritten, ...newSections], cursor: nextCursor })
+            .update({ written_sections: [...prevWritten, ...newSections], cursor: nextCursor, last_advanced_at: nextBeat })
             .eq('id', job.id)
+            .eq('phase', 'writing')
+            .eq('last_advanced_at', currentClaimAt)
+            .select('id')
+          if (!hasMatchedRow(batchUpdated)) {
+            console.warn(`[ArticleJobs] Lease lost during writing batch for job ${job.id} — aborting`)
+            leaseLost = true
+            return false
+          }
+          currentClaimAt = nextBeat
+          return true
         },
         job.repo_intensity,
       )
+      if (leaseLost) return 'lease_lost'
       const written = [...prevWritten, ...res.sections]
-      await supabase
+      const { data: updated } = await supabase
         .from('article_jobs')
         .update({
           written_sections: written,
@@ -519,6 +554,13 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
           last_advanced_at: null,
         })
         .eq('id', job.id)
+        .eq('phase', 'writing')
+        .eq('last_advanced_at', currentClaimAt)
+        .select('id')
+      if (!hasMatchedRow(updated)) {
+        console.warn(`[ArticleJobs] Lease lost at end of writing for job ${job.id}`)
+        return 'lease_lost'
+      }
       return res.done ? 'writing_done' : 'writing_progress'
     }
 
@@ -537,15 +579,35 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
         job.model as AIModel,
         vocabulary,
       )
-      const postId = await persistDraftPost(supabase, job, fullMarkdown)
+      const { data: fresh } = await supabase
+        .from('article_jobs')
+        .select('phase, last_advanced_at, generated_post_id')
+        .eq('id', job.id)
+        .maybeSingle()
+      const freshRow = fresh as { phase?: string | null; last_advanced_at?: string | null; generated_post_id?: string | null } | null
+      if (freshRow && (freshRow.phase !== 'finalizing' || (freshRow.last_advanced_at && freshRow.last_advanced_at !== currentClaimAt))) {
+        console.warn(`[ArticleJobs] Lease lost before persistDraftPost for job ${job.id} — skipping insert`)
+        return 'lease_lost'
+      }
+      const jobForPersist = freshRow?.generated_post_id
+        ? { ...job, generated_post_id: freshRow.generated_post_id }
+        : job
+      const postId = await persistDraftPost(supabase, jobForPersist, fullMarkdown)
       await markTaskRun(supabase, 'post_generation')
       // NICHT status: 'done' — die lexicon-Phase (unten) schließt den Job ab.
       // Sie braucht die hier gerade erzeugte postId, um die Kandidatenliste an
       // pending_glossary_terms zu hängen; deshalb kann sie nicht vorher laufen.
-      await supabase
+      const { data: updated } = await supabase
         .from('article_jobs')
         .update({ phase: 'lexicon', generated_post_id: postId, last_advanced_at: null })
         .eq('id', job.id)
+        .eq('phase', 'finalizing')
+        .eq('last_advanced_at', currentClaimAt)
+        .select('id')
+      if (!hasMatchedRow(updated)) {
+        console.warn(`[ArticleJobs] Lease lost after persistDraftPost for job ${job.id}`)
+        return 'lease_lost'
+      }
       return 'finalized'
     }
 
@@ -609,10 +671,17 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
       // Browser nach dem Abschluss an; seit der Job im Hintergrund fertig wird,
       // passiert es hier — best-effort wie die Begriffssuche.
       await runAssets(supabase, job)
-      await supabase
+      const { data: updated } = await supabase
         .from('article_jobs')
         .update({ status: 'done', phase: null, completed_at: new Date().toISOString(), last_advanced_at: null })
         .eq('id', job.id)
+        .eq('phase', 'lexicon')
+        .eq('last_advanced_at', currentClaimAt)
+        .select('id')
+      if (!hasMatchedRow(updated)) {
+        console.warn(`[ArticleJobs] Lease lost at end of lexicon for job ${job.id}`)
+        return 'lease_lost'
+      }
       return 'lexicon_done'
     }
 
@@ -624,7 +693,11 @@ export async function advanceArticleJob(jobId?: string): Promise<string> {
     // Persist the message (status stays 'processing') for debuggability.
     const msg = err instanceof Error ? (err.stack || err.message) : String(err)
     console.error('[ArticleJobs] advance error:', err)
-    await supabase.from('article_jobs').update({ error_message: msg.slice(0, 1000) }).eq('id', job.id)
+    await supabase
+      .from('article_jobs')
+      .update({ error_message: msg.slice(0, 1000) })
+      .eq('id', job.id)
+      .eq('last_advanced_at', currentClaimAt)
     return 'tick_error'
   }
 }

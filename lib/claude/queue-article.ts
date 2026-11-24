@@ -29,7 +29,7 @@
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { findDuplicateMetaphors, streamMetaphorDeduplication, type AIModel } from '@/lib/claude/ghostwriter'
-import { runGhostwriterPipeline, type PipelineItem } from '@/lib/claude/ghostwriter-pipeline'
+import { runGhostwriterPipeline, STORY_SCOPED_BUNDLE_TYPES, type PipelineItem } from '@/lib/claude/ghostwriter-pipeline'
 import { isLikelyTruncated } from '@/lib/claude/rewrite-truncation'
 import { getBalancedSelection, getSelectedItems, selectItemsForArticle, deriveSourceUrl } from '@/lib/news-queue/service'
 import { recordQueueEvents, type QueueEvent } from '@/lib/news-queue/events'
@@ -128,12 +128,12 @@ export function capByUnits<T extends { total_score?: number; bundle_type?: strin
 ): T[] {
   const { bundled, single } = splitBundled(items)
 
-  // Je (Typ, Story) ein Bündel — dieselbe Aufteilung wie in der Schreibphase
-  // (computeBundleUnits). Ohne Story-Schlüssel bildet der Typ die Gruppe.
+  // Je (Typ, Story) bei Story-fähigen Labels (`topic`), sonst alle Items
+  // desselben Labels in ein Bündel — identisch zu computeBundleUnits.
   const gruppen = new Map<string, T[]>()
   for (const item of bundled) {
-    const story = item.metadata?.techmeme_story
-    const key = `${item.bundle_type}::${typeof story === 'string' ? story : ''}`
+    const story = bundleKeyOf(item.metadata, item.bundle_type)
+    const key = `${item.bundle_type}::${story ?? ''}`
     const vorhanden = gruppen.get(key)
     if (vorhanden) vorhanden.push(item)
     else gruppen.set(key, [item])
@@ -174,8 +174,8 @@ export function countSelectionUnits<
   const { bundled, single } = splitBundled(items)
   const gruppen = new Set<string>()
   for (const item of bundled) {
-    const story = item.metadata?.techmeme_story
-    gruppen.add(`${item.bundle_type}::${typeof story === 'string' ? story : ''}`)
+    const story = bundleKeyOf(item.metadata, item.bundle_type)
+    gruppen.add(`${item.bundle_type}::${story ?? ''}`)
   }
   return gruppen.size + single.length
 }
@@ -189,6 +189,15 @@ export function mergeSelectionWithFill<
   T extends { total_score?: number; bundle_type?: string | null; metadata?: Record<string, unknown> | null },
 >(cappedManual: T[], fillItems: T[], maxUnits: number): T[] {
   return capByUnits([...cappedManual, ...fillItems], maxUnits)
+}
+
+/**
+ * Nachgeladene Balanced-Items aus status='pending' dürfen niemals ein altes
+ * bundle_type (z. B. nach Reset zurückgesetzte Techmeme-Items) als
+ * Überraschungs-Bündel in den Artikel einschleusen.
+ */
+export function stripBundleLabelsForFill<T extends { bundle_type?: BundleType | null }>(items: T[]): T[] {
+  return items.map((item) => (item.bundle_type ? { ...item, bundle_type: null } : item))
 }
 
 export function toPipelineItem(item: {
@@ -209,7 +218,7 @@ export function toPipelineItem(item: {
     source_url: sanitizeUrl(item.source_url) || deriveSourceUrl(null, item.source_identifier),
     source_identifier: item.source_identifier,
     bundle_type: item.bundle_type ?? null,
-    bundle_key: bundleKeyOf(item.metadata),
+    bundle_key: bundleKeyOf(item.metadata, item.bundle_type ?? null),
   }
 }
 
@@ -217,14 +226,18 @@ export function toPipelineItem(item: {
  * Woran erkennt die Pipeline, dass zwei gebündelte News DASSELBE Thema
  * behandeln?
  *
- * An der Techmeme-Story. Sie steht bereits in den Metadaten — ein eigenes Feld
- * daneben könnte davon abweichen und wäre eine zweite Wahrheit über dieselbe
- * Sache.
- *
- * Ohne Schlüssel (händisch markierte News) bleibt es beim bisherigen Verhalten:
- * alle Items eines Typs bilden EIN Bündel.
+ * Nur beim automatischen Techmeme-Label (`topic`) trennt `techmeme_story` die
+ * Stories in eigene Abschnitte. Alle anderen Labels (`cover_story`,
+ * `deep_dive`, `long_read`, `recap`) sowie ungelabelte Items (`null`) liefern
+ * keinen Story-Schlüssel.
  */
-export function bundleKeyOf(metadata: Record<string, unknown> | null | undefined): string | null {
+export function bundleKeyOf(
+  metadata: Record<string, unknown> | null | undefined,
+  bundleType?: string | null,
+): string | null {
+  if (bundleType !== undefined && (!bundleType || !STORY_SCOPED_BUNDLE_TYPES.has(bundleType as BundleType))) {
+    return null
+  }
   const key = metadata?.techmeme_story
   return typeof key === 'string' && key.length > 0 ? key : null
 }
@@ -240,6 +253,7 @@ export async function selectAndEnrichItems(opts: {
   queueItemIds?: string[]
   useSelected?: boolean
   maxItems?: number
+  fillFromBalanced?: boolean // Fill up manually selected items from pending balanced queue; default true (auto-post)
   dedupeTopics?: boolean   // Drop same-event-different-source near-duplicates
                            // (semantic embedding dedup). Used by the unattended
                            // auto-post; the manual flow leaves it off.
@@ -248,7 +262,7 @@ export async function selectAndEnrichItems(opts: {
   usedItemIds: string[]
   sourceDistribution: { source: string; count: number; percentage: number }[]
 }> {
-  const { queueItemIds, useSelected = true, maxItems = 25, dedupeTopics = false } = opts
+  const { queueItemIds, useSelected = true, maxItems = 25, fillFromBalanced = true, dedupeTopics = false } = opts
 
   const supabase = createAdminClient()
 
@@ -292,9 +306,9 @@ export async function selectAndEnrichItems(opts: {
         console.log(`[Ghostwriter-Queue] Capped from ${manuallySelected.length} to ${selectedItems.length} items (${selectedUnits}/${maxItems} Abschnitte)`)
       }
 
-      // Fill up with balanced items if selected UNITS < maxItems
+      // Fill up with balanced items if allowed and selected UNITS < maxItems
       const neededCount = maxItems - selectedUnits
-      if (neededCount > 0) {
+      if (fillFromBalanced && neededCount > 0) {
         console.log(`[Ghostwriter-Queue] Need ${neededCount} more items from balanced selection to reach ${maxItems} units (currently ${selectedUnits} units / ${selectedItems.length} items)`)
 
         const balancedSelection = await getBalancedSelection(neededCount)
@@ -315,10 +329,12 @@ export async function selectAndEnrichItems(opts: {
 
             if (!result.error && result.items.length > 0) {
               console.log(`[Ghostwriter-Queue] Added ${result.items.length} items from balanced selection`)
-              selectedItems = mergeSelectionWithFill(selectedItems, result.items, maxItems)
+              selectedItems = mergeSelectionWithFill(selectedItems, stripBundleLabelsForFill(result.items), maxItems)
             }
           }
         }
+      } else if (!fillFromBalanced && neededCount > 0) {
+        console.log(`[Ghostwriter-Queue] SKIPPED balanced fill (fillFromBalanced=false): using ${selectedItems.length} manually selected items (${selectedUnits} units)`)
       } else {
         console.log(`[Ghostwriter-Queue] SKIPPED fill: selectedUnits (${selectedUnits}) >= maxItems (${maxItems})`)
       }
@@ -341,7 +357,7 @@ export async function selectAndEnrichItems(opts: {
 
       if (result.error) throw new Error(result.error)
 
-      selectedItems = result.items
+      selectedItems = stripBundleLabelsForFill(result.items)
       console.log(`[Ghostwriter-Queue] Final selected items count: ${selectedItems.length}`)
     }
   } else {
@@ -357,7 +373,7 @@ export async function selectAndEnrichItems(opts: {
 
     if (result.error) throw new Error(result.error)
 
-    selectedItems = result.items
+    selectedItems = stripBundleLabelsForFill(result.items)
   }
 
   console.log(`[Ghostwriter-Queue] Selected ${selectedItems.length} items from queue`)
