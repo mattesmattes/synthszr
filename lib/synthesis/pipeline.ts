@@ -703,7 +703,7 @@ export async function rescorePendingItems(
     const results = await Promise.all(
       batch.map(async (item) => {
         const s = scoreMap.get(item.id)
-        if (!s) return false
+        if (!s || s.reasoning === 'Batch-Scoring fehlgeschlagen') return false
         const { error } = await supabase
           .from('news_queue')
           .update({

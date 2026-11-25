@@ -181,6 +181,7 @@ export default function NewsQueuePage() {
   // Toggle in der Top-Leiste (neben "Quellen & Embeddings") einblendbar.
   const [showRankingSuggestions, setShowRankingSuggestions] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [rescoreNotice, setRescoreNotice] = useState<string | null>(null)
   const [showDeselectConfirm, setShowDeselectConfirm] = useState(false)
   const [showBalancedDialog, setShowBalancedDialog] = useState(false)
   const [showImportDialog, setShowImportDialog] = useState(false)
@@ -401,6 +402,31 @@ export default function NewsQueuePage() {
     } catch (error) {
       console.error('Failed to fetch balanced selection:', error)
     }
+  }
+
+  const handleRescoreLastDay = async () => {
+    setActionLoading('rescore-pending')
+    setRescoreNotice(null)
+    try {
+      const res = await fetch('/api/admin/news-queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'rescore-pending', days: 1, onlyUnscored: true, limit: 1000 }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setRescoreNotice(`Fehler beim Neubewerten (HTTP ${res.status}): ${data.error || 'Unbekannt'}`)
+      } else {
+        setRescoreNotice(
+          `24h neu bewertet: ${data.rescored ?? 0}, Junk entfernt: ${data.junkSkipped ?? 0}${data.errors ? `, Fehler: ${data.errors}` : ''}`
+        )
+        await fetchData()
+      }
+    } catch (error) {
+      console.error('Rescore failed:', error)
+      setRescoreNotice('Netzwerkfehler beim Neubewerten.')
+    }
+    setActionLoading(null)
   }
 
   const fetchCandidates = async (date: string) => {
@@ -951,8 +977,37 @@ export default function NewsQueuePage() {
             <Sparkles className="h-3 w-3 mr-1" />
             Ranking-Vorschläge
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs"
+            onClick={handleRescoreLastDay}
+            disabled={actionLoading === 'rescore-pending'}
+            title="Unbewertete (3/3) Artikel der letzten 24 Stunden mit dem neuen Kriterienkatalog neu bewerten"
+          >
+            {actionLoading === 'rescore-pending' ? (
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3 mr-1" />
+            )}
+            24h neu bewerten
+          </Button>
         </div>
       </div>
+
+      {rescoreNotice && (
+        <div className="mb-4 flex items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs">
+          <span>{rescoreNotice}</span>
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={() => setRescoreNotice(null)}
+            aria-label="Hinweis schließen"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Stats Cards / Tab Navigation */}
       {stats && (

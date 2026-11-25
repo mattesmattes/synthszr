@@ -27,6 +27,8 @@ import { parseIntParam } from '@/lib/validation/query-params'
 import { readStatusSnapshot, recordQueueEvents } from '@/lib/news-queue/events'
 import { rescorePendingItems } from '@/lib/synthesis/pipeline'
 
+export const maxDuration = 300
+
 // GET: List queue items, stats, or distribution
 export async function GET(request: NextRequest) {
   const session = await getSession()
