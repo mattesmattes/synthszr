@@ -2,8 +2,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
-const mocks = vi.hoisted(() => ({ requireCronOrAdmin: vi.fn(), loadHouseAgents: vi.fn(), runHouseAgent: vi.fn() }))
-vi.mock('@/lib/auth/session', () => ({ requireCronOrAdmin: mocks.requireCronOrAdmin }))
+const mocks = vi.hoisted(() => ({ verifyCronAuth: vi.fn(), requireAdmin: vi.fn(), loadHouseAgents: vi.fn(), runHouseAgent: vi.fn() }))
+vi.mock('@/lib/security/cron-auth', () => ({ verifyCronAuth: mocks.verifyCronAuth }))
+vi.mock('@/lib/auth/session', () => ({ requireAdmin: mocks.requireAdmin }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({}) }))
 vi.mock('@/lib/agents/house', async () => {
   const actual = await vi.importActual<typeof import('@/lib/agents/house')>('@/lib/agents/house')
@@ -12,14 +13,15 @@ vi.mock('@/lib/agents/house', async () => {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.requireCronOrAdmin.mockResolvedValue(null)
+  mocks.verifyCronAuth.mockReturnValue({ authorized: true, method: 'bearer' })
+  mocks.requireAdmin.mockResolvedValue(null)
   mocks.loadHouseAgents.mockResolvedValue([{ handle: 'argus', api_key: 'k', persona: 'p', langs: ['de'], max_takes_per_day: 2 }])
   mocks.runHouseAgent.mockResolvedValue({ handle: 'argus', planned: 1, submitted: 1, published: 1, pending: 0, rejected: 0 })
 })
 
 describe('GET /api/cron/agent-heartbeat', () => {
   it('401 ohne Berechtigung', async () => {
-    mocks.requireCronOrAdmin.mockResolvedValue(new Response('nope', { status: 401 }))
+    mocks.verifyCronAuth.mockReturnValue({ authorized: false })
     const { GET } = await import('@/app/api/cron/agent-heartbeat/route')
     expect((await GET(new NextRequest('https://x/api/cron/agent-heartbeat'))).status).toBe(401)
     expect(mocks.runHouseAgent).not.toHaveBeenCalled()

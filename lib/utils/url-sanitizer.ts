@@ -237,6 +237,11 @@ export function sanitizeUrl(url: string | null | undefined): string | null {
   try {
     const parsed = new URL(url)
 
+    // Only allow safe web protocols — reject javascript:, data:, vbscript:, etc.
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null
+    }
+
     // If this is a tracking redirect URL, try to extract the destination domain
     if (isTrackingRedirectUrl(url)) {
       const domain = extractRedirectDomain(url)
@@ -244,10 +249,9 @@ export function sanitizeUrl(url: string | null | undefined): string | null {
         console.log(`[URL Sanitizer] Tracking redirect → domain: ${domain} (from ${url.slice(0, 60)}...)`)
         return domain
       }
-      // Keep the original URL rather than losing the source entirely.
-      // A tracking redirect is better than no URL at all.
+      // Keep canonicalized URL (percent-encoding quotes/spaces) rather than raw string
       console.log(`[URL Sanitizer] Keeping tracking redirect (no destination found): ${url.slice(0, 80)}...`)
-      return url
+      return parsed.toString()
     }
 
     // Remove known tracking parameters
@@ -291,7 +295,7 @@ export function sanitizeUrl(url: string | null | undefined): string | null {
     return parsed.toString()
   } catch (error) {
     console.error('[URL Sanitizer] Failed to parse URL:', url, error)
-    return url // Return original if parsing fails
+    return null
   }
 }
 

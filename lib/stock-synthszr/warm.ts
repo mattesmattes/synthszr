@@ -27,10 +27,17 @@ export interface EnsureStockSynthszrInput {
   force?: boolean
 }
 
+export const ALLOWED_STOCK_CURRENCIES = new Set(['EUR', 'USD', 'GBP', 'CHF'])
+
+export function normalizeStockCurrency(raw?: string | null): string {
+  const upper = (raw ?? 'EUR').trim().toUpperCase()
+  return ALLOWED_STOCK_CURRENCIES.has(upper) ? upper : 'EUR'
+}
+
 export async function ensureStockSynthszr(input: EnsureStockSynthszrInput): Promise<{ data: StockSynthszrResult & { created_at?: string }; cached: boolean }> {
-  const company = input.company.trim()
-  const currency = input.currency ?? 'EUR'
-  const price = input.price ?? null
+  const company = input.company.replace(/[\r\n\t]+/g, ' ').trim().slice(0, 100)
+  const currency = normalizeStockCurrency(input.currency)
+  const price = typeof input.price === 'number' && Number.isFinite(input.price) && input.price > 0 ? input.price : null
   const supabase = createAdminClient()
 
   if (!input.force) {

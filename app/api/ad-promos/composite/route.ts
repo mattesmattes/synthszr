@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import sharp from 'sharp'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { safeFetch } from '@/lib/security/ssrf'
+import { readResponseBuffer, BoundedBodyError } from '@/lib/security/bounded-body'
+import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
+
+const relaxedLimiter = rateLimiters.relaxed()
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024
+const MAX_INPUT_PIXELS = 16_000_000
+const MAX_OUTPUT_DIMENSION = 2400
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -24,6 +31,10 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
 }
 
 export async function GET(request: NextRequest) {
+  const clientIP = getClientIP(request)
+  const rl = await checkRateLimit(`ad-promos-composite:${clientIP}`, relaxedLimiter ?? undefined)
+  if (!rl.success) return rateLimitResponse(rl)
+
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
   const slot = searchParams.get('slot') === 'right' ? 'right' : 'left'
@@ -77,11 +88,20 @@ export async function GET(request: NextRequest) {
     // guard against SSRF, same rationale as the animated-GIF branch above.
     const res = await safeFetch(imageUrl)
     if (!res.ok) throw new Error(`Source fetch failed: ${res.status}`)
-    const srcBuffer = Buffer.from(await res.arrayBuffer())
+    const srcBuffer = await readResponseBuffer(res, MAX_IMAGE_BYTES)
 
-    const meta = await sharp(srcBuffer).metadata()
-    const width = meta.width ?? 600
-    const height = meta.height ?? 600
+    const meta = await sharp(srcBuffer, { limitInputPixels: MAX_INPUT_PIXELS }).metadata()
+    const rawW = meta.width ?? 600
+    const rawH = meta.height ?? 600
+    const scale = Math.min(1, MAX_OUTPUT_DIMENSION / Math.max(rawW, rawH))
+    const width = Math.max(1, Math.round(rawW * scale))
+    const height = Math.max(1, Math.round(rawH * scale))
+    const resizedSrc =
+      scale < 1
+        ? await sharp(srcBuffer, { limitInputPixels: MAX_INPUT_PIXELS })
+            .resize(width, height, { fit: 'inside' })
+            .toBuffer()
+        : srcBuffer
     const { r, g, b } = hexToRgb(bg || '#ffffff')
 
     // Flatten foreground onto BG using multiply (mirrors CSS mix-blend-mode: multiply).
@@ -89,7 +109,7 @@ export async function GET(request: NextRequest) {
     const composited = await sharp({
       create: { width, height, channels: 3, background: { r, g, b } },
     })
-      .composite([{ input: srcBuffer, blend: 'multiply' }])
+      .composite([{ input: resizedSrc, blend: 'multiply' }])
       .png({ compressionLevel: 9 })
       .toBuffer()
 
@@ -102,9 +122,12 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (err) {
+    if (err instanceof BoundedBodyError && err.code === 'BODY_TOO_LARGE') {
+      return NextResponse.json({ error: 'Source image too large' }, { status: 413 })
+    }
     console.error('[ad-promo composite] failed:', err)
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Composite failed' },
+      { error: 'Composite failed' },
       { status: 500 },
     )
   }

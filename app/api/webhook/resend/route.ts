@@ -29,7 +29,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const contentLength = Number(request.headers.get('content-length') || '0')
+    if (Number.isFinite(contentLength) && contentLength > 512 * 1024) {
+      return NextResponse.json({ error: 'Payload too large' }, { status: 413 })
+    }
     const body = await request.text()
+    if (body.length > 512 * 1024) {
+      return NextResponse.json({ error: 'Payload too large' }, { status: 413 })
+    }
 
     // Verify Svix signature
     const svixId = request.headers.get('svix-id')
@@ -87,8 +94,9 @@ export async function POST(request: NextRequest) {
       newsletterSendId = recipient?.newsletter_send_id ?? null
     }
 
-    // Store the event
-    await supabase.from('email_events').insert({
+    // Store the event (deduplicated atomically via unique svix_id index)
+    const { error: insertError } = await supabase.from('email_events').insert({
+      svix_id: svixId,
       resend_email_id: resendEmailId,
       event_type: eventType,
       recipient_email: recipientEmail,
@@ -96,6 +104,14 @@ export async function POST(request: NextRequest) {
       click_url: data.click?.url ?? null,
       raw_payload: data,
     })
+
+    if (insertError) {
+      // Postgres unique_violation (23505) = duplicate Svix delivery; acknowledge idempotently
+      if (insertError.code === '23505') {
+        return NextResponse.json({ received: true, duplicate: true })
+      }
+      console.error('[Resend Webhook] Event insert failed:', insertError)
+    }
 
     return NextResponse.json({ received: true })
   } catch (error) {

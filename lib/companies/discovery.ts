@@ -78,6 +78,9 @@ export function extractUnknownCompanyTags(content: unknown): string[] {
     // Skip multi-company tags like {Google, YouTube} — not parseable
     if (name.includes(',')) continue
 
+    // Skip overly long strings or strings with control chars, quotes, or backslashes
+    if (name.length > 80 || /[\r\n\t\\'"`;]/.test(name)) continue
+
     found.add(name)
   }
 

@@ -2,6 +2,7 @@ import { JSDOM } from 'jsdom'
 import { Readability } from '@mozilla/readability'
 import { isTrackingRedirectUrl } from '@/lib/utils/url-sanitizer'
 import { assertPublicUrl, safeFetch } from '@/lib/security/ssrf'
+import { readResponseBuffer } from '@/lib/security/bounded-body'
 
 /**
  * Decode tracking redirect URLs to get the actual target URL.
@@ -252,8 +253,9 @@ export async function extractArticleContent(url: string, attempt = 1): Promise<E
       return null
     }
 
-    const html = await response.text()
+    const htmlBuf = await readResponseBuffer(response, 600 * 1024)
     clearTimeout(timeoutId)
+    const html = htmlBuf.toString('utf8')
 
     // Additional safety check: reject suspiciously large responses (likely binary/PDF)
     if (html.length > 500000) {
@@ -508,24 +510,30 @@ export function filterArticleUrls(
  */
 export async function extractViaMarkdownNew(url: string): Promise<{ title: string | null; content: string } | null> {
   try {
+    // Never forward private/internal URLs to external markdown.new proxy
+    await assertPublicUrl(url)
+
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 30000)
 
     console.log(`[ArticleExtractor] Trying markdown.new fallback for: ${url.slice(0, 80)}...`)
     const response = await fetch(`https://markdown.new/${url}`, {
       signal: controller.signal,
+      redirect: 'manual',
       headers: {
         'Accept': 'text/plain, text/markdown, */*',
       },
     })
-    clearTimeout(timeoutId)
 
     if (!response.ok) {
+      clearTimeout(timeoutId)
       console.log(`[ArticleExtractor] markdown.new returned ${response.status} for: ${url.slice(0, 60)}`)
       return null
     }
 
-    const markdown = await response.text()
+    const mdBuf = await readResponseBuffer(response, 1024 * 1024)
+    clearTimeout(timeoutId)
+    const markdown = mdBuf.toString('utf8')
     if (!markdown || markdown.length < 100) {
       console.log(`[ArticleExtractor] markdown.new returned too little content (${markdown.length} chars)`)
       return null

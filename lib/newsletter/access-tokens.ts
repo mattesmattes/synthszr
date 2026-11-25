@@ -146,6 +146,16 @@ export async function resolveSubscriberToken(
 
   if (error || !row) return null
 
+  // For active-subscriber actions (comment, preferences, referral), fail closed if unsubscribed
+  if (purpose !== 'unsubscribe' && purpose !== 'confirm') {
+    const { data: sub, error: subError } = await supabase
+      .from('subscribers')
+      .select('status')
+      .eq('id', row.subscriber_id)
+      .maybeSingle()
+    if (subError || !sub || sub.status !== 'active') return null
+  }
+
   if (!options?.consume) {
     return { subscriberId: row.subscriber_id }
   }

@@ -403,7 +403,9 @@ export async function planArticle(items: PipelineItem[], model: AIModel): Promis
   const itemList = items
     .map((item, i) => {
       const bundleTag = formatPlanBundleTag(item.bundle_type)
-      return `${i + 1}. TITEL: ${item.title}\n   QUELLE: ${item.source_display_name || item.source_identifier}\n   INHALT: ${escapeQuellmaterialTag(stripLoneSurrogates((item.content || '').slice(0, 600)).replace(/\n/g, ' '))}${bundleTag}`
+      const safeTitle = escapeQuellmaterialTag(stripLoneSurrogates(item.title || ''))
+      const safeSource = escapeQuellmaterialTag(stripLoneSurrogates(item.source_display_name || item.source_identifier || ''))
+      return `${i + 1}. TITEL: ${safeTitle}\n   QUELLE: ${safeSource}\n   INHALT: ${escapeQuellmaterialTag(stripLoneSurrogates((item.content || '').slice(0, 600)).replace(/\n/g, ' '))}${bundleTag}`
     })
     .join('\n\n')
 
@@ -663,9 +665,12 @@ export async function writeSection(
   const angleBlock = context.takeAngle
     ? `\n\nBLICKWINKEL FÜR DEN TAKE (nur den Take, nicht die Zusammenfassung; der Typ vor dem Doppelpunkt ist die analytische Linse): ${context.takeAngle}`
     : ''
-  const userPrompt = `NACHRICHTENKERN (Original-Schlagzeile der Quelle — nüchterne Faktengrundlage, oft englisch; forme daraus deine EIGENE journalistisch präzise deutsche Überschrift nach den ÜBERSCHRIFT-Regeln, KEINE Formulierung wörtlich übernehmen und NICHT ins Kryptische zuspitzen): ${item.title}${angleBlock}
+  const safeItemTitle = escapeQuellmaterialTag(stripLoneSurrogates(item.title || ''))
+  const safeSourceName = sourceName ? escapeQuellmaterialTag(stripLoneSurrogates(sourceName)) : ''
+  const safeEffectiveUrl = effectiveUrl ? escapeQuellmaterialTag(stripLoneSurrogates(effectiveUrl)) : ''
+  const userPrompt = `NACHRICHTENKERN (Original-Schlagzeile der Quelle — nüchterne Faktengrundlage, oft englisch; forme daraus deine EIGENE journalistisch präzise deutsche Überschrift nach den ÜBERSCHRIFT-Regeln, KEINE Formulierung wörtlich übernehmen und NICHT ins Kryptische zuspitzen): <newsletter_quellmaterial>${safeItemTitle}</newsletter_quellmaterial>${angleBlock}
 
-NEWS-INHALT${sourceName ? ` (Quelle: ${sourceName}` : ''}${effectiveUrl ? ` | URL: ${effectiveUrl}` : ''}${sourceName ? ')' : ''}:
+NEWS-INHALT${safeSourceName ? ` (Quelle: ${safeSourceName}` : ''}${safeEffectiveUrl ? ` | URL: ${safeEffectiveUrl}` : ''}${safeSourceName ? ')' : ''}:
 <newsletter_quellmaterial>
 ${escapeQuellmaterialTag(stripLoneSurrogates((item.content || 'Kein Inhalt verfügbar.').slice(0, 6000)))}
 </newsletter_quellmaterial>
@@ -1188,8 +1193,9 @@ export async function writeBundleSection(
       ? Math.min(12000, Math.max(4000, Math.floor(48000 / Math.max(1, items.length))))
       : 4000
   const sourceBlocks = items.map((it, i) => {
-    const name = it.source_display_name || it.source_identifier
-    return `[QUELLE ${i + 1}] ${name}${it.source_url ? ` | URL: ${it.source_url}` : ''}\n${escapeQuellmaterialTag(stripLoneSurrogates((it.content || 'Kein Inhalt verfügbar.').slice(0, BUNDLE_SOURCE_CONTENT_CHARS)))}`
+    const name = escapeQuellmaterialTag(stripLoneSurrogates(it.source_display_name || it.source_identifier || ''))
+    const safeUrl = it.source_url ? escapeQuellmaterialTag(stripLoneSurrogates(it.source_url)) : ''
+    return `[QUELLE ${i + 1}] ${name}${safeUrl ? ` | URL: ${safeUrl}` : ''}\n${escapeQuellmaterialTag(stripLoneSurrogates((it.content || 'Kein Inhalt verfügbar.').slice(0, BUNDLE_SOURCE_CONTENT_CHARS)))}`
   })
 
   // Voice-Grounding (Mattes-Korpus) + historische Callbacks — non-fatal, parallel,

@@ -45,6 +45,7 @@ export async function getVendorStockSynthszr(vendor: string): Promise<VendorStoc
     .from('stock_synthszr_cache')
     .select('company, data, created_at, expires_at')
     .ilike('company', key)
+    .in('currency', ['EUR', 'USD', 'GBP', 'CHF'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()

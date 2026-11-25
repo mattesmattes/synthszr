@@ -114,12 +114,21 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         .eq('translation_status', 'completed')
         .single()
 
-      if (translationBySlug) {
-        post = {
-          title: translationBySlug.title || '',
-          excerpt: translationBySlug.excerpt
+      if (translationBySlug?.generated_post_id) {
+        const { data: parentPost } = await supabase
+          .from('generated_posts')
+          .select('id')
+          .eq('id', translationBySlug.generated_post_id)
+          .eq('status', 'published')
+          .maybeSingle()
+
+        if (parentPost) {
+          post = {
+            title: translationBySlug.title || '',
+            excerpt: translationBySlug.excerpt
+          }
+          postId = translationBySlug.generated_post_id
         }
-        postId = translationBySlug.generated_post_id
       }
     }
   }

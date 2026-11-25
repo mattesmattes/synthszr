@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { timingSafeEqual } from 'crypto'
 import { NextRequest } from 'next/server'
+import { verifyBearerToken } from '@/lib/security/cron-auth'
 import {
   ADMIN_SESSION_TTL_SECONDS,
   SESSION_COOKIE_NAME as STORE_COOKIE_NAME,
@@ -128,8 +129,8 @@ export async function requireCronOrAdmin(request: NextRequest): Promise<Response
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
 
-  // Check cron secret first
-  if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
+  // Check cron secret first (constant-time comparison)
+  if (verifyBearerToken(authHeader, cronSecret)) {
     return null
   }
 

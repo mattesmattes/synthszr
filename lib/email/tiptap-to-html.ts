@@ -1343,7 +1343,10 @@ function applyMarks(text: string, marks?: Array<{ type: string; attrs?: Record<s
           break
         case 'link': {
           const rawHref = mark.attrs?.href || '#'
-          const cleanHref = sanitizeUrl(rawHref) || rawHref
+          const cleanHref =
+            rawHref.startsWith('#') || rawHref.startsWith('/')
+              ? rawHref
+              : sanitizeUrl(rawHref) || '#'
           result = `<a href="${escapeAttr(absolutizeHref(cleanHref, lang))}">${result}</a>`
           break
         }
@@ -1394,11 +1397,12 @@ function convertNodeToHtml(node: TiptapNode, locale: string = 'de'): string {
       let headingHtml = renderContent(node.content, locale)
 
       // If heading has a source link, wrap content with favicon + link
-      const srcUrl = node.attrs?.sourceUrl as string | undefined
+      const rawSrcUrl = node.attrs?.sourceUrl as string | undefined
+      const safeSrcUrl = rawSrcUrl ? sanitizeUrl(rawSrcUrl) : null
       const favDomain = node.attrs?.faviconDomain as string | undefined
-      if (srcUrl && favDomain) {
-        const favicon = `<img src="https://www.google.com/s2/favicons?domain=${favDomain}&sz=32" alt="" width="16" height="16" style="vertical-align: middle; margin-right: 6px; opacity: 0.7;" />`
-        headingHtml = `${favicon}<a href="${srcUrl}" style="color: inherit; text-decoration: none;">${headingHtml}</a>`
+      if (safeSrcUrl && favDomain) {
+        const favicon = `<img src="https://www.google.com/s2/favicons?domain=${escapeAttr(encodeURIComponent(favDomain))}&sz=32" alt="" width="16" height="16" style="vertical-align: middle; margin-right: 6px; opacity: 0.7;" />`
+        headingHtml = `${favicon}<a href="${escapeAttr(safeSrcUrl)}" style="color: inherit; text-decoration: none;">${headingHtml}</a>`
       }
 
       // Bundle-Label ("Cover Story" / "Thema des Tages" / "Deep Dive" / "Long Read" / "Nachlese") —
@@ -1492,7 +1496,10 @@ function renderContent(content?: TiptapNode[], lang: string = 'de'): string {
               break
             case 'link': {
               const rawHref = mark.attrs?.href || '#'
-              const cleanHref = sanitizeUrl(rawHref) || rawHref
+              const cleanHref =
+                rawHref.startsWith('#') || rawHref.startsWith('/')
+                  ? rawHref
+                  : sanitizeUrl(rawHref) || '#'
               text = `<a href="${escapeAttr(absolutizeHref(cleanHref, lang))}">${text}</a>`
               break
             }

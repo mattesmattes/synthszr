@@ -24,7 +24,7 @@ export function stripLoneSurrogates(text: string): string {
  * eingebetteten schließenden (oder öffnenden) Tag aus dem Block ausbrechen
  * kann, werden spitze Klammern eines solchen Tags im Content selbst entfernt.
  */
-const QUELLMATERIAL_TAG = /<\/?newsletter_quellmaterial>/gi
+const QUELLMATERIAL_TAG = /<\/?newsletter_quellmaterial\b[^>]*>/gi
 
 export function escapeQuellmaterialTag(text: string): string {
   return text.replace(QUELLMATERIAL_TAG, (match) => match.replace(/[<>]/g, ''))

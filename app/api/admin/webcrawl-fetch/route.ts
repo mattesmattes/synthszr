@@ -81,12 +81,19 @@ export async function POST(request: NextRequest) {
 
         // When a targetDate is set, fetch more emails so we can filter by date
         const maxEmails = targetDate ? 10 : 1
-        const allEmails = await gmailClient.fetchEmailsBySubject(
+        const rawEmails = await gmailClient.fetchEmailsBySubject(
           null,
           '+synthszr-webcrawler',
           maxEmails,
           fetchWindowHours
         )
+
+        const { isAllowedIngestionSender } = await import('@/lib/security/ingestion-allowlist')
+        const allEmails = rawEmails.filter((email) => {
+          if (isAllowedIngestionSender(email.from)) return true
+          console.warn(`[WebCrawl] Skipping +synthszr-webcrawler email from non-allowlisted sender: ${email.from}`)
+          return false
+        })
 
         // Filter to emails matching the target date if specified
         const emails = targetDate

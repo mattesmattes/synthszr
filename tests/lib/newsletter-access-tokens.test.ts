@@ -96,8 +96,13 @@ describe('resolving', () => {
   })
 
   it('returns the subscriber for a valid token', async () => {
-    state.result = { data: { id: 'row-1', subscriber_id: SUBSCRIBER }, error: null }
+    state.result = { data: { id: 'row-1', subscriber_id: SUBSCRIBER, status: 'active' }, error: null }
     await expect(resolveSubscriberToken('t', 'preferences')).resolves.toEqual({ subscriberId: SUBSCRIBER })
+  })
+
+  it('returns null when subscriber is unsubscribed for active-only purposes', async () => {
+    state.result = { data: { id: 'row-1', subscriber_id: SUBSCRIBER, status: 'unsubscribed' }, error: null }
+    await expect(resolveSubscriberToken('t', 'preferences')).resolves.toBeNull()
   })
 
   it('returns null for an unknown token', async () => {

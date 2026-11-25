@@ -8,6 +8,45 @@ import { wantsMarkdown } from '@/lib/seo/markdown-negotiation'
 const SESSION_COOKIE_NAME = 'synthszr_session'
 const LOCALE_COOKIE_NAME = 'synthszr_locale'
 
+const STATE_CHANGING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+/**
+ * Edge-safe constant-time Bearer token comparison (no Node crypto dependency).
+ */
+function verifyBearerTokenEdge(authHeader: string | null, expected: string | undefined): boolean {
+  if (!authHeader || !expected) return false
+  const prefix = 'Bearer '
+  if (!authHeader.startsWith(prefix)) return false
+  const provided = authHeader.slice(prefix.length)
+  const enc = new TextEncoder()
+  const a = enc.encode(provided)
+  const b = enc.encode(expected)
+  const len = Math.max(a.length, b.length)
+  let diff = a.length ^ b.length
+  for (let i = 0; i < len; i++) {
+    diff |= (a[i] ?? 0) ^ (b[i] ?? 0)
+  }
+  return diff === 0
+}
+
+/**
+ * Validates Origin header on state-changing cookie-authenticated /api/admin/*
+ * requests as defense-in-depth against CSRF.
+ */
+function isValidAdminOrigin(request: NextRequest): boolean {
+  const origin = request.headers.get('origin')
+  if (!origin) return true
+  try {
+    const originHost = new URL(origin).origin
+    if (originHost === request.nextUrl.origin) return true
+    const configured = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL
+    if (configured && originHost === new URL(configured).origin) return true
+  } catch {
+    return false
+  }
+  return false
+}
+
 // All potentially supported locales
 const ALL_LOCALES = ['de', 'en', 'fr', 'es', 'it', 'pt', 'nl', 'pl', 'cs', 'nds'] as const
 type LocaleType = (typeof ALL_LOCALES)[number]
@@ -189,13 +228,24 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
         // /api/admin-Routen. Vercel-Crons senden automatisch den Bearer-Token
         // (CRON_SECRET ist gesetzt); der einzige interne /api/admin-Cron-Call
         // (scheduled-tasks → newsletter-send) nutzt ebenfalls Bearer.
-        const isCronAuth = !!cronSecret && authHeader === `Bearer ${cronSecret}`
+        const isCronAuth = verifyBearerTokenEdge(authHeader, cronSecret)
         if (isCronAuth) return NextResponse.next()
         return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
       }
       const loginUrl = new URL('/login', request.url)
       loginUrl.searchParams.set('redirect', pathname)
       return NextResponse.redirect(loginUrl)
+    }
+
+    // Defense-in-depth CSRF check for cookie-authenticated state-changing /api/admin/* calls
+    if (
+      isProtectedRoute &&
+      isAuthenticated &&
+      pathname.startsWith('/api/admin') &&
+      STATE_CHANGING_METHODS.has(request.method) &&
+      !isValidAdminOrigin(request)
+    ) {
+      return NextResponse.json({ error: 'Forbidden: invalid origin' }, { status: 403 })
     }
 
     if (isAuthRoute && isAuthenticated) {
@@ -255,7 +305,20 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     // Google reads as "personalized, don't index".
     const response = NextResponse.next()
     response.headers.set('x-locale', urlLocale)
-    response.headers.set('cache-control', 'public, s-maxage=60, stale-while-revalidate=300')
+    const pathAfterLocale = pathname.slice(urlLocale.length + 1) || '/'
+    const isPrivateOrTokenRoute =
+      pathAfterLocale === '/referral' ||
+      pathAfterLocale.startsWith('/referral/') ||
+      pathAfterLocale === '/newsletter' ||
+      pathAfterLocale.startsWith('/newsletter/') ||
+      request.nextUrl.searchParams.has('token') ||
+      request.nextUrl.searchParams.has('ct')
+    response.headers.set(
+      'cache-control',
+      isPrivateOrTokenRoute
+        ? 'private, no-store'
+        : 'public, s-maxage=60, stale-while-revalidate=300'
+    )
     response.headers.set('Vary', 'Accept')
     return response
   }

@@ -479,12 +479,19 @@ export async function processWebcrawl(): Promise<WebcrawlProcessResult> {
 
   const gmailClient = new GmailClient(tokenData.refresh_token)
 
-  const emails = await gmailClient.fetchEmailsBySubject(
+  const rawEmails = await gmailClient.fetchEmailsBySubject(
     null,
     '+synthszr-webcrawler',
     MAX_EMAILS,
     FETCH_WINDOW_HOURS
   )
+
+  const { isAllowedIngestionSender } = await import('@/lib/security/ingestion-allowlist')
+  const emails = rawEmails.filter((email) => {
+    if (isAllowedIngestionSender(email.from)) return true
+    console.warn(`[WebCrawl] Skipping +synthszr-webcrawler email from non-allowlisted sender: ${email.from}`)
+    return false
+  })
 
   console.log(`[WebCrawl] Found ${emails.length} +synthszr-webcrawler emails`)
 

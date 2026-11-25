@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSession, setSessionCookie, validatePassword } from '@/lib/auth/session'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
+import { readJsonBody, BoundedBodyError } from '@/lib/security/bounded-body'
 
 export async function POST(request: NextRequest) {
   try {
@@ -8,7 +9,19 @@ export async function POST(request: NextRequest) {
     const rl = await checkRateLimit(`login:${getClientIP(request)}`, rateLimiters.strict() ?? undefined)
     if (!rl.success) return rateLimitResponse(rl)
 
-    const body = await request.json()
+    let rawBody: unknown
+    try {
+      rawBody = await readJsonBody(request, 4 * 1024)
+    } catch (err) {
+      if (err instanceof BoundedBodyError) {
+        return NextResponse.json(
+          { error: err.code === 'BODY_TOO_LARGE' ? 'Payload too large' : 'Invalid JSON' },
+          { status: err.code === 'BODY_TOO_LARGE' ? 413 : 400 }
+        )
+      }
+      throw err
+    }
+    const body = (rawBody && typeof rawBody === 'object' ? rawBody : {}) as Record<string, unknown>
     const { password } = body
 
     if (!password || typeof password !== 'string') {

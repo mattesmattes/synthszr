@@ -236,6 +236,7 @@ export async function submitAgentComment(
 
 /** Rückzug durch den Agenten: nur eigene Takes, Hard-Delete wie im Admin. */
 export async function withdrawAgentComment(supabase: AdminClient, account: AgentAccount, id: string): Promise<boolean> {
+  if (account.status !== 'active') return false
   const { data } = await supabase
     .from('post_comments')
     .select('post_id, agent_id, status')

@@ -35,11 +35,11 @@ function deploymentEnv(): DeploymentEnv {
  * missing from here fails silently at request time instead.
  */
 const REQUIRED_PRODUCTION_SECRETS = [
-  ['JWT_SECRET', 'admin session cookies could not be verified'],
   ['CRON_SECRET', 'cron endpoints would be unprotected'],
   ['SUPABASE_SERVICE_ROLE_KEY', 'admin operations would fail'],
   ['ADMIN_PASSWORD', 'password login would be unusable'],
   ['REVALIDATE_SECRET', 'the rankings cache endpoint would be unprotected'],
+  ['ENCRYPTION_KEY', 'stored OAuth tokens and secrets cannot be encrypted/decrypted'],
 ] as const
 
 type PairState = 'complete' | 'partial' | 'missing'
@@ -89,6 +89,17 @@ export function validateSecurityConfig(): SecurityCheckResult {
   // Medium: Admin Emails for OAuth
   if (process.env.GOOGLE_CLIENT_ID && !process.env.ADMIN_EMAILS) {
     warnings.push('ADMIN_EMAILS not set - Google OAuth login will fail')
+  }
+
+  // Recommended hardening secrets (warn-only so existing deployments keep booting)
+  if (isProduction && !process.env.RESEND_WEBHOOK_SECRET) {
+    warnings.push('RESEND_WEBHOOK_SECRET not set - Resend webhook endpoint stays fail-closed (HTTP 500)')
+  }
+  if (isProduction && !process.env.AGENT_IP_SALT) {
+    warnings.push('AGENT_IP_SALT not set - agent IP hashing falls back to a weaker default salt')
+  }
+  if (isProduction && !process.env.READER_SESSION_SECRET) {
+    warnings.push('READER_SESSION_SECRET not set - reader sessions derive key from SUPABASE_SERVICE_ROLE_KEY')
   }
 
   return {

@@ -3,6 +3,7 @@ import { parseNewsletterHtml } from '@/lib/email/parser'
 import { extractArticleContent, isArticleTooOld, isLikelyArticleUrl, isNonArticleLinkText, extractViaMarkdownNew, decodeTrackingUrl } from '@/lib/scraper/article-extractor'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { backfillMissingEmbeddings } from '@/lib/embeddings/backfill'
+import { isAllowedIngestionSender } from '@/lib/security/ingestion-allowlist'
 
 // Default fetch window - can be overridden per request
 const DEFAULT_FETCH_WINDOW_HOURS = 28
@@ -532,12 +533,18 @@ export async function runNewsletterFetch(options?: {
     })
 
     try {
-      const emailNotes = await gmailClient.fetchEmailsBySubject(
+      const rawEmailNotes = await gmailClient.fetchEmailsBySubject(
         EMAIL_NOTE_CONFIG.senderEmail,
         EMAIL_NOTE_CONFIG.subjectTag,
         50,
         EMAIL_NOTE_CONFIG.hoursBack
       )
+
+      const emailNotes = rawEmailNotes.filter((note) => {
+        if (isAllowedIngestionSender(note.from)) return true
+        console.warn(`[Newsletter Fetch] Skipping +dailyrepo email from non-allowlisted sender: ${note.from}`)
+        return false
+      })
 
       console.log('[Newsletter Fetch] Found', emailNotes.length, '+dailyrepo emails')
 

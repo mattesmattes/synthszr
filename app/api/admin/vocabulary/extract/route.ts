@@ -3,12 +3,18 @@ import { getSession } from '@/lib/auth/session'
 import Anthropic from '@anthropic-ai/sdk'
 import { withUsageLogging } from '@/lib/ai/usage-log'
 
-// Dynamic import for pdf-parse to avoid build issues
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 // 10 MB
+
+// Dynamic import for pdf-parse v2 to avoid build issues
 async function parsePDF(buffer: Buffer): Promise<string> {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pdfParse = require('pdf-parse')
-  const data = await pdfParse(buffer)
-  return data.text
+  const { PDFParse } = await import('pdf-parse')
+  const parser = new PDFParse({ data: buffer })
+  try {
+    const result = await parser.getText()
+    return result.text
+  } finally {
+    await parser.destroy().catch(() => {})
+  }
 }
 
 export const maxDuration = 120
@@ -60,6 +66,13 @@ export async function POST(request: NextRequest) {
 
     if (!file) {
       return NextResponse.json({ error: 'Keine Datei hochgeladen' }, { status: 400 })
+    }
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return NextResponse.json(
+        { error: 'Datei ist zu groß (max. 10 MB erlaubt)' },
+        { status: 413 }
+      )
     }
 
     // Check file type

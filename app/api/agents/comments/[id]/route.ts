@@ -9,6 +9,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const supabase = createAdminClient()
   const account = await authenticateAgent(supabase, bearerFrom(request))
   if (!account) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (account.status !== 'active') return NextResponse.json({ error: 'suspended' }, { status: 403 })
   const { id } = await params
   if (!/^[0-9a-f-]{36}$/i.test(id) && !/^[a-z0-9-]+$/i.test(id)) return NextResponse.json({ error: 'invalid_id' }, { status: 400 })
   try {

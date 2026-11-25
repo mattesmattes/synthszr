@@ -43,6 +43,7 @@ export async function rerankPostHits<T extends RerankableHit>(
     })
     .join('\n\n')
 
+  const safeQuery = query.replace(/[\r\n"]+/g, ' ').trim().slice(0, 200)
   const prompt = `Du bekommst eine Suchanfrage und eine Liste nummerierter Treffer.
 Die Treffer sind tägliche News-Digests mit MEHREREN unabhängigen Themen pro
 Post — ein Treffer ist relevant, sobald EIN Abschnitt die Anfrage behandelt,
@@ -58,7 +59,7 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Array der ursprünglichen Nummern der
 relevanten Treffer in neuer Reihenfolge, z.B. [3, 1, 5] oder []. Keine Erklärung,
 kein Markdown.
 
-ANFRAGE: "${query}"
+ANFRAGE: "${safeQuery}"
 
 TREFFER:
 ${numbered}`

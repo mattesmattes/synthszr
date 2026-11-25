@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processNewsletters } from '@/lib/newsletter/processor'
-import { requireCronOrAdmin, requireAdmin } from '@/lib/auth/session'
+import { requireAdmin } from '@/lib/auth/session'
+import { verifyCronAuth } from '@/lib/security/cron-auth'
 
 // Node.js runtime for jsdom compatibility
 export const runtime = 'nodejs'
 
-// GET for Vercel Cron (automatic scheduling)
+// GET for Vercel Cron (automatic scheduling — Bearer CRON_SECRET only to prevent SameSite=Lax CSRF)
 export async function GET(request: NextRequest) {
-  // Verify cron secret or admin session
-  const authError = await requireCronOrAdmin(request)
-  if (authError) return authError
+  const auth = verifyCronAuth(request)
+  if (!auth.authorized) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   try {
     const result = await processNewsletters()

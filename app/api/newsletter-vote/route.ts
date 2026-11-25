@@ -94,13 +94,20 @@ export async function GET(request: NextRequest) {
 
   const ip = getClientIP(request)
   const rl = await checkRateLimit(`newsletter-vote:${ip}`, rateLimiters.relaxed() ?? undefined)
-  if (!rl.success) return NextResponse.redirect(ziel, { status: 303 })
+  if (!rl.success) return NextResponse.redirect(ziel, { status: 303, headers: { 'Cache-Control': 'no-store' } })
+
+  // Ignore speculative browser/mail-scanner prefetch requests on GET
+  const purpose = (request.headers.get('sec-purpose') || request.headers.get('purpose') || '').toLowerCase()
+  const fetchDest = (request.headers.get('sec-fetch-dest') || '').toLowerCase()
+  if (purpose.includes('prefetch') || (fetchDest && fetchDest !== 'document')) {
+    return NextResponse.redirect(ziel, { status: 303, headers: { 'Cache-Control': 'no-store' } })
+  }
 
   // Token NICHT verbrauchen (consume: false): derselbe Token trägt auch den
   // Artikellink und das spätere Kommentieren. Ein Vote darf ihn nicht entwerten.
   const resolved = await resolveSubscriberToken(ct, 'comment', { consume: false })
   if (!resolved?.subscriberId) {
-    return NextResponse.redirect(ziel, { status: 303 })
+    return NextResponse.redirect(ziel, { status: 303, headers: { 'Cache-Control': 'no-store' } })
   }
 
   const supabase = createAdminClient()
@@ -114,7 +121,7 @@ export async function GET(request: NextRequest) {
     .maybeSingle()
   const postId = (postRow as { id: string } | null)?.id
   if (!postId) {
-    return NextResponse.redirect(ziel, { status: 303 })
+    return NextResponse.redirect(ziel, { status: 303, headers: { 'Cache-Control': 'no-store' } })
   }
 
   const { error } = await supabase.from('take_feedback').upsert({
@@ -129,16 +136,21 @@ export async function GET(request: NextRequest) {
   }
 
   // Kurze Lesersitzung: ab jetzt zwei Stunden lang ohne Magic Link kommentieren.
-  // Ziel MIT ?take=: die Stimme ist verbucht, jetzt darf der Leser optional noch
-  // schreiben — dieselbe Geste wie auf der Website.
-  const res = NextResponse.redirect(redirectToArticle(lang, slug, sectionAnchor, true), { status: 303 })
-  const expiresAt = new Date(Date.now() + VOTE_SESSION_TTL_SECONDS * 1000)
-  res.cookies.set(READER_COOKIE_NAME, sealReaderSession(resolved.subscriberId, expiresAt), {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: VOTE_SESSION_TTL_SECONDS,
-    path: '/',
+  // Bestehende gültige Lesersitzung nicht über GET überschreiben (verhindert Session Fixation).
+  const res = NextResponse.redirect(redirectToArticle(lang, slug, sectionAnchor, true), {
+    status: 303,
+    headers: { 'Cache-Control': 'no-store' },
   })
+  const existingCookie = request.cookies.get(READER_COOKIE_NAME)?.value
+  if (!existingCookie) {
+    const expiresAt = new Date(Date.now() + VOTE_SESSION_TTL_SECONDS * 1000)
+    res.cookies.set(READER_COOKIE_NAME, sealReaderSession(resolved.subscriberId, expiresAt), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: VOTE_SESSION_TTL_SECONDS,
+      path: '/',
+    })
+  }
   return res
 }

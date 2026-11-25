@@ -27,9 +27,7 @@ describe('Newsletter — Synthszr Update', () => {
     expect(html).toContain('/api/newsletter-vote?v=agree')
   })
 
-  it('escapt Anfuehrungszeichen im href — Quellen-URLs kommen jetzt aus der Web-Suche', () => {
-    // Review 2026-10-24: sanitizeUrl gibt eine nicht parsebare URL roh zurueck;
-    // ein Anfuehrungszeichen darin braeche das href-Attribut im Newsletter auf.
+  it('neutralisiert unparsebare/unsichere hrefs — Quellen-URLs kommen aus der Web-Suche', () => {
     const mitLink = { type: 'doc', content: [
       { type: 'paragraph', content: [{ type: 'text', text: 'Update-Quellen: ' }, {
         type: 'text', text: 'Q',
@@ -38,6 +36,6 @@ describe('Newsletter — Synthszr Update', () => {
     ] } as unknown as TiptapDoc
     const html = convertTiptapToHtml(mitLink)
     expect(html).not.toContain('x"onmouseover="1"')
-    expect(html).toContain('&quot;')
+    expect(html).toContain('href="#"')
   })
 })

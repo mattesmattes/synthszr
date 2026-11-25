@@ -59,7 +59,11 @@ export function buildTakeUserPrompt(input: TakeInput): string {
     `ZUSAMMENFASSUNG (steht bereits über dem Take — nicht wiederholen):\n${input.summary.trim()}`,
   ]
   if (input.takeAngle) parts.push(`BLICKWINKEL: ${input.takeAngle}`)
-  parts.push(`QUELLENAUSZUG (nur für Zahlen und Namen):\n<newsletter_quellmaterial>\n${input.sourceExcerpt.trim() || 'Kein Auszug verfügbar.'}\n</newsletter_quellmaterial>`)
+  const safeExcerpt = (input.sourceExcerpt.trim() || 'Kein Auszug verfügbar.').replace(
+    /<\/?newsletter_quellmaterial\b[^>]*>/gi,
+    (m) => m.replace(/[<>]/g, ''),
+  )
+  parts.push(`QUELLENAUSZUG (nur für Zahlen und Namen):\n<newsletter_quellmaterial>\n${safeExcerpt}\n</newsletter_quellmaterial>`)
   if (input.mattesBlock) parts.push(input.mattesBlock)
   if (input.exemplarsBlock) parts.push(input.exemplarsBlock)
   if (input.recentTakesBlock) parts.push(input.recentTakesBlock)

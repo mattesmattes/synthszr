@@ -60,6 +60,10 @@ export async function getGoogleUserInfo(accessToken: string): Promise<{ email: s
     }
 
     const data = await response.json()
+    if (!data?.email || data.verified_email !== true) {
+      console.error('Google userinfo missing email or unverified email')
+      return null
+    }
     return {
       email: data.email,
       name: data.name || data.email,

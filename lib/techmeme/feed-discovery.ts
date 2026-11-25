@@ -13,6 +13,7 @@
  * NEGATIVE Ergebnis gespeichert.
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
+import { readResponseBuffer } from '@/lib/security/bounded-body'
 import { knownFeedFor } from '@/lib/techmeme/known-feeds'
 import { safeFetch } from '@/lib/security/ssrf'
 
@@ -88,7 +89,7 @@ async function probe(url: string): Promise<boolean> {
       timeoutMs: 10_000,
     })
     if (!res.ok) return false
-    const body = (await res.text()).slice(0, 2000)
+    const body = (await readResponseBuffer(res, 64 * 1024)).toString('utf8').slice(0, 2000)
     return looksLikeFeed(res.headers.get('content-type'), body)
   } catch {
     return false
@@ -147,7 +148,7 @@ export async function discoverFeed(
       timeoutMs: 12_000,
     })
     if (res.ok) {
-      const html = (await res.text()).slice(0, 200_000)
+      const html = (await readResponseBuffer(res, 256 * 1024)).toString('utf8').slice(0, 200_000)
       const candidate = feedUrlFromHtml(html, origin)
       if (candidate && await probe(candidate)) found = candidate
     }

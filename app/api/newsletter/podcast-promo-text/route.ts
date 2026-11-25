@@ -3,6 +3,12 @@ import { ImageResponse } from 'next/og'
 import React from 'react'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
+
+const relaxedLimiter = rateLimiters.relaxed()
+const MAX_HEADLINE_LEN = 80
+const MAX_TEXT_LEN = 240
+const MAX_CANVAS_HEIGHT = 1400
 
 export const runtime = 'nodejs'
 
@@ -40,22 +46,27 @@ function loadFonts() {
 }
 
 export async function GET(req: NextRequest) {
+  const clientIP = getClientIP(req)
+  const rl = await checkRateLimit(`podcast-promo-text:${clientIP}`, relaxedLimiter ?? undefined)
+  if (!rl.success) return rateLimitResponse(rl)
+
   const sp = req.nextUrl.searchParams
-  const headline = (sp.get('headline') || '').toUpperCase()
-  const title = sp.get('title') || ''
-  const subtitle = sp.get('subtitle') || ''
+  const headline = (sp.get('headline') || '').trim().slice(0, MAX_HEADLINE_LEN).toUpperCase()
+  const title = (sp.get('title') || '').trim().slice(0, MAX_TEXT_LEN)
+  const subtitle = (sp.get('subtitle') || '').trim().slice(0, MAX_TEXT_LEN)
 
   // Estimate height: Satori wraps flex text automatically, but ImageResponse
   // needs a fixed canvas. Approximate line counts from char width per font size.
   const titleLines = title ? Math.max(1, Math.ceil(title.length / 23)) : 0
   const subLines = subtitle ? Math.max(1, Math.ceil(subtitle.length / 33)) : 0
   const PAD_Y = 30
-  const height =
+  const rawHeight =
     PAD_Y +
     40 + // headline line
     (titleLines ? 14 + titleLines * 60 : 0) +
     (subLines ? 8 + subLines * 50 : 0) +
     PAD_Y
+  const height = Math.min(rawHeight, MAX_CANVAS_HEIGHT)
 
   const children: React.ReactElement[] = [
     React.createElement(
@@ -121,6 +132,9 @@ export async function GET(req: NextRequest) {
   return new ImageResponse(tree, {
     width: W,
     height,
+    headers: {
+      'Cache-Control': 'public, max-age=86400, s-maxage=86400',
+    },
     fonts: [
       { name: 'LibSans', data: regular, weight: 400, style: 'normal' },
       { name: 'LibSans', data: bold, weight: 700, style: 'normal' },

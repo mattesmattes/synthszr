@@ -206,12 +206,19 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'process') {
-      // Trigger queue processing
+      // Trigger queue processing, forwarding admin session cookie / bearer auth
+      const forwardHeaders: Record<string, string> = {}
+      const cookie = request.headers.get('cookie')
+      const authorization = request.headers.get('authorization')
+      if (cookie) forwardHeaders.cookie = cookie
+      if (authorization) forwardHeaders.authorization = authorization
+
       const res = await fetch(new URL('/api/admin/translations/process-queue', request.url).toString(), {
         method: 'POST',
+        headers: forwardHeaders,
       })
-      const data = await res.json()
-      return NextResponse.json(data)
+      const data = await res.json().catch(() => ({ error: 'Invalid response from process-queue' }))
+      return NextResponse.json(data, { status: res.status })
     }
 
     if (action === 'retry-all-failed') {

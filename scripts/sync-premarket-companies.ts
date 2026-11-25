@@ -236,6 +236,12 @@ async function fetchPremarketCompanies(): Promise<string[] | null> {
   return uniqueCompanies
 }
 
+function toTsStringLiteral(value: string): string {
+  return JSON.stringify(value)
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029')
+}
+
 function generateTypeScriptFile(
   premarketCompanies: string[],
   discoveredPublic: Record<string, string> = {},
@@ -249,12 +255,12 @@ function generateTypeScriptFile(
   const allPremarketCompanies = [...allPremarketSet].sort()
 
   const premarketEntries = allPremarketCompanies
-    .map(name => `  '${name.replace(/'/g, "\\'")}': '${name.replace(/'/g, "\\'")}'`)
+    .map(name => `  ${toTsStringLiteral(name)}: ${toTsStringLiteral(name)}`)
     .join(',\n')
 
   const publicEntries = Object.entries(allPublicCompanies)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, slug]) => `  '${name.replace(/'/g, "\\'")}': '${slug.replace(/'/g, "\\'")}'`)
+    .map(([name, slug]) => `  ${toTsStringLiteral(name)}: ${toTsStringLiteral(slug)}`)
     .join(',\n')
 
   // Handle empty entries (no trailing comma when empty)

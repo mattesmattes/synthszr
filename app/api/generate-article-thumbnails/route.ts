@@ -4,7 +4,7 @@ import { put } from '@vercel/blob'
 import sharp from 'sharp'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateSatiricalImage, applyDithering, whiteToTransparent } from '@/lib/gemini/image-generator'
-import { getSession } from '@/lib/auth/session'
+import { getSession, isAdminRequest } from '@/lib/auth/session'
 
 export const maxDuration = 300 // Allow up to 5 minutes for batch thumbnail generation
 
@@ -279,25 +279,52 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createAdminClient()
+  const isAdmin = await isAdminRequest(request)
+
+  if (!isAdmin) {
+    const { data: publishedPost } = await supabase
+      .from('generated_posts')
+      .select('id')
+      .eq('id', postId)
+      .eq('status', 'published')
+      .maybeSingle()
+
+    if (!publishedPost) {
+      return NextResponse.json(
+        { thumbnails: [] },
+        { status: 404, headers: { 'Cache-Control': 'no-store' } }
+      )
+    }
+  }
 
   // Nur die vom Client (tiptap-renderer/news-headings) tatsächlich genutzten
   // Spalten laden statt der kompletten Zeile (spart Egress bei jedem Pageview).
-  const { data: thumbnails, error } = await supabase
+  let query = supabase
     .from('post_images')
     .select('id, article_index, article_queue_item_id, image_url, generation_status')
     .eq('post_id', postId)
     .eq('image_type', 'article_thumbnail')
-    .order('article_index', { ascending: true })
+
+  if (!isAdmin) {
+    query = query.eq('generation_status', 'completed')
+  }
+
+  const { data: thumbnails, error } = await query.order('article_index', { ascending: true })
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('[generate-article-thumbnails] GET error:', error.message)
+    return NextResponse.json({ error: 'Thumbnails konnten nicht geladen werden' }, { status: 500 })
   }
 
   // Thumbnails ändern sich pro Post nur selten (Regenerierung ist die
   // Ausnahme) → kurzes Edge-Caching mit SWR reduziert DB-Treffer pro Pageview.
   return NextResponse.json(
     { thumbnails },
-    { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } }
+    {
+      headers: {
+        'Cache-Control': isAdmin ? 'private, no-store' : 'public, s-maxage=60, stale-while-revalidate=300',
+      },
+    }
   )
 }
 

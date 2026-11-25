@@ -5,6 +5,7 @@ import { ensureReferralCode } from '@/lib/referrals/service'
 import { checkRateLimit, getClientIP, rateLimiters } from '@/lib/rate-limit'
 import { requireValidOrigin } from '@/lib/security/origin-check'
 import { mintSubscriberToken } from '@/lib/newsletter/access-tokens'
+import { readJsonBody, BoundedBodyError } from '@/lib/security/bounded-body'
 
 const standardLimiter = rateLimiters.standard()
 
@@ -22,8 +23,12 @@ export async function POST(request: NextRequest) {
 
   let body: { email?: string; lang?: string }
   try {
-    body = await request.json()
-  } catch {
+    const rawBody = await readJsonBody(request, 8 * 1024)
+    body = (rawBody && typeof rawBody === 'object' ? rawBody : {}) as { email?: string; lang?: string }
+  } catch (err) {
+    if (err instanceof BoundedBodyError && err.code === 'BODY_TOO_LARGE') {
+      return NextResponse.json({ error: 'payload_too_large' }, { status: 413 })
+    }
     return NextResponse.json({ error: 'invalid_body' }, { status: 400 })
   }
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''

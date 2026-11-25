@@ -20,7 +20,10 @@ export const READER_COOKIE_NAME = 'synthszr_reader'
 export const READER_SESSION_TTL_SECONDS = 90 * 24 * 60 * 60
 
 function signingKey(): Buffer {
-  const material = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  const material = process.env.READER_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+  if (!material && process.env.NODE_ENV === 'production') {
+    throw new Error('READER_SESSION_SECRET or SUPABASE_SERVICE_ROLE_KEY must be configured in production')
+  }
   // Ableitung statt Direktnutzung: der abgeleitete Schlüssel ist nutzlos für
   // die Supabase-API, ein Leck des Cookies verrät nichts über den Root-Key.
   return createHmac('sha256', material).update('synthszr-reader-session-v1').digest()

@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getResend, FROM_EMAIL, BASE_URL } from '@/lib/resend/client'
@@ -6,6 +7,7 @@ import { render } from '@react-email/components'
 import { logIfUnexpected } from '@/lib/supabase/error-handling'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 import { requireValidOrigin } from '@/lib/security/origin-check'
+import { readJsonBody, BoundedBodyError } from '@/lib/security/bounded-body'
 import { trackReferral, generateReferralCode } from '@/lib/referrals/service'
 import { mintSubscriberToken } from '@/lib/newsletter/access-tokens'
 
@@ -78,8 +80,21 @@ export async function POST(request: NextRequest) {
     if (!rateLimitResult.success) {
       return rateLimitResponse(rateLimitResult)
     }
-    const body = await request.json()
+    let rawBody: unknown
+    try {
+      rawBody = await readJsonBody(request, 8 * 1024)
+    } catch (err) {
+      if (err instanceof BoundedBodyError) {
+        return NextResponse.json(
+          { error: err.code === 'BODY_TOO_LARGE' ? 'Payload too large' : 'Invalid JSON' },
+          { status: err.code === 'BODY_TOO_LARGE' ? 413 : 400 }
+        )
+      }
+      throw err
+    }
+    const body = (rawBody && typeof rawBody === 'object' ? rawBody : {}) as Record<string, unknown>
     const { email, name, language = 'en', ref } = body
+    const langStr = typeof language === 'string' ? language : 'en'
     const refCode = typeof ref === 'string' ? ref.trim().slice(0, 32) : ''
 
     if (!email || typeof email !== 'string') {
@@ -98,13 +113,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Per-email cooldown against confirmation-mail bombing across rotated IPs.
+    // Returns the same 202 accepted response to avoid turning this into an oracle.
+    const normalizedEmail = email.trim().toLowerCase()
+    const emailHash = createHash('sha256').update(normalizedEmail).digest('hex').slice(0, 24)
+    const emailRl = await checkRateLimit(`newsletter-email:${emailHash}`, newsletterLimiter ?? undefined)
+    if (!emailRl.success) {
+      return accepted()
+    }
+
     const supabase = createAdminClient()
 
     // Check if email already exists
     const { data: existing, error: existingError } = await supabase
       .from('subscribers')
       .select('id, status')
-      .eq('email', email.toLowerCase())
+      .eq('email', normalizedEmail)
       .single()
 
     logIfUnexpected('newsletter/subscribe', existingError)
@@ -126,11 +150,11 @@ export async function POST(request: NextRequest) {
             confirmation_sent_at: new Date().toISOString(),
             unsubscribed_at: null,
             updated_at: new Date().toISOString(),
-            preferences: { language },
+            preferences: { language: langStr },
           })
           .eq('id', existing.id)
 
-        await issueConfirmation(supabase, existing.id, email, language)
+        await issueConfirmation(supabase, existing.id, email, langStr)
         return accepted()
       }
 
@@ -144,7 +168,7 @@ export async function POST(request: NextRequest) {
           })
           .eq('id', existing.id)
 
-        await issueConfirmation(supabase, existing.id, email, language)
+        await issueConfirmation(supabase, existing.id, email, langStr)
         return accepted()
       }
     }
@@ -153,11 +177,11 @@ export async function POST(request: NextRequest) {
     const { data: newSubscriber, error: insertError } = await supabase
       .from('subscribers')
       .insert({
-        email: email.toLowerCase(),
-        name: name || null,
+        email: normalizedEmail,
+        name: typeof name === 'string' ? name : null,
         status: 'pending',
         confirmation_sent_at: new Date().toISOString(),
-        preferences: { language },
+        preferences: { language: langStr },
         referral_code: generateReferralCode(),
       })
       .select('id')
@@ -176,7 +200,7 @@ export async function POST(request: NextRequest) {
       await trackReferral(refCode, email, newSubscriber.id)
     }
 
-    await issueConfirmation(supabase, newSubscriber.id, email, language)
+    await issueConfirmation(supabase, newSubscriber.id, email, langStr)
 
     // The new subscriber's id stays server-side.
     return accepted()

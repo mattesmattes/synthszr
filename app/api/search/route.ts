@@ -6,6 +6,10 @@ import { getCategoryCappedProductsShared } from '@/lib/rankings/leaderboard'
 import { embedQuery } from '@/lib/search/embeddings'
 import { rerankPostHits } from '@/lib/search/rerank'
 import { searchPublishedTerms, type GlossarySearchHit } from '@/lib/glossary/terms'
+import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
+
+const searchLimiter = rateLimiters.standard()
+const MAX_SEARCH_QUERY_LEN = 200
 
 // Search pipeline:
 //   1. Embedding similarity over generated_posts (semantic recall)
@@ -95,8 +99,14 @@ function escapeLike(s: string): string {
 }
 
 export async function GET(request: NextRequest) {
+  const clientIP = getClientIP(request)
+  const rateLimitResult = await checkRateLimit(`search:${clientIP}`, searchLimiter ?? undefined)
+  if (!rateLimitResult.success) {
+    return rateLimitResponse(rateLimitResult)
+  }
+
   const { searchParams } = new URL(request.url)
-  const rawQuery = (searchParams.get('q') || '').trim()
+  const rawQuery = (searchParams.get('q') || '').trim().slice(0, MAX_SEARCH_QUERY_LEN)
   const locale = (searchParams.get('locale') || 'de').trim().toLowerCase()
   const isDefaultLocale = locale === 'de'
   // Voll-Ansicht (Ergebnisseite /[lang]/search) → mehr Treffer pro Gruppe.
@@ -455,5 +465,8 @@ export async function GET(request: NextRequest) {
     console.warn('[Search] products lookup failed:', err)
   }
 
-  return NextResponse.json({ posts: finalPosts, companies, products, glossary })
+  return NextResponse.json(
+    { posts: finalPosts, companies, products, glossary },
+    { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } }
+  )
 }

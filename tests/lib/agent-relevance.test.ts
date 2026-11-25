@@ -42,9 +42,10 @@ describe('checkRelevance', () => {
     expect(r.takeSimilarity).toBeCloseTo(0.714, 2)
   })
 
-  it('blockiert nicht, wenn die Embedding-API ausfaellt', async () => {
+  it('haelt fail-closed an, wenn die Embedding-API ausfaellt', async () => {
     const r = await checkRelevance({ body: 'b', sectionText: 's', takeText: 't', settings, embed: async () => { throw new Error('quota') } })
-    expect(r.hold).toBeNull()
+    expect(r.hold).toBe('relevance')
+    expect(r.reason).toBe('relevance_check_error')
     expect(r.similarity).toBeNaN()
   })
 })

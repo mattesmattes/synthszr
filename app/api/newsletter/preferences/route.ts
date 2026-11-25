@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 import { resolveSubscriberToken } from '@/lib/newsletter/access-tokens'
+import { readJsonBody, BoundedBodyError } from '@/lib/security/bounded-body'
 
 // Standard rate limiter: 30 requests per minute per IP
 const standardLimiter = rateLimiters.standard()
@@ -70,7 +71,19 @@ export async function PUT(request: NextRequest) {
   if (!rateLimitResult.success) return rateLimitResponse(rateLimitResult)
 
   try {
-    const body = await request.json().catch(() => ({}))
+    let rawBody: unknown
+    try {
+      rawBody = await readJsonBody(request, 8 * 1024)
+    } catch (err) {
+      if (err instanceof BoundedBodyError) {
+        return NextResponse.json(
+          { error: err.code === 'BODY_TOO_LARGE' ? 'Payload zu groß' : 'Ungültiger Request-Body' },
+          { status: err.code === 'BODY_TOO_LARGE' ? 413 : 400, headers: NO_STORE }
+        )
+      }
+      throw err
+    }
+    const body = (rawBody && typeof rawBody === 'object' ? rawBody : {}) as Record<string, unknown>
     const token = typeof body.token === 'string' ? body.token : ''
     const language = typeof body.language === 'string' ? body.language : ''
 

@@ -165,6 +165,7 @@ async function rememberDisplayName(
     .from('subscribers')
     .update({ name, updated_at: new Date().toISOString() })
     .eq('id', subscriberId)
+    .eq('status', 'active')
   if (error) console.error('[Comments] Anzeigename nicht gemerkt:', error.message)
 }
 
@@ -177,6 +178,7 @@ export async function getSubscriberDisplayName(
     .from('subscribers')
     .select('name')
     .eq('id', subscriberId)
+    .eq('status', 'active')
     .maybeSingle()
   const name = (data as { name?: string | null } | null)?.name
   return name?.trim() || null
@@ -339,6 +341,7 @@ export async function verifyAndPublishComments(
       moderation_verdict: moderation.verdict,
       moderation_reason: moderation.reason,
       published_at: status === 'published' ? new Date().toISOString() : null,
+      verify_token_hash: null,
     }).eq('id', row.id).eq('status', 'pending_verify')
     if (status === 'published') {
       published++

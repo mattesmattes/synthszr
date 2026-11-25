@@ -71,6 +71,8 @@ export function isPrivateIPv4(ip: string): boolean {
   if (a === 0) return true
   // 10.0.0.0/8 - private
   if (a === 10) return true
+  // 100.64.0.0/10 - CGNAT / Shared Address Space (RFC 6598)
+  if (a === 100 && b >= 64 && b <= 127) return true
   // 127.0.0.0/8 - loopback
   if (a === 127) return true
   // 169.254.0.0/16 - link-local (includes cloud metadata 169.254.169.254)
@@ -81,6 +83,8 @@ export function isPrivateIPv4(ip: string): boolean {
   if (a === 192 && b === 168) return true
   // 192.0.0.0/24 - IETF protocol assignments (includes some cloud metadata schemes)
   if (a === 192 && b === 0 && parts[2] === 0) return true
+  // 192.88.99.0/24 - 6to4 relay anycast
+  if (a === 192 && b === 88 && parts[2] === 99) return true
   // 198.18.0.0/15 - benchmark testing
   if (a === 198 && (b === 18 || b === 19)) return true
   // 224.0.0.0/4 - multicast
@@ -147,35 +151,76 @@ function expandIPv6(ip: string): number[] | null {
  */
 export function isPrivateIPv6(ip: string): boolean {
   const normalized = ip.toLowerCase()
-
-  // ::1 - loopback
-  if (normalized === '::1') return true
-  // :: - unspecified
-  if (normalized === '::') return true
-
-  // IPv4-mapped IPv6 (::ffff:0:0/96) - covers the decimal form
-  // (::ffff:127.0.0.1) and the hex form (::ffff:7f00:1, ::ffff:a9fe:a9fe,
-  // ...) alike: expand to 8 hextets, check hextets 1-5 are 0 and hextet 6 is
-  // ffff, then treat hextets 7+8 as the embedded IPv4 address.
   const hextets = expandIPv6(normalized)
+  // Fail closed on malformed IPv6 literals
+  if (!hextets) return true
+
+  const allZeroPrefix6 =
+    hextets[0] === 0 && hextets[1] === 0 && hextets[2] === 0 &&
+    hextets[3] === 0 && hextets[4] === 0 && hextets[5] === 0
+
+  // :: (unspecified) and ::1 (loopback) in any canonical or expanded form (incl. zone IDs)
+  if (allZeroPrefix6 && hextets[6] === 0 && (hextets[7] === 0 || hextets[7] === 1)) {
+    return true
+  }
+
+  const embeddedTailIPv4 = [
+    (hextets[6] >> 8) & 0xff, hextets[6] & 0xff,
+    (hextets[7] >> 8) & 0xff, hextets[7] & 0xff,
+  ].join('.')
+
+  // ::/96 (deprecated IPv4-compatible IPv6)
+  if (allZeroPrefix6) {
+    return isPrivateIPv4(embeddedTailIPv4)
+  }
+
+  // ::ffff:0:0/96 (IPv4-mapped IPv6)
   if (
-    hextets &&
     hextets[0] === 0 && hextets[1] === 0 && hextets[2] === 0 &&
     hextets[3] === 0 && hextets[4] === 0 && hextets[5] === 0xffff
   ) {
-    const embeddedIPv4 = [
-      (hextets[6] >> 8) & 0xff, hextets[6] & 0xff,
-      (hextets[7] >> 8) & 0xff, hextets[7] & 0xff,
-    ].join('.')
-    return isPrivateIPv4(embeddedIPv4)
+    return isPrivateIPv4(embeddedTailIPv4)
   }
 
-  // fe80::/10 - link-local
-  if (normalized.startsWith('fe8') || normalized.startsWith('fe9') || normalized.startsWith('fea') || normalized.startsWith('feb')) {
+  // ::ffff:0:0:0/96 (IPv4-translated SIIT)
+  if (
+    hextets[0] === 0 && hextets[1] === 0 && hextets[2] === 0 &&
+    hextets[3] === 0 && hextets[4] === 0xffff && hextets[5] === 0
+  ) {
+    return isPrivateIPv4(embeddedTailIPv4)
+  }
+
+  // 64:ff9b::/96 (NAT64 well-known prefix)
+  if (
+    hextets[0] === 0x0064 && hextets[1] === 0xff9b &&
+    hextets[2] === 0 && hextets[3] === 0 && hextets[4] === 0 && hextets[5] === 0
+  ) {
+    return isPrivateIPv4(embeddedTailIPv4)
+  }
+
+  // 64:ff9b:1::/48 (NAT64 local-use prefix)
+  if (hextets[0] === 0x0064 && hextets[1] === 0xff9b && hextets[2] === 0x0001) {
     return true
   }
+
+  // 2002::/16 (6to4 — embedded IPv4 in hextets[1..2])
+  if (hextets[0] === 0x2002) {
+    const embedded6to4 = [
+      (hextets[1] >> 8) & 0xff, hextets[1] & 0xff,
+      (hextets[2] >> 8) & 0xff, hextets[2] & 0xff,
+    ].join('.')
+    return isPrivateIPv4(embedded6to4)
+  }
+
+  // 2001::/32 (Teredo tunneling)
+  if (hextets[0] === 0x2001 && hextets[1] === 0x0000) return true
+
+  // fe80::/10 - link-local
+  if ((hextets[0] & 0xffc0) === 0xfe80) return true
   // fc00::/7 - unique local (fc00:: - fdff::)
-  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true
+  if ((hextets[0] & 0xfe00) === 0xfc00) return true
+  // ff00::/8 - multicast
+  if ((hextets[0] & 0xff00) === 0xff00) return true
 
   return false
 }

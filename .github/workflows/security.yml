@@ -19,6 +19,9 @@ on:
     # Run weekly on Sunday at midnight
     - cron: '0 0 * * 0'
 
+permissions:
+  contents: read
+
 jobs:
   # Dependency vulnerability scanning
   audit:
@@ -189,7 +192,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run tests
-        run: pnpm exec vitest run tests/lib/
+        run: pnpm exec vitest run tests/
         env:
           NODE_ENV: test
           # Platzhalter, KEIN echter Schluessel. Mehrere Module pruefen beim

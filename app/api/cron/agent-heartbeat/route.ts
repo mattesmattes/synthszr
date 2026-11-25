@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireCronOrAdmin } from '@/lib/auth/session'
+import { requireAdmin } from '@/lib/auth/session'
+import { verifyCronAuth } from '@/lib/security/cron-auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { loadHouseAgents, runHouseAgent } from '@/lib/agents/house'
 
@@ -11,9 +12,7 @@ import { loadHouseAgents, runHouseAgent } from '@/lib/agents/house'
  */
 export const maxDuration = 300
 
-export async function GET(request: NextRequest) {
-  const authError = await requireCronOrAdmin(request)
-  if (authError) return authError
+async function executeAgentHeartbeat() {
   const supabase = createAdminClient()
   const agents = await loadHouseAgents(supabase)
   const runs = []
@@ -27,4 +26,18 @@ export async function GET(request: NextRequest) {
   }
   console.log('[Agents] Heartbeat:', JSON.stringify(runs.map((r) => ({ handle: r.handle, error: r.error, published: r.published, pending: r.pending, rejected: r.rejected }))))
   return NextResponse.json({ ok: true, runs })
+}
+
+export async function GET(request: NextRequest) {
+  const auth = verifyCronAuth(request)
+  if (!auth.authorized) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  return executeAgentHeartbeat()
+}
+
+export async function POST(request: NextRequest) {
+  const authError = await requireAdmin(request)
+  if (authError) return authError
+  return executeAgentHeartbeat()
 }

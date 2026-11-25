@@ -133,11 +133,12 @@ describe('Security: Startup Checks', () => {
 
     const values: Record<string, string | undefined> = {
       VERCEL_ENV: 'production',
-      JWT_SECRET: 'jwt-secret',
       CRON_SECRET: 'cron-secret',
       SUPABASE_SERVICE_ROLE_KEY: 'service-key',
       ADMIN_PASSWORD: 'admin-password',
       REVALIDATE_SECRET: 'revalidate-secret',
+      ENCRYPTION_KEY: 'encryption-key',
+      RESEND_WEBHOOK_SECRET: 'whsec_test',
       KV_REST_API_URL: 'https://kv.vercel-storage.com',
       KV_REST_API_TOKEN: 'kv-token',
       ...overrides,
@@ -159,14 +160,24 @@ describe('Security: Startup Checks', () => {
     expect(result.valid).toBe(true)
   })
 
-  it('reports missing JWT_SECRET in production', async () => {
-    productionEnv({ JWT_SECRET: undefined })
+  it('reports missing ENCRYPTION_KEY in production', async () => {
+    productionEnv({ ENCRYPTION_KEY: undefined })
 
     const { validateSecurityConfig } = await import('@/lib/security/startup-checks')
     const result = validateSecurityConfig()
 
     expect(result.valid).toBe(false)
-    expect(result.errors.some(e => e.includes('JWT_SECRET'))).toBe(true)
+    expect(result.errors.some(e => e.includes('ENCRYPTION_KEY'))).toBe(true)
+  })
+
+  it('warns on missing RESEND_WEBHOOK_SECRET in production without crashing boot', async () => {
+    productionEnv({ RESEND_WEBHOOK_SECRET: undefined })
+
+    const { validateSecurityConfig } = await import('@/lib/security/startup-checks')
+    const result = validateSecurityConfig()
+
+    expect(result.valid).toBe(true)
+    expect(result.warnings.some(w => w.includes('RESEND_WEBHOOK_SECRET'))).toBe(true)
   })
 
   it('reports missing CRON_SECRET in production', async () => {

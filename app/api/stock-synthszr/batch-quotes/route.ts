@@ -130,6 +130,7 @@ export async function POST(request: NextRequest) {
             .from('stock_synthszr_cache')
             .select('company, data, created_at')
             .ilike('company', company.trim())
+            .in('currency', ['EUR', 'USD', 'GBP', 'CHF'])
             .order('created_at', { ascending: false })
             .limit(1)
             .single<CacheRow>()

@@ -54,6 +54,8 @@ export interface FetchContext {
   bodies: Map<string, string>
 }
 
+import { readResponseBuffer } from '@/lib/security/bounded-body'
+
 const UA = 'Mozilla/5.0 (compatible; SynthszrBot/1.0; +https://www.synthszr.com)'
 
 /** Der Feed-Eintrag zu einer Artikel-Adresse, falls auffindbar. */
@@ -67,7 +69,7 @@ async function fromFeed(ctx: FetchContext, url: string): Promise<FetchedText | n
     try {
       const res = await safeFetch(gefunden.feedUrl, { headers: { 'User-Agent': UA }, timeoutMs: 12_000 })
       if (!res.ok) return null
-      xml = await res.text()
+      xml = (await readResponseBuffer(res, 2 * 1024 * 1024)).toString('utf8')
       ctx.bodies.set(gefunden.feedUrl, xml)
     } catch {
       return null

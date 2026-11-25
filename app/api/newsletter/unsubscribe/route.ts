@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 import { requireValidOrigin } from '@/lib/security/origin-check'
 import { resolveSubscriberToken } from '@/lib/newsletter/access-tokens'
+import { readJsonBody, BoundedBodyError } from '@/lib/security/bounded-body'
 
 const standardLimiter = rateLimiters.standard()
 
@@ -31,7 +32,19 @@ export async function POST(request: NextRequest) {
   if (!rateLimitResult.success) return rateLimitResponse(rateLimitResult)
 
   try {
-    const body = await request.json().catch(() => ({}))
+    let rawBody: unknown
+    try {
+      rawBody = await readJsonBody(request, 8 * 1024)
+    } catch (err) {
+      if (err instanceof BoundedBodyError) {
+        return NextResponse.json(
+          { error: err.code === 'BODY_TOO_LARGE' ? 'payload_too_large' : 'invalid_body' },
+          { status: err.code === 'BODY_TOO_LARGE' ? 413 : 400, headers: NO_STORE }
+        )
+      }
+      throw err
+    }
+    const body = (rawBody && typeof rawBody === 'object' ? rawBody : {}) as Record<string, unknown>
     const token = typeof body.token === 'string' ? body.token.trim() : ''
     if (!token) {
       return NextResponse.json({ error: 'token erforderlich' }, { status: 400, headers: NO_STORE })
@@ -72,7 +85,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'update_failed' }, { status: 500, headers: NO_STORE })
     }
 
-    return NextResponse.json({ status: 'success' }, { headers: NO_STORE })
+    // Revoke all remaining action tokens (comment, preferences, referral) for this subscriber
+    await supabase
+      .from('subscriber_action_tokens')
+      .update({ consumed_at: new Date().toISOString() })
+      .eq('subscriber_id', subscriber.id)
+      .is('consumed_at', null)
+
+    const res = NextResponse.json({ status: 'success' }, { headers: NO_STORE })
+    res.cookies.delete('synthszr_reader')
+    return res
   } catch (error) {
     console.error('Unsubscribe error:', error)
     return NextResponse.json({ error: 'server_error' }, { status: 500, headers: NO_STORE })

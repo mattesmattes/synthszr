@@ -94,11 +94,24 @@ export async function POST(request: NextRequest) {
     const cookieValue = request.cookies.get(READER_COOKIE_NAME)?.value
     let subscriberId = cookieValue ? openReaderSession(cookieValue)?.subscriberId ?? null : null
     let refreshCookie = false
+    let clearStaleCookie = false
+
+    if (subscriberId && typeof supabase?.from === 'function') {
+      const { data: activeSub } = await supabase
+        .from('subscribers')
+        .select('status')
+        .eq('id', subscriberId)
+        .maybeSingle()
+      if (!activeSub || activeSub.status !== 'active') {
+        subscriberId = null
+        clearStaleCookie = true
+      }
+    }
 
     if (!subscriberId && data.commentToken) {
       subscriberId = await resolveCommentToken(data.commentToken)
-      // Token war gültig → Cookie setzen, damit der nächste Kommentar ohne
-      // Token-Parameter funktioniert (der Link wandert aus der URL).
+      // Token war gültig → Cookie setzen (auf 7 Tage begrenzt analog zur ?ct=-TTL),
+      // damit der nächste Kommentar ohne Token-Parameter funktioniert.
       refreshCookie = subscriberId !== null
     }
 
@@ -106,11 +119,12 @@ export async function POST(request: NextRequest) {
       const { status } = await submitVerifiedComment(supabase, subscriberId, input)
       const res = NextResponse.json({ status })
       if (refreshCookie) {
-        res.cookies.set(READER_COOKIE_NAME, sealReaderSession(subscriberId, new Date(Date.now() + READER_SESSION_TTL_SECONDS * 1000)), {
+        const commentCookieTtl = Math.min(READER_SESSION_TTL_SECONDS, 7 * 24 * 60 * 60)
+        res.cookies.set(READER_COOKIE_NAME, sealReaderSession(subscriberId, new Date(Date.now() + commentCookieTtl * 1000)), {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
           sameSite: 'lax',
-          maxAge: READER_SESSION_TTL_SECONDS,
+          maxAge: commentCookieTtl,
           path: '/',
         })
       }
@@ -119,7 +133,9 @@ export async function POST(request: NextRequest) {
 
     // Web-Flow: E-Mail nötig.
     if (!data.email) {
-      return NextResponse.json({ error: 'email_required' }, { status: 401 })
+      const res = NextResponse.json({ error: 'email_required' }, { status: 401 })
+      if (clearStaleCookie) res.cookies.delete(READER_COOKIE_NAME)
+      return res
     }
     // ANTI-ENUMERATION mit gleichem TIMING: die gesamte „ist das ein Abonnent,
     // dann parken + mailen"-Arbeit läuft NACH der Antwort (after). Beide Fälle

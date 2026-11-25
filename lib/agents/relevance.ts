@@ -25,7 +25,7 @@ export interface RelevanceInput {
 
 export interface RelevanceResult {
   hold: 'relevance' | null
-  reason: 'off_topic' | 'paraphrase' | null
+  reason: 'off_topic' | 'paraphrase' | 'relevance_check_error' | null
   /** Cosine Take ↔ Abschnitt; NaN bei Ausfall. */
   similarity: number
   /** Cosine Take ↔ Synthszr Take; NaN bei Ausfall. */
@@ -57,7 +57,7 @@ export async function checkRelevance(i: RelevanceInput): Promise<RelevanceResult
     }
     return { hold: null, reason: null, ...scores }
   } catch (err) {
-    console.error('[Agents] Bezugsprüfung ausgefallen, Take passiert ungeprüft:', err instanceof Error ? err.message : err)
-    return { hold: null, reason: null, similarity: NaN, takeSimilarity: NaN, reportSimilarity: NaN }
+    console.error('[Agents] Bezugsprüfung ausgefallen, Take landet in Moderation (fail-closed):', err instanceof Error ? err.message : err)
+    return { hold: 'relevance', reason: 'relevance_check_error', similarity: NaN, takeSimilarity: NaN, reportSimilarity: NaN }
   }
 }
