@@ -139,6 +139,21 @@ const JUNK_TITLE_PATTERNS = [
   /:\s*ai courses,.*ad-free/i,
   /^the who['’]s who of\b/i,
   /^presentations\s*[—–-]\s*/i,
+
+  // Crawl block / paywall / bot-check / HTTP error pages
+  /^your access (to this site )?has been blocked\.?$/i,
+  /^access (to \S+ )?(was )?denied\.?$/i,
+  /^access blocked\.?$/i,
+  /^just a moment\.{0,3}$/i,
+  /^attention required!?\s*(\||$)/i,
+  /^verify you are (a )?human\.?$/i,
+  /^(are you a robot|robot or human)\??$/i,
+  /^(403\s+)?forbidden\.?$/i,
+  /^(404\s+)?(page )?not found\.?$/i,
+  /^(please )?enable (javascript|cookies)\b/i,
+  /^subscribe to (continue )?read(ing)?\.?$/i,
+  /^sign in to continue\.?$/i,
+  /^checking your browser\b/i,
 ]
 
 /**

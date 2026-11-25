@@ -46,6 +46,13 @@ describe('isJunkTitle — erweiterte Filter', () => {
     'Dupple X: AI Courses, Software Deals, Ad-Free Techpresso',
     "The Who's Who of AI",
     'Presentations — Benedict Evans',
+    'Your access has been blocked.',
+    'Access to x.com was denied',
+    'Just a moment...',
+    'Attention Required! | Cloudflare',
+    'Verify you are human',
+    '403 Forbidden',
+    'Subscribe to continue reading',
   ])('filtert bekannten Junk-Titel: %s', (title) => {
     expect(isJunkTitle(title)).toBe(true)
   })
@@ -56,6 +63,8 @@ describe('isJunkTitle — erweiterte Filter', () => {
     'inclusionAI drops Ling-3.2-air, 124B MoE at 5.5B active',
     'China’s Huawei found guilty of stealing trade secrets',
     "Google's Neon Is Great… On a Short Leash",
+    'China blocked access to Nvidia AI chips',
+    'Judge rules access to records was denied illegally',
   ])('lässt echte Artikel-Titel passieren: %s', (title) => {
     expect(isJunkTitle(title)).toBe(false)
   })

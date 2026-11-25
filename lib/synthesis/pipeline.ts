@@ -658,19 +658,19 @@ export async function rescorePendingItems(
     if (rows.length < end - offset + 1) break
   }
 
-  const candidates = loaded.filter((r) => {
+  const nonManual = loaded.filter((r) => (r.metadata ?? {}).manual !== true)
+  const junkRows = nonManual.filter((r) => isJunkTitle(r.title))
+  const toScore = nonManual.filter((r) => {
     const meta = r.metadata ?? {}
-    if (meta.techmeme === true || meta.manual === true) return false
+    if (meta.techmeme === true) return false
+    if (isJunkTitle(r.title)) return false
     if (onlyUnscored) return r.synthesis_score === 3 && r.relevance_score === 3
     return true
   })
 
-  if (candidates.length === 0) {
+  if (junkRows.length === 0 && toScore.length === 0) {
     return { scanned: loaded.length, rescored: 0, junkSkipped: 0, errors: 0 }
   }
-
-  const junkRows = candidates.filter((r) => isJunkTitle(r.title))
-  const toScore = candidates.filter((r) => !isJunkTitle(r.title))
 
   let junkSkipped = 0
   if (junkRows.length > 0) {
