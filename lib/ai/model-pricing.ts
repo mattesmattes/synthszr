@@ -105,6 +105,12 @@ export const MODEL_PRICING: Record<string, ModelInfo> = {
     provider: 'anthropic',
     pricing: { input: 3, output: 15 },
   },
+  'claude-haiku-5-5': {
+    id: 'claude-haiku-5-5',
+    name: 'Claude Haiku 5.5',
+    provider: 'anthropic',
+    pricing: { input: 1, output: 5 },
+  },
   'claude-haiku-4-5-20251001': {
     id: 'claude-haiku-4-5-20251001',
     name: 'Claude Haiku 4.5',

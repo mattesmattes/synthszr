@@ -128,6 +128,17 @@ const JUNK_TITLE_PATTERNS = [
 
   // Solve puzzles / crosswords
   /^(sat|sun|mon|tue|wed|thu|fri),.*solve this/i,
+
+  // Partner / sponsor / directory / social profile leaks observed in queue
+  /^partner content\b/i,
+  /\bpartner content and sponsorships?\b/i,
+  /^sponsorships?$/i,
+  /\(@\w+\)\s+(auf|on)\s+x$/i,
+  /\|\s*toolradar$/i,
+  /^featured in\s+\S+/i,
+  /:\s*ai courses,.*ad-free/i,
+  /^the who['’]s who of\b/i,
+  /^presentations\s*[—–-]\s*/i,
 ]
 
 /**

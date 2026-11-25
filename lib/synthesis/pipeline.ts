@@ -6,7 +6,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { addToQueue } from '@/lib/news-queue'
-import { isJunkTitle, normalizeSourceIdentifier } from '@/lib/news-queue/service'
+import { isJunkTitle, normalizeSourceIdentifier, skipItems } from '@/lib/news-queue/service'
 import { scoreContentOnly } from './score'
 
 /**
@@ -17,25 +17,34 @@ function normalizeSource(email: string | null, url: string | null): string {
 }
 
 /**
- * Load historical source publication rates.
- * Extracts queueItemIds from published generated_posts TipTap content,
- * then calculates per-source: published_count / total_count.
+ * Laplace-smoothed source publication rate (capped at 0.30, fits NUMERIC(4,3)).
+ * Returns 0 when published <= 0 so unpicked sources never gain spurious weight.
+ */
+export function computeSmoothedPubRate(published: number, total: number): number {
+  if (published <= 0 || total <= 0) return 0
+  return Math.min(0.30, Math.round((published / (total + 15)) * 1000) / 1000)
+}
+
+/**
+ * Load historical source publication rates across the last 60 days.
+ * Counts items present in published generated_posts (both singular queueItemId
+ * and bundled queueItemIds[]) OR marked status='used' on news_queue.
  */
 async function getSourcePubRates(): Promise<Map<string, number>> {
   const supabase = createAdminClient()
   const rates = new Map<string, number>()
 
-  // Get published post content to extract queueItemIds
+  // Get published post content to extract queueItemIds (last 60 days + older used markers)
+  const cutoff60d = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString()
   const { data: posts } = await supabase
     .from('generated_posts')
     .select('content')
     .eq('status', 'published')
-
-  if (!posts || posts.length === 0) return rates
+    .gte('created_at', cutoff60d)
 
   // Extract all queueItemIds from TipTap heading nodes
   const publishedIds = new Set<string>()
-  for (const post of posts) {
+  for (const post of posts || []) {
     if (!post.content) continue
     try {
       const doc = typeof post.content === 'string' ? JSON.parse(post.content) : post.content
@@ -45,21 +54,17 @@ async function getSourcePubRates(): Promise<Map<string, number>> {
     }
   }
 
-  if (publishedIds.size === 0) return rates
-
-  // Count per source: total items and published items
+  // Count per source: total items and published items over last 60 days
   const sourceTotals = new Map<string, number>()
   const sourcePublished = new Map<string, number>()
 
-  // Fetch queue items from last 30 days only (avoids full-table scan on large tables)
-  const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
   let offset = 0
   const batchSize = 1000
   while (true) {
     const { data } = await supabase
       .from('news_queue')
-      .select('id, source_identifier')
-      .gte('queued_at', cutoff30d)
+      .select('id, source_identifier, status')
+      .gte('queued_at', cutoff60d)
       .range(offset, offset + batchSize - 1)
 
     if (!data || data.length === 0) break
@@ -67,7 +72,7 @@ async function getSourcePubRates(): Promise<Map<string, number>> {
     for (const item of data) {
       const src = item.source_identifier
       sourceTotals.set(src, (sourceTotals.get(src) || 0) + 1)
-      if (publishedIds.has(item.id)) {
+      if (publishedIds.has(item.id) || item.status === 'used') {
         sourcePublished.set(src, (sourcePublished.get(src) || 0) + 1)
       }
     }
@@ -76,22 +81,27 @@ async function getSourcePubRates(): Promise<Map<string, number>> {
     offset += batchSize
   }
 
-  // Calculate rates
+  // Calculate Laplace-smoothed rates
   for (const [src, total] of sourceTotals) {
     const published = sourcePublished.get(src) || 0
-    rates.set(src, total > 0 ? published / total : 0)
+    rates.set(src, computeSmoothedPubRate(published, total))
   }
 
-  console.log(`[Pipeline] Source pub rates: ${publishedIds.size} published items across ${rates.size} sources`)
+  console.log(`[Pipeline] Source pub rates: ${publishedIds.size} heading IDs across ${rates.size} sources (60d smoothed)`)
   return rates
 }
 
-/** Recursively extract queueItemIds from TipTap JSON */
-function extractQueueItemIds(node: Record<string, unknown>, ids: Set<string>) {
+/** Recursively extract queueItemId and queueItemIds[] from TipTap JSON headings */
+export function extractQueueItemIds(node: Record<string, unknown>, ids: Set<string>): void {
   if (node.type === 'heading' && node.attrs) {
     const attrs = node.attrs as Record<string, unknown>
     if (attrs.queueItemId && typeof attrs.queueItemId === 'string') {
       ids.add(attrs.queueItemId)
+    }
+    if (Array.isArray(attrs.queueItemIds)) {
+      for (const id of attrs.queueItemIds) {
+        if (typeof id === 'string' && id.length > 0) ids.add(id)
+      }
     }
   }
   if (Array.isArray(node.content)) {
@@ -605,4 +615,118 @@ export async function runSynthesisPipelineWithProgress(
       errors,
     }
   }
+}
+
+/**
+ * Re-score pending non-Techmeme, non-manual queue items (e.g. after a Parse-Fehler outage).
+ * Also marks items caught by updated JUNK_TITLE_PATTERNS as skipped.
+ */
+export async function rescorePendingItems(
+  options: { days?: number; onlyUnscored?: boolean; limit?: number } = {}
+): Promise<{ scanned: number; rescored: number; junkSkipped: number; errors: number }> {
+  const days = Math.min(Math.max(options.days ?? 3, 1), 7)
+  const onlyUnscored = options.onlyUnscored ?? true
+  const limit = Math.min(Math.max(options.limit ?? 400, 1), 1500)
+
+  const supabase = createAdminClient()
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+
+  interface PendingRow {
+    id: string
+    title: string
+    content: string | null
+    source_identifier: string
+    synthesis_score: number
+    relevance_score: number
+    metadata: Record<string, unknown> | null
+  }
+
+  const loaded: PendingRow[] = []
+  const PAGE = 1000
+  for (let offset = 0; loaded.length < limit; offset += PAGE) {
+    const end = Math.min(offset + PAGE - 1, limit - 1)
+    const { data, error } = await supabase
+      .from('news_queue')
+      .select('id, title, content, source_identifier, synthesis_score, relevance_score, metadata')
+      .eq('status', 'pending')
+      .gte('queued_at', since)
+      .order('queued_at', { ascending: false })
+      .range(offset, end)
+    if (error) throw new Error(`rescorePendingItems read failed: ${error.message}`)
+    const rows = (data ?? []) as PendingRow[]
+    loaded.push(...rows)
+    if (rows.length < end - offset + 1) break
+  }
+
+  const candidates = loaded.filter((r) => {
+    const meta = r.metadata ?? {}
+    if (meta.techmeme === true || meta.manual === true) return false
+    if (onlyUnscored) return r.synthesis_score === 3 && r.relevance_score === 3
+    return true
+  })
+
+  if (candidates.length === 0) {
+    return { scanned: loaded.length, rescored: 0, junkSkipped: 0, errors: 0 }
+  }
+
+  const junkRows = candidates.filter((r) => isJunkTitle(r.title))
+  const toScore = candidates.filter((r) => !isJunkTitle(r.title))
+
+  let junkSkipped = 0
+  if (junkRows.length > 0) {
+    const CHUNK = 100
+    for (let i = 0; i < junkRows.length; i += CHUNK) {
+      const slice = junkRows.slice(i, i + CHUNK)
+      await skipItems(slice.map((r) => r.id), 'junk_title', { actor: 'pipeline' })
+      junkSkipped += slice.length
+    }
+  }
+
+  if (toScore.length === 0) {
+    return { scanned: loaded.length, rescored: 0, junkSkipped, errors: 0 }
+  }
+
+  const scoreMap = await scoreContentOnly(
+    toScore.map((r) => ({ id: r.id, title: r.title, content: r.content || '' })),
+    { concurrency: 8 }
+  )
+  const recentTitles = await getRecentlyPublishedTitles(3)
+  applyRecencyPenalty(toScore, recentTitles, scoreMap)
+  applyNoveltyPenalty(toScore, scoreMap)
+  const sourcePubRates = await getSourcePubRates()
+
+  let rescored = 0
+  let errors = 0
+  const UPDATE_CONCURRENCY = 20
+  for (let i = 0; i < toScore.length; i += UPDATE_CONCURRENCY) {
+    const batch = toScore.slice(i, i + UPDATE_CONCURRENCY)
+    const results = await Promise.all(
+      batch.map(async (item) => {
+        const s = scoreMap.get(item.id)
+        if (!s) return false
+        const { error } = await supabase
+          .from('news_queue')
+          .update({
+            synthesis_score: s.synthesisScore,
+            relevance_score: s.relevanceScore,
+            uniqueness_score: s.uniquenessScore,
+            source_pub_rate: sourcePubRates.get(item.source_identifier) ?? 0,
+            content_length: (item.content || '').length,
+          })
+          .eq('id', item.id)
+        if (error) {
+          console.error(`[Pipeline] rescore update failed for ${item.id}:`, error.message)
+          return false
+        }
+        return true
+      })
+    )
+    for (const ok of results) {
+      if (ok) rescored++
+      else errors++
+    }
+  }
+
+  console.log(`[Pipeline] rescorePendingItems: scanned=${loaded.length}, rescored=${rescored}, junkSkipped=${junkSkipped}, errors=${errors}`)
+  return { scanned: loaded.length, rescored, junkSkipped, errors }
 }

@@ -25,6 +25,7 @@ import {
 import { createAdminClient } from '@/lib/supabase/admin'
 import { parseIntParam } from '@/lib/validation/query-params'
 import { readStatusSnapshot, recordQueueEvents } from '@/lib/news-queue/events'
+import { rescorePendingItems } from '@/lib/synthesis/pipeline'
 
 // GET: List queue items, stats, or distribution
 export async function GET(request: NextRequest) {
@@ -530,6 +531,20 @@ export async function POST(request: NextRequest) {
 
         console.log('[NewsQueue] reset-item success:', data[0])
         return NextResponse.json({ success: true, updated: data[0] })
+      }
+
+      case 'rescore-pending': {
+        const { days, onlyUnscored, limit } = body as {
+          days?: unknown
+          onlyUnscored?: unknown
+          limit?: unknown
+        }
+        const result = await rescorePendingItems({
+          days: typeof days === 'number' ? days : undefined,
+          onlyUnscored: typeof onlyUnscored === 'boolean' ? onlyUnscored : undefined,
+          limit: typeof limit === 'number' ? limit : undefined,
+        })
+        return NextResponse.json(result)
       }
 
       default:

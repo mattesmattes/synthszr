@@ -7,6 +7,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { SimilarItem, daysBetween } from './search'
 import { getModelForUseCase } from '@/lib/ai/model-config'
 import { withUsageLogging } from '@/lib/ai/usage-log'
+import { getModelCapabilities } from '@/lib/claude/model-capabilities'
 
 export type SynthesisType =
   | 'contradiction'
@@ -214,6 +215,125 @@ export interface ContentScore {
  */
 // Number of articles scored per single Claude call (batch scoring)
 const ARTICLES_PER_CALL = 10
+const SCORING_SNIPPET_CHARS = 1500
+
+const clampScore = (n: number): number => {
+  if (!Number.isFinite(n)) return 0
+  return Math.min(10, Math.max(0, Math.round(n * 10) / 10))
+}
+
+/**
+ * Behavior-calibrated batch scoring prompt grounded in historical pick/publish lifts.
+ */
+export function buildBatchScoringPrompt(
+  group: Array<{ id: string; title: string; content: string }>
+): string {
+  const articleBlocks = group
+    .map((item, i) => {
+      const text = `${item.title}\n\n${item.content || ''}`.slice(0, SCORING_SNIPPET_CHARS)
+      return `ARTIKEL_${i + 1}:\n${text}`
+    })
+    .join('\n\n---\n\n')
+
+  return `Bewerte diese ${group.length} Tech-/Business-Newsletter-Artikel für eine kuratierte Entscheider-Publikation (Fokus: KI, Plattformen, Strategie, Regulierung).
+
+HARTE JUNK-KAPPUNG (alle drei Achsen 0-1):
+- Werbung, Sponsoring, Partner-Content, Kurs-/Software-Deals, Ad-Free-Promos
+- Newsletter-Housekeeping, Abo-Hinweise, Social-Media-Profil-Links („auf X“), Präsentations-Archive
+- Reine Link-Sammlungen/Roundups ohne eigene Story, reine How-To-Tutorials oder Alltags-Spielereien (z. B. Einkaufslisten)
+
+Kriterien (Skala 0-10, ganze Zahlen oder 0.5-Schritte):
+- SUBSTANZ (Beleg & Fakten-Tiefe):
+  8-10 = konkretes, datiertes Ereignis (Produkt-/Modell-Launch, Sicherheitsvorfall, M&A/Deal, Politik/Urteil, gewichtiges Executive-Statement) oder tief belegte Analyse mit Zahlen/Zitaten
+  5-7  = solider Nachrichtenbericht mit klarem Kernfakt, begrenzte Tiefe
+  3-4  = dünner Teaser oder reine Meinung/Kommentar ohne neuen Fakt
+  0-2  = Spam, Werbung, Navigation, Profilseite, Linkliste
+- RELEVANZ (strategischer Entscheider-Hebel):
+  9-10 = KI im Kern UND hohe strategische Bedeutung für Entscheider/Märkte (typisch Big Player wie OpenAI, Anthropic, Nvidia, Google, Meta, Apple, Microsoft, Amazon, xAI, DeepSeek oder folgenreiche Regulierung/Sicherheit/Machtverschiebung)
+  7-8  = klares KI-/Tech-Marktthema mit relevantem Produkt-, Modell- oder Wettbewerbseffekt
+  4-6  = allgemeines Tech/Business ohne KI-Kern oder Nische; isolierte kleine Funding-Runden ohne Big-Player-/KI-Hebel höchstens 5
+  0-3  = Consumer-Lifestyle, irrelevante Nische, Sponsoring, Housekeeping, Tutorials
+- NEUHEIT (echter Informationsgewinn):
+  8-10 = genuin neue Entwicklung, überraschende Wende/Kontroverse oder klar neuer analytischer Blickwinkel
+  5-7  = solides Update mit neuen Details zu laufender Story
+  0-4  = Rehash bekannter Meldungen, Evergreen-Guide, Sammel-Digest, Trivialität
+
+${articleBlocks}
+
+Antworte EXAKT in diesem Format (eine Zeile pro Artikel, keine Einleitung, keine Erklärungen):
+ARTIKEL_1: SUBSTANZ:X RELEVANZ:X NEUHEIT:X
+ARTIKEL_2: SUBSTANZ:X RELEVANZ:X NEUHEIT:X`
+}
+
+/**
+ * Builds SDK request params adapted to model capabilities.
+ * Models like claude-haiku-5-5 use adaptive thinking by default, which can
+ * silently consume small max_tokens budgets if not disabled.
+ */
+export function buildScoringRequestParams(
+  modelId: string,
+  prompt: string,
+  itemCount: number
+): Anthropic.MessageCreateParamsNonStreaming {
+  const caps = getModelCapabilities(modelId)
+  const needsAdaptiveRoom = caps.adaptiveThinking && !caps.supportsDisabledThinking
+  const maxTokens = needsAdaptiveRoom
+    ? itemCount * 120 + 600
+    : itemCount * 60 + 250
+
+  const params: Record<string, unknown> = {
+    model: modelId,
+    max_tokens: maxTokens,
+    messages: [{ role: 'user', content: prompt }],
+  }
+
+  if (caps.adaptiveThinking) {
+    if (caps.supportsDisabledThinking) {
+      params.thinking = { type: 'disabled' }
+    } else if (caps.supportsEffort) {
+      params.output_config = { effort: 'low' }
+    }
+  }
+
+  return params as unknown as Anthropic.MessageCreateParamsNonStreaming
+}
+
+/** Concatenates all text blocks (skipping thinking/redacted_thinking blocks). */
+export function extractTextFromContent(content: Anthropic.Message['content']): string {
+  return content
+    .filter((block): block is Anthropic.TextBlock => block.type === 'text' && typeof block.text === 'string')
+    .map(block => block.text)
+    .join('\n')
+}
+
+/** Parses per-article SUBSTANZ/RELEVANZ/NEUHEIT lines with tolerance for markdown formatting. */
+export function parseBatchScoreText(
+  text: string,
+  group: Array<{ id: string }>
+): { results: Array<{ id: string; score: ContentScore }>; parseFailures: number } {
+  let parseFailures = 0
+  const results = group.map((item, i) => {
+    const regex = new RegExp(
+      `(?:^|\\n)\\s*(?:[-*•]\\s*)?(?:\\*\\*)?ARTIKEL[_\\s]+${i + 1}(?:\\*\\*)?\\s*:?\\s*(?:\\*\\*)?SUBSTANZ(?:\\*\\*)?\\s*:?\\s*(\\d+(?:[.,]\\d+)?)\\s*[,;|/]?\\s*(?:\\*\\*)?RELEVANZ(?:\\*\\*)?\\s*:?\\s*(\\d+(?:[.,]\\d+)?)\\s*[,;|/]?\\s*(?:\\*\\*)?NEUHEIT(?:\\*\\*)?\\s*:?\\s*(\\d+(?:[.,]\\d+)?)`,
+      'i'
+    )
+    const match = text.match(regex)
+    if (match) {
+      return {
+        id: item.id,
+        score: {
+          synthesisScore: clampScore(parseFloat(match[1].replace(',', '.'))),
+          relevanceScore: clampScore(parseFloat(match[2].replace(',', '.'))),
+          uniquenessScore: clampScore(parseFloat(match[3].replace(',', '.'))),
+          reasoning: '',
+        },
+      }
+    }
+    parseFailures++
+    return { id: item.id, score: { synthesisScore: 3, relevanceScore: 3, uniquenessScore: 3, reasoning: 'Parse-Fehler' } }
+  })
+  return { results, parseFailures }
+}
 
 /**
  * Score a group of articles in a single Claude call.
@@ -224,25 +344,8 @@ async function scoreArticleGroup(
   group: Array<{ id: string; title: string; content: string }>,
   modelId: string
 ): Promise<Array<{ id: string; score: ContentScore }>> {
-  const articleBlocks = group
-    .map((item, i) => {
-      const text = `${item.title}\n\n${item.content || ''}`.slice(0, 800)
-      return `ARTIKEL_${i + 1}:\n${text}`
-    })
-    .join('\n\n---\n\n')
-
-  const prompt = `Bewerte diese ${group.length} Newsletter-Artikel für ein professionelles Tech/Business-Publikum.
-
-Kriterien (Skala 0-10):
-- SUBSTANZ: Inhaltliche Tiefe (0-2=Spam/Werbung/Navigation, 3-4=Teaser, 5-6=normal, 7-8=gut, 9-10=exzellent)
-- RELEVANZ: Für Digital/Design/Tech/Business-Profis (0-2=irrelevant, 5-6=moderat, 7-8=hoch, 9-10=strategisch)
-- NEUHEIT: Originalität des Inhalts (0-2=trivial, 5-6=durchschnittlich, 7-8=interessant, 9-10=bahnbrechend)
-
-${articleBlocks}
-
-Antworte EXAKT in diesem Format (eine Zeile pro Artikel, keine anderen Zeilen):
-ARTIKEL_1: SUBSTANZ:X RELEVANZ:X NEUHEIT:X
-ARTIKEL_2: SUBSTANZ:X RELEVANZ:X NEUHEIT:X`
+  const prompt = buildBatchScoringPrompt(group)
+  const requestParams = buildScoringRequestParams(modelId, prompt, group.length)
 
   const timeoutMs = 60000
   const timeoutPromise = new Promise<never>((_, reject) =>
@@ -257,35 +360,18 @@ ARTIKEL_2: SUBSTANZ:X RELEVANZ:X NEUHEIT:X`
 
   try {
     const response = await Promise.race([
-      anthropic.messages.create({
-        model: modelId,
-        max_tokens: group.length * 25 + 50,
-        messages: [{ role: 'user', content: prompt }],
-      }),
+      anthropic.messages.create(requestParams),
       timeoutPromise,
     ])
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : ''
-
-    return group.map((item, i) => {
-      const regex = new RegExp(
-        `ARTIKEL_${i + 1}:\\s*SUBSTANZ:(\\d+)\\s+RELEVANZ:(\\d+)\\s+NEUHEIT:(\\d+)`,
-        'i'
+    const text = extractTextFromContent(response.content)
+    const { results, parseFailures } = parseBatchScoreText(text, group)
+    if (parseFailures > 0) {
+      console.warn(
+        `[ContentScoring] ${parseFailures}/${group.length} Parse-Fehler (model=${modelId}, stop=${response.stop_reason}): ${text.slice(0, 240)}`
       )
-      const match = text.match(regex)
-      if (match) {
-        return {
-          id: item.id,
-          score: {
-            synthesisScore: parseInt(match[1], 10),
-            relevanceScore: parseInt(match[2], 10),
-            uniquenessScore: parseInt(match[3], 10),
-            reasoning: '',
-          },
-        }
-      }
-      return { id: item.id, score: { synthesisScore: 3, relevanceScore: 3, uniquenessScore: 3, reasoning: 'Parse-Fehler' } }
-    })
+    }
+    return results
   } catch (error) {
     console.error(`[ContentScoring] Batch failed:`, error)
     return fallback('Batch-Scoring fehlgeschlagen')
