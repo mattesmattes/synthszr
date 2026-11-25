@@ -452,7 +452,7 @@ const container = {
 const coverSection = {
   padding: '0',
   textAlign: 'center' as const,
-  backgroundColor: '#CCFF00',
+  backgroundColor: '#00FFFF',
 }
 
 const coverImage = {

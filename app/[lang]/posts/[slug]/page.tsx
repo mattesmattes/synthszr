@@ -256,7 +256,9 @@ export default async function PostPage({ params }: PageProps) {
           .eq('post_id', aiPost.id)
           .eq('image_type', 'cover_desktop')
           .eq('generation_status', 'completed')
-          .single()
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
         desktopCoverUrl = desktopCover?.image_url || null
       }
 

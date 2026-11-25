@@ -248,6 +248,7 @@ export async function PUT(request: NextRequest) {
       ]
 
       try {
+        await supabase.from('post_images').delete().eq('post_id', postId).eq('image_type', 'cover_email')
         const emailCover = await generateEmailCover(rawResult.imageBase64!)
 
         // Create email cover record
@@ -293,6 +294,7 @@ export async function PUT(request: NextRequest) {
 
       // Step 4: Generate desktop cover version (non-fatal)
       try {
+        await supabase.from('post_images').delete().eq('post_id', postId).eq('image_type', 'cover_desktop')
         const desktopCover = await generateDesktopCover(rawResult.imageBase64!)
         const { data: desktopRecord } = await supabase
           .from('post_images')
@@ -436,6 +438,7 @@ export async function PUT(request: NextRequest) {
 
             // Generate email cover version (non-fatal)
             try {
+              await supabase.from('post_images').delete().eq('post_id', postId).eq('image_type', 'cover_email')
               const emailCover = await generateEmailCover(rawResult.imageBase64)
               const { data: emailRecord } = await supabase
                 .from('post_images')
@@ -468,6 +471,7 @@ export async function PUT(request: NextRequest) {
 
             // Generate desktop cover version (non-fatal)
             try {
+              await supabase.from('post_images').delete().eq('post_id', postId).eq('image_type', 'cover_desktop')
               const desktopCover = await generateDesktopCover(rawResult.imageBase64)
               const { data: desktopRecord } = await supabase
                 .from('post_images')

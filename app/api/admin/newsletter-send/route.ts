@@ -88,14 +88,16 @@ export async function POST(request: NextRequest) {
     // Extract cover image URL
     const coverImageUrl = (post.post_images as { image_url?: string } | null)?.image_url || null
 
-    // Look up pre-generated email cover (natively dithered at 604px)
+    // Look up latest pre-generated email cover (natively dithered at 900px)
     const { data: emailCoverData } = await supabase
       .from('post_images')
       .select('image_url')
       .eq('post_id', postId)
       .eq('image_type', 'cover_email')
       .eq('generation_status', 'completed')
-      .single()
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
     const emailCoverImageUrl = emailCoverData?.image_url || null
 

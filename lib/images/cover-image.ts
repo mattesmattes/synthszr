@@ -93,6 +93,7 @@ export async function generateCoverImagesForPost(input: CoverImageInput): Promis
   await supabase.from('generated_posts').update({ cover_image_id: imageRecord.id }).eq('id', postId)
 
   try {
+    await supabase.from('post_images').delete().eq('post_id', postId).eq('image_type', 'cover_email')
     const emailCover = await generateEmailCover(rawResult.imageBase64)
     const { data: emailRecord, error: emailInsertError } = await supabase
       .from('post_images')
@@ -109,6 +110,7 @@ export async function generateCoverImagesForPost(input: CoverImageInput): Promis
   }
 
   try {
+    await supabase.from('post_images').delete().eq('post_id', postId).eq('image_type', 'cover_desktop')
     const desktopCover = await generateDesktopCover(rawResult.imageBase64)
     const { data: desktopRecord } = await supabase
       .from('post_images')

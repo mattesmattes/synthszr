@@ -6,8 +6,8 @@ import { join } from 'path'
 import { fetchNewsletterImage, ImageFetchError } from '@/lib/security/safe-image-fetch'
 import { checkRateLimit, getClientIP, rateLimitResponse, rateLimiters } from '@/lib/rate-limit'
 
-// Neon yellow RGB values
-const NEON_YELLOW = { r: 204, g: 255, b: 0 }
+// Neon cyan RGB values (matches generateEmailCover and web cover bg-neon-cyan)
+const NEON_CYAN = { r: 0, g: 255, b: 255 }
 
 // SEC-007: input decode limit for sharp — matches the 16 MP cap enforced on
 // every sharp() instantiation that decodes the untrusted fetched bytes.
@@ -89,6 +89,9 @@ export async function GET(request: NextRequest) {
     const cropSize = Math.min(width, height)
     const left = Math.floor((width - cropSize) / 2)
     const top = Math.floor((height - cropSize) / 2)
+    // Never nearest-neighbor upscale an already-dithered 1-bit PNG (non-integer
+    // scaling like 792→900 duplicates rows/cols unevenly and creates plaid moiré).
+    const outputSize = skipTransform ? size : Math.min(cropSize, size)
 
     let finalImage: Buffer
 
@@ -101,27 +104,32 @@ export async function GET(request: NextRequest) {
           sequentialRead: true,
         })
           .extract({ left, top, width: cropSize, height: cropSize })
-          .resize(size, size, { fit: 'fill', kernel: sharp.kernel.nearest })
+          .resize(outputSize, outputSize, { fit: 'fill', kernel: sharp.kernel.nearest })
           .png()
           .toBuffer()
       } else {
         // Full processing with color transformation
-        // Use nearest-neighbor to preserve dithered B&W dots (lanczos3 creates gray values)
-        const croppedBuffer = await sharp(imageBuffer, {
+        // Keep native cropSize unless downscaling (never upscale dithered dots)
+        let basePipeline = sharp(imageBuffer, {
           failOn: 'warning',
           limitInputPixels: MAX_INPUT_PIXELS,
           sequentialRead: true,
         })
           .extract({ left, top, width: cropSize, height: cropSize })
-          .resize(size, size, { fit: 'fill', kernel: sharp.kernel.nearest })
+
+        if (outputSize !== cropSize) {
+          basePipeline = basePipeline.resize(outputSize, outputSize, { fit: 'fill', kernel: sharp.kernel.nearest })
+        }
+
+        const croppedBuffer = await basePipeline
           .ensureAlpha()
           .raw()
           .toBuffer({ resolveWithObject: true })
 
         const { data, info } = croppedBuffer
 
-        // Process pixels: white/transparent → neon yellow, dark → black
-        // This recreates the frontend effect (yellow BG + transparent PNG overlay)
+        // Process pixels: white/transparent → neon cyan, dark → black
+        // This recreates the frontend effect (cyan BG + transparent PNG overlay)
         const pixels = new Uint8Array(data)
         for (let i = 0; i < pixels.length; i += 4) {
           const r = pixels[i]
@@ -132,14 +140,14 @@ export async function GET(request: NextRequest) {
           // Calculate luminance
           const luminance = (r + g + b) / 3
 
-          // If pixel is transparent OR bright (white in dithered image) → neon yellow
+          // If pixel is transparent OR bright (white in dithered image) → neon cyan
           // If pixel is dark (black in dithered image) → pure black
           const threshold = 128
           if (a < 128 || luminance >= threshold) {
-            // White/transparent → neon yellow
-            pixels[i] = NEON_YELLOW.r
-            pixels[i + 1] = NEON_YELLOW.g
-            pixels[i + 2] = NEON_YELLOW.b
+            // White/transparent → neon cyan
+            pixels[i] = NEON_CYAN.r
+            pixels[i + 1] = NEON_CYAN.g
+            pixels[i + 2] = NEON_CYAN.b
             pixels[i + 3] = 255
           } else {
             // Dark → pure black
@@ -169,7 +177,7 @@ export async function GET(request: NextRequest) {
     if (addLogo) {
       const logoSvgRaw = readFileSync(join(process.cwd(), 'public', 'synthszr-logo.svg'), 'utf-8')
       // Original viewBox: 0 0 464.93 103.82 → aspect ratio ~4.475
-      const logoWidth = Math.round(size * 0.80)
+      const logoWidth = Math.round(outputSize * 0.65)
       const logoHeight = Math.round(logoWidth / 4.475)
       // Replace viewBox-only SVG with explicit width/height for sharp
       const logoSvg = logoSvgRaw
@@ -179,8 +187,8 @@ export async function GET(request: NextRequest) {
         .composite([
           {
             input: Buffer.from(logoSvg),
-            top: Math.round((size - logoHeight) / 2),
-            left: Math.round((size - logoWidth) / 2),
+            top: Math.round((outputSize - logoHeight) / 2),
+            left: Math.round((outputSize - logoWidth) / 2),
           },
         ])
         .png()
@@ -190,7 +198,7 @@ export async function GET(request: NextRequest) {
     // Add play button overlay if requested (legacy)
     if (addPlayButton) {
       // Scale play button to image size (80px at 302px = ~26% of image)
-      const buttonSize = Math.round(size * 0.26)
+      const buttonSize = Math.round(outputSize * 0.26)
       const circleRadius = Math.round(buttonSize * 0.45)
 
       const playButtonSvg = `
@@ -214,8 +222,8 @@ export async function GET(request: NextRequest) {
         .composite([
           {
             input: Buffer.from(playButtonSvg),
-            top: Math.round((size - buttonSize) / 2),
-            left: Math.round((size - buttonSize) / 2),
+            top: Math.round((outputSize - buttonSize) / 2),
+            left: Math.round((outputSize - buttonSize) / 2),
           },
         ])
         .png()
