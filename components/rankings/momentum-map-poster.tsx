@@ -68,37 +68,60 @@ function trendGlyph(trend: 'up' | 'down' | 'flat'): { ch: string; fill: string }
   return { ch: '—', fill: LIGHT_MUTED }
 }
 
-/** Deterministic, crisp minimalist 13×13 QR-style matrix + finder squares linking to synthszr.com/en/rankings */
+/**
+ * Exact ISO-18004 Version 3-M (29×29) QR code matrix for
+ * https://www.synthszr.com/en/rankings (with 2-module quiet zone).
+ */
+const QR_RANKINGS_MATRIX = [
+  '11111110100100100110001111111',
+  '10000010011100001101001000001',
+  '10111010001011001111001011101',
+  '10111010111010110010001011101',
+  '10111010110001111110001011101',
+  '10000010100001101001101000001',
+  '11111110101010101010101111111',
+  '00000000110000100111100000000',
+  '10001011110001100110111111001',
+  '10101001000010011110111111111',
+  '10110011101011111010011110001',
+  '01100001011011000111000011011',
+  '00001011010101010101010000010',
+  '00001101001101111010011011111',
+  '01100110101110010110010011101',
+  '11111101010110111111001000011',
+  '01100010110001110100010100010',
+  '11110100000000011110001111011',
+  '00110010101011110010100010101',
+  '00011101010001001101010000011',
+  '11110110011011010111111111001',
+  '00000000101101111110100010001',
+  '11111110100010011011101011101',
+  '10000010010100100111100010011',
+  '10111010101001110101111111010',
+  '10111010011100011001110100001',
+  '10111010001110010000100001111',
+  '10000010010000011100101011011',
+  '11111110101111000100100110010',
+]
+
 function renderQrGraphic(x: number, y: number, size: number) {
-  // Real 21×21 QR Version 1 visual finder + deterministic data pattern for compact print emblem
-  const cells = 21
-  const cell = size / cells
+  const cells = QR_RANKINGS_MATRIX.length
+  const quiet = 2
+  const cell = size / (cells + quiet * 2)
+  const ox = x + quiet * cell
+  const oy = y + quiet * cell
   const rects: Array<{ cx: number; cy: number }> = []
-  const isFinder = (r: number, c: number) =>
-    (r < 7 && c < 7) || (r < 7 && c >= cells - 7) || (r >= cells - 7 && c < 7)
-  const finderOn = (r: number, c: number) => {
-    const lr = r < 7 ? r : r - (cells - 7)
-    const lc = c < 7 ? c : c - (cells - 7)
-    return lr === 0 || lr === 6 || lc === 0 || lc === 6 || (lr >= 2 && lr <= 4 && lc >= 2 && lc <= 4)
-  }
-  const seed = 'https://www.synthszr.com/en/rankings'
   for (let r = 0; r < cells; r++) {
+    const row = QR_RANKINGS_MATRIX[r]
     for (let c = 0; c < cells; c++) {
-      if (isFinder(r, c)) {
-        if (finderOn(r, c)) rects.push({ cx: c, cy: r })
-      } else if (r === 6 || c === 6) {
-        if ((r + c) % 2 === 0) rects.push({ cx: c, cy: r })
-      } else {
-        const h = (seed.charCodeAt((r * 7 + c * 13) % seed.length) + r * 31 + c * 17) % 5
-        if (h === 0 || h === 2) rects.push({ cx: c, cy: r })
-      }
+      if (row[c] === '1') rects.push({ cx: c, cy: r })
     }
   }
   return (
     <g>
-      <rect x={x - 3} y={y - 3} width={size + 6} height={size + 6} fill="#FFFFFF" stroke={RULE} strokeWidth={0.8} />
+      <rect x={x} y={y} width={size} height={size} fill="#FFFFFF" stroke={RULE} strokeWidth={0.8} />
       {rects.map(({ cx, cy }, i) => (
-        <rect key={i} x={x + cx * cell} y={y + cy * cell} width={cell + 0.15} height={cell + 0.15} fill={INK} />
+        <rect key={i} x={ox + cx * cell} y={oy + cy * cell} width={cell + 0.12} height={cell + 0.12} fill={INK} />
       ))}
     </g>
   )
