@@ -78,6 +78,8 @@ export interface MomentumMapData {
   windowLabel: string
   generatedAt: string
   totalMentions90d: number
+  totalArticles90d: number
+  totalNewsSources: number
   totalTrackedProducts: number
   thematicDeck: string
   heroTop12: PosterHeroProduct[]
@@ -232,15 +234,25 @@ export async function buildMomentumMapData(now: Date = new Date()): Promise<Mome
   }
 
   const sinceIso = start90.toISOString().slice(0, 10)
-  const [mentionsRes, catsRes] = await Promise.all([
+  const [mentionsRes, articlesRes, sourcesRes, catsRes] = await Promise.all([
     supabase
       .from('product_mentions')
       .select('id', { count: 'exact', head: true })
       .gte('mention_date', sinceIso),
+    supabase
+      .from('daily_repo')
+      .select('id', { count: 'exact', head: true })
+      .gte('newsletter_date', sinceIso),
+    supabase
+      .from('newsletter_sources')
+      .select('id', { count: 'exact', head: true })
+      .eq('enabled', true),
     supabase.from('product_categories').select('slug, name'),
   ])
 
   const totalMentions90d = mentionsRes.count ?? 0
+  const totalArticles90d = articlesRes.count ?? 0
+  const totalNewsSources = sourcesRes.count ?? 0
   const catFallback = new Map<string, string>(
     ((catsRes.data ?? []) as Array<{ slug: string; name: string }>).map((c) => [c.slug, c.name])
   )
@@ -456,6 +468,8 @@ export async function buildMomentumMapData(now: Date = new Date()): Promise<Mome
     windowLabel,
     generatedAt: now.toISOString(),
     totalMentions90d,
+    totalArticles90d,
+    totalNewsSources,
     totalTrackedProducts: normalized.length,
     thematicDeck,
     heroTop12,

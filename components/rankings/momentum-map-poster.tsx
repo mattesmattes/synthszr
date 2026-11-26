@@ -589,7 +589,7 @@ export function MomentumMapPoster({ data }: { data: MomentumMapData }) {
           METHODOLOGY: Exponential time-decay mention momentum across curated daily AI newsletters &amp; tech feeds.
         </text>
         <text x={PAD} y={footerTop + 104} fontFamily={MONO} fontSize={8} fill={MUTED}>
-          PRINT SPEC: DIN A2 (420 × 594 mm) · 300 DPI Vector · Live charts &amp; full archive at https://www.synthszr.com/en/rankings
+          DATA BASIS (90D): {data.totalArticles90d.toLocaleString('en-US')} articles analyzed across {data.totalNewsSources.toLocaleString('en-US')} curated news sources · {data.totalMentions90d.toLocaleString('en-US')} product mentions · synthszr.com/en/rankings
         </text>
 
         {/* Vector QR Emblem bottom right */}
