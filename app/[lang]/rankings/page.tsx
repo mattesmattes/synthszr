@@ -194,6 +194,14 @@ export default async function RankingsPage({ params, searchParams }: PageProps) 
         ) : (
           <p className="mt-1 text-sm text-foreground/80 leading-relaxed">{t('rankings.intro')}</p>
         )}
+        <div className="mt-3">
+          <Link
+            href={`/${lang}/rankings/poster`}
+            className="inline-flex items-center gap-2 rounded-md border border-foreground/20 bg-[#CCFF00] px-3 py-1 font-mono text-xs font-semibold text-black transition-all hover:brightness-95"
+          >
+            <span>SYNTHSZR MOMENTUM MAP · A2 POSTER →</span>
+          </Link>
+        </div>
       </header>
       {/* Nav Ebene 1+2 in abgesetztem Panel. Ist eine Gruppe aktiv, werden die übrigen
           Ebene-1-Punkte ausgeblendet (nur „Alle" + aktive Gruppe bleiben); „Alle" zeigt
