@@ -5,6 +5,7 @@
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { toDisplayScore } from '@/lib/rankings/score'
+import { loadCachedMomentumAnalysis, type BilingualProse } from '@/lib/rankings/momentum-map-analysis'
 
 export interface HistoryPoint {
   t: number
@@ -92,11 +93,13 @@ export interface MomentumMover {
   deltaPct: number | null // null for pure new entrants (prev30Avg ~ 0)
   mentionCount: number
   evidence: NewsEvidence[]
+  analysis?: BilingualProse
 }
 
 export interface MonthlyMomentumReport {
   currentPeriodLabel: string
   previousPeriodLabel: string
+  editorialSummary?: BilingualProse
   risers: MomentumMover[]
   newEntrants: MomentumMover[]
   fallers: MomentumMover[]
@@ -574,13 +577,16 @@ export async function buildMomentumMapData(now: Date = new Date()): Promise<Mome
 
     for (const row of (mentionRows ?? []) as unknown as RawMention[]) {
       const list = evidenceByProduct.get(row.product_id) ?? []
-      if (list.length >= 3) continue
+      if (list.length >= 6) continue
       const dr = Array.isArray(row.daily_repo) ? row.daily_repo[0] : row.daily_repo
-      const title = (dr?.title ?? '').trim()
-      const excerpt = (row.excerpt ?? '').trim()
+      const clean = (s: string | null | undefined) =>
+        (s ?? '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim()
+      const title = clean(dr?.title)
+      const excerpt = clean(row.excerpt)
       if (!title && !excerpt) continue
+      // Skip pure markup/gibberish or ultra-short fragments
+      if (excerpt.length < 20 && title.length < 10) continue
       const url = dr?.source_url && /^https?:\/\//i.test(dr.source_url) ? dr.source_url : null
-      // Deduplicate by normalized title or excerpt prefix
       const dedupeKey = (title || excerpt).toLowerCase().slice(0, 55)
       if (list.some((e) => (e.title || e.excerpt).toLowerCase().slice(0, 55) === dedupeKey)) continue
       list.push({
@@ -594,14 +600,18 @@ export async function buildMomentumMapData(now: Date = new Date()): Promise<Mome
     }
   }
 
+  const cachedAnalysis = await loadCachedMomentumAnalysis(monthLabel)
+
   const attachEvidence = (m: (typeof momCandidates)[number]): MomentumMover => ({
     ...m,
     evidence: evidenceByProduct.get(m.id) ?? [],
+    analysis: cachedAnalysis?.movers?.[m.slug],
   })
 
   const monthlyReport: MonthlyMomentumReport = {
     currentPeriodLabel,
     previousPeriodLabel,
+    editorialSummary: cachedAnalysis?.summary,
     risers: risersBase.map(attachEvidence),
     newEntrants: newEntrantsBase.map(attachEvidence),
     fallers: fallersBase.map(attachEvidence),

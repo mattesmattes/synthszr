@@ -25,6 +25,9 @@ function MoverCard({
         ? 'bg-foreground text-background border-foreground'
         : 'bg-secondary text-foreground border-border'
 
+  const prose = de ? mover.analysis?.de : mover.analysis?.en
+  const cleanSources = mover.evidence.filter((e) => e.url && e.title).slice(0, 2)
+
   return (
     <article className="rounded-lg border border-border bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -55,36 +58,31 @@ function MoverCard({
         </span>
       </div>
 
-      {mover.evidence.length > 0 && (
-        <div className="mt-4 border-t border-border pt-3">
-          <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            {de ? 'Belege aus den News (letzte 30 Tage)' : 'News evidence (last 30 days)'}
-          </p>
-          <ul className="space-y-2.5">
-            {mover.evidence.map((ev, idx) => (
-              <li key={idx} className="text-sm leading-relaxed">
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  {ev.date && <span className="font-mono text-[11px] text-muted-foreground">{ev.date}</span>}
-                  {ev.url ? (
-                    <a
-                      href={ev.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 font-medium text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground"
-                    >
-                      <span>{ev.title}</span>
-                      <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
-                    </a>
-                  ) : (
-                    <span className="font-medium text-foreground">{ev.title}</span>
-                  )}
-                </div>
-                {ev.excerpt && ev.excerpt !== ev.title && (
-                  <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">“{ev.excerpt}”</p>
-                )}
-              </li>
-            ))}
-          </ul>
+      {/* Editorial Prose Analysis */}
+      {prose && (
+        <p className="mt-3.5 text-sm leading-relaxed text-foreground/90">
+          {prose}
+        </p>
+      )}
+
+      {/* Compact source citations */}
+      {cleanSources.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-border/70 pt-2.5 text-xs text-muted-foreground">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-wider">
+            {de ? 'Quellen:' : 'Sources:'}
+          </span>
+          {cleanSources.map((ev, idx) => (
+            <a
+              key={idx}
+              href={ev.url!}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 underline decoration-border underline-offset-2 hover:text-foreground hover:decoration-foreground"
+            >
+              <span>{ev.title.length > 68 ? `${ev.title.slice(0, 67)}…` : ev.title}</span>
+              <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+            </a>
+          ))}
         </div>
       )}
     </article>
@@ -140,7 +138,9 @@ export function MomentumMapArticle({ data, locale }: { data: MomentumMapData; lo
           <span className="mr-2 inline-block bg-[#CCFF00] px-1.5 py-0.5 font-mono text-xs font-bold uppercase tracking-wide text-black">
             SYNTHSZR TAKE:
           </span>
-          {de ? (
+          {monthlyReport.editorialSummary ? (
+            <span>{de ? monthlyReport.editorialSummary.de : monthlyReport.editorialSummary.en}</span>
+          ) : de ? (
             <>
               <strong>{data.heroTop12[0]?.name}</strong> und <strong>{data.heroTop12[1]?.name}</strong> zementieren die Dominanz der
               Coding-Agenten an der Weltspitze. Die stärkste Aufwärtsdynamik im Monatsvergleich liefert{' '}

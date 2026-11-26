@@ -14,9 +14,14 @@ import { join } from 'node:path'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { buildMomentumMapData } from '@/lib/rankings/momentum-map'
+import { generateAndCacheMomentumAnalysis } from '@/lib/rankings/momentum-map-analysis'
 import { MomentumMapPoster } from '@/components/rankings/momentum-map-poster'
 
 async function main() {
+  const initialData = await buildMomentumMapData()
+  await generateAndCacheMomentumAnalysis(initialData.monthLabel, initialData.monthlyReport, {
+    force: process.argv.includes('--force-analysis'),
+  })
   const data = await buildMomentumMapData()
   const outDir = join(process.cwd(), 'data', 'posters')
   mkdirSync(outDir, { recursive: true })
