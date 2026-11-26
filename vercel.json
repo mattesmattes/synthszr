@@ -58,6 +58,10 @@
     {
       "path": "/api/cron/health-check",
       "schedule": "0 */4 * * *"
+    },
+    {
+      "path": "/api/cron/momentum-map",
+      "schedule": "0 6 28 * *"
     }
   ],
   "headers": [

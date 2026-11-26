@@ -13,16 +13,20 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { buildMomentumMapData } from '@/lib/rankings/momentum-map'
+import { buildMomentumMapData, saveMomentumMapSnapshot } from '@/lib/rankings/momentum-map'
 import { generateAndCacheMomentumAnalysis } from '@/lib/rankings/momentum-map-analysis'
 import { MomentumMapPoster } from '@/components/rankings/momentum-map-poster'
 
 async function main() {
-  const initialData = await buildMomentumMapData()
+  const initialData = await buildMomentumMapData(new Date(), { forceUpcomingMonth: true })
   await generateAndCacheMomentumAnalysis(initialData.monthLabel, initialData.monthlyReport, {
     force: process.argv.includes('--force-analysis'),
   })
-  const data = await buildMomentumMapData()
+  const data = await buildMomentumMapData(new Date(), { forceUpcomingMonth: true })
+  if (process.argv.includes('--save-snapshot')) {
+    const { archiveKey } = await saveMomentumMapSnapshot(data)
+    console.log('Saved snapshot to Supabase:', archiveKey)
+  }
   const outDir = join(process.cwd(), 'data', 'posters')
   mkdirSync(outDir, { recursive: true })
 

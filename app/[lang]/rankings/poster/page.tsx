@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { Suspense } from 'react'
 import type { Metadata } from 'next'
 import { ArrowLeft } from 'lucide-react'
-import { buildMomentumMapData } from '@/lib/rankings/momentum-map'
+import { buildMomentumMapData, loadLatestMomentumMapSnapshot } from '@/lib/rankings/momentum-map'
 import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import { BloomLanguageSwitcher } from '@/components/bloom-language-switcher'
 import { SiteFooter } from '@/components/site-footer'
@@ -30,7 +30,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function MomentumMapPosterPage({ params }: PageProps) {
   const { lang } = await params
-  const data = await buildMomentumMapData()
+  // Serve the frozen monthly snapshot published by the 28th cron; fall back to live build if none archived yet.
+  const data = (await loadLatestMomentumMapSnapshot()) ?? (await buildMomentumMapData())
   const de = lang === 'de'
 
   return (

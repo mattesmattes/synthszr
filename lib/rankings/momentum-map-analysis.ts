@@ -8,6 +8,7 @@
  */
 import { generateText } from 'ai'
 import { google } from '@ai-sdk/google'
+import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { escapeQuellmaterialTag, stripLoneSurrogates } from '@/lib/claude/sanitize'
 import type { MonthlyMomentumReport, MomentumMover } from '@/lib/rankings/momentum-map'
@@ -77,7 +78,9 @@ export async function generateAndCacheMomentumAnalysis(
     if (existing) return existing
   }
 
-  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) return null
+  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY && !process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
+    return null
+  }
 
   const allMovers: Array<{ mover: MomentumMover; group: 'RISER' | 'NEW_ENTRANT' | 'COOLDOWN' }> = [
     ...report.risers.map((mover) => ({ mover, group: 'RISER' as const })),
@@ -120,12 +123,71 @@ Return JSON with this exact shape:
   }
 }`
 
-  const { text } = await generateText({
-    model: google('gemini-3.8-flash'),
-    system: systemPrompt,
-    prompt: userPrompt,
-    maxOutputTokens: 8192,
-  })
+  let text = ''
+  const errors: string[] = []
+
+  // Provider fallback chain: Gemini -> Anthropic -> OpenAI
+  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY && !text) {
+    try {
+      const res = await generateText({
+        model: google('gemini-3.8-flash'),
+        system: systemPrompt,
+        prompt: userPrompt,
+        maxOutputTokens: 8192,
+      })
+      text = res.text
+    } catch (err) {
+      errors.push(`gemini: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  if (process.env.ANTHROPIC_API_KEY && !text) {
+    try {
+      const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+      const msg = await client.messages.create({
+        model: 'claude-sonnet-4-5-20250929',
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+      })
+      text = msg.content
+        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+        .map((b) => b.text)
+        .join('\n')
+    } catch (err) {
+      errors.push(`anthropic: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  if (process.env.OPENAI_API_KEY && !text) {
+    try {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+        }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> }
+      text = json.choices?.[0]?.message?.content ?? ''
+    } catch (err) {
+      errors.push(`openai: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  if (!text) {
+    console.error('[MomentumMap] All LLM providers failed:', errors.join(' | '))
+    return null
+  }
 
   const rawText = text
     .trim()

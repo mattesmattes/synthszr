@@ -250,13 +250,53 @@ function fmtShortDate(d: Date): string {
   return `${MONTHS_SHORT[d.getUTCMonth()]} ${String(d.getUTCDate()).padStart(2, '0')}`
 }
 
-export async function buildMomentumMapData(now: Date = new Date()): Promise<MomentumMapData> {
+export function issueYearMonth(monthLabel: string): string {
+  const [mon, yr] = monthLabel.trim().toUpperCase().split(/\s+/)
+  const idx = MONTHS_SHORT.indexOf(mon)
+  const mm = idx >= 0 ? String(idx + 1).padStart(2, '0') : '01'
+  return `${yr || '2026'}-${mm}`
+}
+
+export async function loadLatestMomentumMapSnapshot(): Promise<MomentumMapData | null> {
+  try {
+    const supabase = createAdminClient()
+    const { data } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'momentum_map_snapshot:latest')
+      .maybeSingle()
+    const val = (data as { value?: MomentumMapData } | null)?.value
+    if (val && typeof val === 'object' && Array.isArray(val.categories) && val.categories.length > 0) {
+      return val
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+export async function saveMomentumMapSnapshot(data: MomentumMapData): Promise<{ archiveKey: string }> {
+  const supabase = createAdminClient()
+  const ym = issueYearMonth(data.monthLabel)
+  const archiveKey = `momentum_map_snapshot:${ym}`
+  await Promise.all([
+    supabase.from('settings').upsert({ key: archiveKey, value: data }, { onConflict: 'key' }),
+    supabase.from('settings').upsert({ key: 'momentum_map_snapshot:latest', value: data }, { onConflict: 'key' }),
+  ])
+  return { archiveKey }
+}
+
+export async function buildMomentumMapData(
+  now: Date = new Date(),
+  opts: { forceUpcomingMonth?: boolean } = {}
+): Promise<MomentumMapData> {
   const supabase = createAdminClient()
 
-  // Magazine cover-date convention: issues generated from the 20th onward carry the upcoming month
-  // (e.g. late Nov 2026 -> ISSUE 01 · DEC 2026).
+  // Magazine cover-date convention: issues generated on/after the 20th (incl. the 28th cron)
+  // carry the upcoming month (e.g. Nov 28 -> ISSUE 01 · DEC 2026, Dec 28 -> ISSUE 02 · JAN 2027).
+  const advanceMonth = opts.forceUpcomingMonth || now.getUTCDate() >= 20
   const issueDate = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + (now.getUTCDate() >= 20 ? 1 : 0), 1)
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + (advanceMonth ? 1 : 0), 1)
   )
   const issueNumber = Math.max(1, (issueDate.getUTCFullYear() - 2026) * 12 + (issueDate.getUTCMonth() - 11) + 1)
   const monthLabel = `${MONTHS_SHORT[issueDate.getUTCMonth()]} ${issueDate.getUTCFullYear()}`
