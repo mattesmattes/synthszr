@@ -218,9 +218,13 @@ function fmtShortDate(d: Date): string {
 export async function buildMomentumMapData(now: Date = new Date()): Promise<MomentumMapData> {
   const supabase = createAdminClient()
 
-  // Issue #1 = Nov 2026
-  const issueNumber = Math.max(1, (now.getUTCFullYear() - 2026) * 12 + (now.getUTCMonth() - 10) + 1)
-  const monthLabel = `${MONTHS_SHORT[now.getUTCMonth()]} ${now.getUTCFullYear()}`
+  // Magazine cover-date convention: issues generated from the 20th onward carry the upcoming month
+  // (e.g. late Nov 2026 -> ISSUE 01 · DEC 2026).
+  const issueDate = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + (now.getUTCDate() >= 20 ? 1 : 0), 1)
+  )
+  const issueNumber = Math.max(1, (issueDate.getUTCFullYear() - 2026) * 12 + (issueDate.getUTCMonth() - 11) + 1)
+  const monthLabel = `${MONTHS_SHORT[issueDate.getUTCMonth()]} ${issueDate.getUTCFullYear()}`
   const issueCode = `ISSUE ${String(issueNumber).padStart(2, '0')}`
 
   const start90 = new Date(now.getTime() - 89 * 86_400_000)
