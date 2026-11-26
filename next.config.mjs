@@ -33,10 +33,12 @@ const nextConfig = {
     ]
   },
 
-  // Agent-Card unter der A2A-Konvention; ein Ordner „.well-known" im App-Router
-  // wäre fragil, deshalb Rewrite auf die API-Route.
+  // Agent-Card unter beiden A2A-Konventionen (v0.2 agent.json + v0.3 agent-card.json)
   async rewrites() {
-    return [{ source: '/.well-known/agent-card.json', destination: '/api/agents/card' }]
+    return [
+      { source: '/.well-known/agent-card.json', destination: '/api/agents/card' },
+      { source: '/.well-known/agent.json', destination: '/api/agents/card' },
+    ]
   },
 
   // Security headers
@@ -92,6 +94,16 @@ const nextConfig = {
           {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=()',
+          },
+        ],
+      },
+      {
+        // RFC 8288 Link-Header für maschinelle Agent-Discovery auf Start- & Artikelseiten
+        source: '/:locale(de|en|fr|cs|nds)/:path*',
+        headers: [
+          {
+            key: 'Link',
+            value: '<https://www.synthszr.com/agents/skill.md?src=head>; rel="agent-skill"; type="text/markdown", <https://www.synthszr.com/.well-known/agent-card.json>; rel="describedby"; type="application/json", <https://www.synthszr.com/api/mcp>; rel="service"; type="application/json"',
           },
         ],
       },

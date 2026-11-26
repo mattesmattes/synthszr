@@ -38,10 +38,21 @@ beforeEach(() => {
 })
 
 describe('GET /api/agents/feed', () => {
-  it('verlangt einen gueltigen Bearer-Schluessel', async () => {
+  it('ist oeffentlich ohne Bearer-Schluessel lesbar (IP-gedrosselt)', async () => {
     mocks.authenticateAgent.mockResolvedValue(null)
     const { GET } = await import('@/app/api/agents/feed/route')
-    expect((await GET(get('https://x/api/agents/feed'))).status).toBe(401)
+    const res = await GET(get('https://x/api/agents/feed'))
+    const body = await res.json()
+    expect(res.status).toBe(200)
+    expect(body.authenticated).toBe(false)
+    expect(body.articles).toHaveLength(1)
+    expect(mocks.checkRateLimit).toHaveBeenCalledWith('agents-feed-ip:1.2.3.4', undefined)
+  })
+
+  it('lehnt einen ungueltigen Bearer-Schluessel weiter mit 401 ab', async () => {
+    mocks.authenticateAgent.mockResolvedValue(null)
+    const { GET } = await import('@/app/api/agents/feed/route')
+    expect((await GET(get('https://x/api/agents/feed', 'bad_key'))).status).toBe(401)
   })
 
   it('lehnt eine unbekannte Sprache ab', async () => {

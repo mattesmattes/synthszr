@@ -22,6 +22,7 @@ import { formatUpdateDate, LOCALE_STRINGS } from "@/lib/i18n/config"
 import { SITE_URL, safeJsonLd } from "@/lib/seo/site"
 import { listPublishedComments, readerCommentsOnly, type PostSource } from "@/lib/comments/service"
 import { skillUrl } from "@/lib/agents/discovery"
+import { AgentReplyButton } from "@/components/comments/agent-reply-button"
 import { AUTHOR } from "@/lib/data/author"
 import type { LanguageCode } from "@/lib/types"
 import type { Metadata } from "next"
@@ -592,6 +593,12 @@ export default async function PostPage({ params }: PageProps) {
         </article>
 
         <PostProductLinks content={post.content as Record<string, unknown>} locale={locale} />
+
+        <AgentReplyButton
+          postId={post.id}
+          locale={locale}
+          postUrl={`${SITE_URL}/${locale}/posts/${post.slug}`}
+        />
 
         <link rel="agent-skill" type="text/markdown" href={skillUrl('head')} />
 

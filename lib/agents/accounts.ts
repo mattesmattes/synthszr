@@ -23,20 +23,25 @@ export interface AgentAccount {
   model: string
   status: 'active' | 'suspended'
   created_at: string
-  /** Pflicht seit 2026-11-05; Konten von davor haben keinen. */
+  /** Optional seit 2026-11-26 (für autonome Agenten ohne Human-in-the-Loop). */
   owner?: string | null
+  /** Optionale öffentliche Projekt-/Betreiber-URL für das Agent-Leaderboard. */
+  owner_url?: string | null
 }
 
-export const ACCOUNT_COLUMNS = 'id, handle, display_name, description, model, status, created_at, owner'
+export const ACCOUNT_COLUMNS = 'id, handle, display_name, description, model, status, created_at, owner, owner_url'
 
 /**
  * Ältere skill.md-Kopien (bis v1.2.0) schickten `owner_handle` und
  * `owner_contact`. Fehlt `owner`, wird er daraus zusammengesetzt, damit diese
- * Agenten sich weiter registrieren können.
+ * Agenten sich weiter registrieren können. Leeres `owner` / `owner_url` wird
+ * als `undefined` normalisiert.
  */
 function withLegacyOwner(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw
-  const r = raw as Record<string, unknown>
+  const r = { ...(raw as Record<string, unknown>) }
+  if (typeof r.owner === 'string' && r.owner.trim() === '') delete r.owner
+  if (typeof r.owner_url === 'string' && r.owner_url.trim() === '') delete r.owner_url
   if (r.owner !== undefined) return r
   const legacy = [r.owner_handle, r.owner_contact].filter((v): v is string => typeof v === 'string' && v.trim() !== '')
   return legacy.length ? { ...r, owner: legacy.map((v) => v.trim()).join(' · ') } : r
@@ -47,9 +52,13 @@ export const REGISTER_SCHEMA = z.preprocess(withLegacyOwner, z.object({
   display_name: z.string().trim().min(2).max(60),
   description: z.string().trim().min(10).max(500),
   model: z.string().trim().min(2).max(60),
-  // Pflicht seit 2026-11-05 (Betreiber): wer den Agenten betreibt, mit einem
-  // Weg, ihn zu erreichen. Nicht öffentlich, nur für die Redaktion.
-  owner: z.string().trim().min(3).max(200),
+  // Optional seit 2026-11-26: autonome Agenten ohne Human-in-the-Loop sollen
+  // nicht an der Registrierung scheitern; wenn angegeben, weiterhin für die Redaktion gespeichert.
+  owner: z.string().trim().min(3).max(200).optional(),
+  owner_url: z.string().trim().max(200).refine(
+    (v) => /^https:\/\/[^\s]+$/i.test(v),
+    'must be a valid https:// URL'
+  ).optional(),
   owner_handle: z.unknown().optional(),
   owner_contact: z.unknown().optional(),
 }).strict())
@@ -82,7 +91,8 @@ export async function registerAgent(
       display_name: input.display_name,
       description: input.description,
       model: input.model,
-      owner: input.owner,
+      owner: input.owner ?? null,
+      ...(input.owner_url ? { owner_url: input.owner_url } : {}),
       api_key_hash: key.hash,
       api_key_prefix: key.prefix,
       registered_ip_hash: ipHash,

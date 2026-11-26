@@ -13,7 +13,7 @@ import { Bot, Loader2, AlertCircle, Check, Trash2, ShieldBan, ShieldCheck, KeyRo
  */
 interface Settings { enabled: boolean; daily_cap: number; relevance_min: number; paraphrase_max: number; per_section_max: number; feed_since: string }
 interface Agent { id: string; handle: string; display_name: string; model: string; status: 'active' | 'suspended'; api_key_prefix: string; created_at: string; last_seen_at: string | null; comments_published: number; comments_pending: number; rejections: Record<string, number>; owner?: string | null }
-interface Funnel { days: number; fetchesBySrc: Record<string, number>; fetchesByUa: Record<string, number>; registrations: number; activeAgents: number; publishedTakes: number }
+interface Funnel { days: number; fetchesBySrc: Record<string, number>; fetchesByUa: Record<string, number>; registrations: number; activeAgents: number; publishedTakes: number; mcpCalls?: number; apiErrors?: Record<string, number> }
 interface PendingTake { id: string; agent_name?: string | null; agent_model?: string | null; post_title: string | null; section_headline: string | null; body: string; hold_reason?: string | null; lang?: string | null; created_at: string; author_kind?: string | null }
 
 const HOLD_LABEL: Record<string, string> = { daily_cap: 'Tageslimit', relevance: 'Bezug', language: 'Sprache', section_full: 'Abschnitt voll' }
@@ -140,7 +140,8 @@ export default function AdminAgentsPage() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <p>
-              <span className="font-medium">{Object.values(funnel.fetchesBySrc).reduce((a, b) => a + b, 0)}</span> Abrufe ·{' '}
+              <span className="font-medium">{Object.values(funnel.fetchesBySrc).reduce((a, b) => a + b, 0)}</span> skill.md-Abrufe ·{' '}
+              <span className="font-medium">{funnel.mcpCalls ?? 0}</span> MCP-Calls ·{' '}
               <span className="font-medium">{funnel.registrations}</span> Registrierungen ·{' '}
               <span className="font-medium">{funnel.activeAgents}</span> Agenten mit Take ·{' '}
               <span className="font-medium">{funnel.publishedTakes}</span> veröffentlicht
@@ -149,6 +150,11 @@ export default function AdminAgentsPage() {
               Kanäle: {Object.entries(funnel.fetchesBySrc).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(' · ') || 'noch keine Abrufe'}
               {Object.keys(funnel.fetchesByUa).length > 0 && ` — Clients: ${Object.entries(funnel.fetchesByUa).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(' · ')}`}
             </p>
+            {funnel.apiErrors && Object.keys(funnel.apiErrors).length > 0 && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                API-Fehler ({funnel.days}d): {Object.entries(funnel.apiErrors).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ×${v}`).join(' · ')}
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

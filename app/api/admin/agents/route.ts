@@ -14,7 +14,7 @@ import { mintAgentKey } from '@/lib/agents/keys'
  * PATCH { agentId, action: suspend|activate|revoke } → Konto sperren/entsperren,
  *       Schlüssel widerrufen (neuer Schlüssel, einmal im Klartext zurück).
  */
-const AGENT_COLS = 'id, handle, display_name, description, model, status, api_key_prefix, created_at, last_seen_at, comments_published, comments_pending, rejections, owner'
+const AGENT_COLS = 'id, handle, display_name, description, model, status, api_key_prefix, created_at, last_seen_at, comments_published, comments_pending, rejections, owner, owner_url'
 
 const SETTINGS_PATCH = z.object({
   enabled: z.boolean().optional(),
@@ -35,17 +35,27 @@ const FUNNEL_DAYS = 14
 /** Trichter je Kanal (Konzept 2026-10-29): Abrufe → Registrierungen → aktive Agenten → Takes. */
 async function loadFunnel(supabase: ReturnType<typeof createAdminClient>) {
   const since = new Date(Date.now() - FUNNEL_DAYS * 86_400_000).toISOString()
-  const [fetches, registrations, active, published] = await Promise.all([
+  const [fetches, registrations, active, published, apiEvents] = await Promise.all([
     supabase.from('agent_skill_fetches').select('src, ua_class').gte('created_at', since).limit(5000),
     supabase.from('agent_accounts').select('id', { count: 'exact', head: true }).gte('created_at', since),
     supabase.from('post_comments').select('agent_id').eq('author_kind', 'agent').gte('created_at', since).limit(5000),
     supabase.from('post_comments').select('id', { count: 'exact', head: true }).eq('author_kind', 'agent').eq('status', 'published').gte('created_at', since),
+    supabase.from('agent_api_events').select('endpoint, status_code, error_code').gte('created_at', since).limit(5000),
   ])
   const fetchesBySrc: Record<string, number> = {}
   const fetchesByUa: Record<string, number> = {}
   for (const f of ((fetches.data ?? []) as Array<{ src?: string; ua_class?: string }>)) {
     if (f.src) fetchesBySrc[f.src] = (fetchesBySrc[f.src] ?? 0) + 1
     if (f.ua_class) fetchesByUa[f.ua_class] = (fetchesByUa[f.ua_class] ?? 0) + 1
+  }
+  const apiErrors: Record<string, number> = {}
+  let mcpCalls = 0
+  for (const e of ((apiEvents?.data ?? []) as Array<{ endpoint?: string; status_code?: number; error_code?: string | null }>)) {
+    if (e.endpoint === 'mcp') mcpCalls++
+    if (typeof e.status_code === 'number' && e.status_code >= 400) {
+      const key = `${e.endpoint}:${e.status_code}${e.error_code ? `(${e.error_code})` : ''}`
+      apiErrors[key] = (apiErrors[key] ?? 0) + 1
+    }
   }
   const count = (r: { count?: number | null; data?: unknown[] | null }) => r.count ?? r.data?.length ?? 0
   return {
@@ -55,6 +65,8 @@ async function loadFunnel(supabase: ReturnType<typeof createAdminClient>) {
     registrations: count(registrations),
     activeAgents: new Set(((active.data ?? []) as Array<{ agent_id?: string }>).map((r) => r.agent_id).filter(Boolean)).size,
     publishedTakes: count(published),
+    mcpCalls,
+    apiErrors,
   }
 }
 

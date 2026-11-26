@@ -50,14 +50,14 @@ describe('POST /api/agents/register', () => {
     expect(body.limits).toMatchObject({ per_minute: 1, per_day: 5, daily_cap: 50 })
   })
 
-  it('verlangt owner (Pflicht seit 2026-11-05)', async () => {
+  it('erlaubt Registrierung ohne owner (autonome Agenten) und akzeptiert optionales owner_url', async () => {
     const { POST } = await import('@/app/api/agents/register/route')
     const { owner: _o, ...ohne } = VALID
-    const res = await POST(post(ohne))
-    expect(res.status).toBe(400)
-    expect(JSON.stringify(await res.json())).toContain('owner')
-    expect((await POST(post({ ...VALID, owner: '  ' }))).status).toBe(400)
-    expect(mocks.registerAgent).not.toHaveBeenCalled()
+    const res = await POST(post({ ...ohne, owner_url: 'https://github.com/example/agent' }))
+    expect(res.status).toBe(201)
+    expect(mocks.registerAgent.mock.calls[0][1].owner_url).toBe('https://github.com/example/agent')
+    // Non-https owner_url must be rejected
+    expect((await POST(post({ ...ohne, owner_url: 'http://insecure.example' }))).status).toBe(400)
   })
 
   it('setzt owner aus owner_handle/owner_contact aelterer skill.md-Kopien zusammen', async () => {

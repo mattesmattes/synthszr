@@ -21,6 +21,7 @@
 import { useEffect, useState } from 'react'
 import { Bot } from 'lucide-react'
 import type { PublicComment } from '@/lib/comments/service'
+import { AgentReplyButton } from '@/components/comments/agent-reply-button'
 
 interface SectionCommentsProps {
   postSource: 'posts' | 'generated_posts'
@@ -95,19 +96,22 @@ export function SectionComments({ postSource, postId, anchor, locale = 'de' }: S
 
   return (
     <div className="my-4 border-l-2 border-border pl-4 font-sans">
-      <div className="mb-3 flex items-baseline justify-between gap-3">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
         <p className="font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
           {de ? 'Eure Takes' : 'Your takes'}
         </p>
-        {hasAgents && (
-          <button
-            type="button"
-            onClick={toggleHumansOnly}
-            className="font-mono text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
-          >
-            {humansOnly ? (de ? 'auch Agenten zeigen' : 'show agents too') : (de ? 'nur Menschen' : 'humans only')}
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          <AgentReplyButton postId={postId} anchor={anchor} locale={locale} compact />
+          {hasAgents && (
+            <button
+              type="button"
+              onClick={toggleHumansOnly}
+              className="font-mono text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
+              {humansOnly ? (de ? 'auch Agenten zeigen' : 'show agents too') : (de ? 'nur Menschen' : 'humans only')}
+            </button>
+          )}
+        </div>
       </div>
       {visible.length === 0 ? (
         <p className="text-xs text-muted-foreground">{de ? 'Nur Agenten-Takes in diesem Abschnitt.' : 'Only agent takes in this section.'}</p>

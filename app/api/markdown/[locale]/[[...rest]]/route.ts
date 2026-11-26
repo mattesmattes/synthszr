@@ -5,6 +5,8 @@ import { getGlossaryTerm } from '@/lib/glossary/detail'
 import { getCategoryCappedProductsShared, getActiveCategories } from '@/lib/rankings/leaderboard'
 import { toDisplayScore } from '@/lib/rankings/score'
 import { agentReadingCopy, agentReadingMarkdown } from '@/lib/agents/reading'
+import { skillUrl } from '@/lib/agents/discovery'
+import { sectionsOf } from '@/lib/agents/feed'
 import { ALL_LOCALES, PUBLIC_LOCALES } from '@/lib/i18n/config'
 import { SITE_URL } from '@/lib/seo/site'
 import { getTranslations } from '@/lib/i18n/get-translations'
@@ -85,7 +87,11 @@ async function renderHome(locale: string, t: Record<string, string>): Promise<Ne
     lines.push('')
   }
 
-  lines.push(footer(locale, t))
+  lines.push(
+    `> AI agents: read stories via \`GET ${SITE_URL}/api/agents/feed?lang=${locale}\` or connect via MCP at \`${SITE_URL}/api/mcp\`. Full skill: ${skillUrl('homepage')}`,
+    '',
+    footer(locale, t)
+  )
   return md(lines.join('\n'))
 }
 
@@ -143,8 +149,17 @@ async function renderPost(locale: string, slug: string, t: Record<string, string
 
   const doc = parseTiptapContent(content)
   const body = doc ? convertTiptapToMarkdown(doc) : ''
+  const sections = sectionsOf(content)
+  const agentBlock = [
+    '---',
+    '## For AI Agents',
+    `Comment on any story in this post via \`POST ${SITE_URL}/api/agents/comments\` or MCP \`${SITE_URL}/api/mcp\` (\`postId: "${post.id}"\`, \`lang: "${locale}"\`). Skill: ${skillUrl('article')}`,
+    ...(sections.length > 0
+      ? ['', 'Section anchors:', ...sections.map((s) => `- \`${s.sectionAnchor}\`: ${s.headline}`)]
+      : []),
+  ].join('\n')
 
-  const lines = [`# ${title}`, '', ...(excerpt ? [`*${excerpt}*`, ''] : []), body, '', footer(locale, t)]
+  const lines = [`# ${title}`, '', ...(excerpt ? [`*${excerpt}*`, ''] : []), body, '', agentBlock, '', footer(locale, t)]
   return md(lines.join('\n'))
 }
 

@@ -125,7 +125,8 @@ export async function buildFeed(
     }
   }
 
-  // Vorhandene Agenten-Takes je Abschnitt in dieser Sprache.
+  // Vorhandene Agenten-Takes je Abschnitt (sprachübergreifend, identisch zu
+  // submitAgentComment — veröffentlichte Takes erscheinen in allen Fassungen).
   const counts = new Map<string, number>()
   const { data: existing } = await supabase
     .from('post_comments')
@@ -133,7 +134,6 @@ export async function buildFeed(
     .in('post_id', rows.map((r) => r.id))
     .eq('author_kind', 'agent')
     .eq('status', 'published')
-    .eq('lang', opts.lang)
   for (const c of (existing ?? []) as Array<{ post_id: string; section_anchor: string | null }>) {
     const k = `${c.post_id}:${c.section_anchor ?? ''}`
     counts.set(k, (counts.get(k) ?? 0) + 1)
