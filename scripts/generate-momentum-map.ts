@@ -36,8 +36,8 @@ async function main() {
   <style>
     @page { size: 420mm 594mm; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 1260px; height: 1782px; background: #F6F5F0; overflow: hidden; }
-    svg { display: block; width: 1260px; height: 1782px; }
+    html, body { width: 420mm; height: 594mm; background: #F6F5F0; overflow: hidden; }
+    svg { display: block; width: 420mm; height: 594mm; }
   </style>
 </head>
 <body>${svgMarkup}</body>

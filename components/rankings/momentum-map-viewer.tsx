@@ -40,10 +40,15 @@ export function MomentumMapViewer({ data, locale }: { data: MomentumMapData; loc
             inset: 0 !important;
             width: 420mm !important;
             height: 594mm !important;
+            max-width: none !important;
             margin: 0 !important;
             padding: 0 !important;
             box-shadow: none !important;
             border: none !important;
+          }
+          #poster-print-root svg {
+            width: 420mm !important;
+            height: 594mm !important;
           }
         }
       `}</style>
