@@ -7,6 +7,7 @@ import { generateLocalizedMetadata } from '@/lib/i18n/metadata'
 import { BloomLanguageSwitcher } from '@/components/bloom-language-switcher'
 import { SiteFooter } from '@/components/site-footer'
 import { MomentumMapViewer } from '@/components/rankings/momentum-map-viewer'
+import { MomentumMapArticle } from '@/components/rankings/momentum-map-article'
 import type { LanguageCode } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -49,6 +50,7 @@ export default async function MomentumMapPosterPage({ params }: PageProps) {
         </div>
 
         <MomentumMapViewer data={data} locale={lang} />
+        <MomentumMapArticle data={data} locale={lang} />
       </main>
       <div className="print:hidden">
         <SiteFooter locale={lang as LanguageCode} />

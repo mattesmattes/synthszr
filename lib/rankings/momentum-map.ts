@@ -71,6 +71,37 @@ export interface EditorialCallout {
   detail: string
 }
 
+export interface NewsEvidence {
+  date: string
+  title: string
+  excerpt: string
+  url: string | null
+  sentiment: string | null
+}
+
+export interface MomentumMover {
+  id: string
+  name: string
+  vendor: string
+  slug: string
+  categoryName: string
+  currentMomentum: number
+  prev30Avg: number
+  curr30Avg: number
+  deltaAbs: number
+  deltaPct: number | null // null for pure new entrants (prev30Avg ~ 0)
+  mentionCount: number
+  evidence: NewsEvidence[]
+}
+
+export interface MonthlyMomentumReport {
+  currentPeriodLabel: string
+  previousPeriodLabel: string
+  risers: MomentumMover[]
+  newEntrants: MomentumMover[]
+  fallers: MomentumMover[]
+}
+
 export interface MomentumMapData {
   issueNumber: number
   monthLabel: string
@@ -87,6 +118,7 @@ export interface MomentumMapData {
   categories: PosterCategoryTile[]
   vendorGravity: VendorGravityItem[]
   callouts: EditorialCallout[]
+  monthlyReport: MonthlyMomentumReport
 }
 
 const CATEGORY_EN_NAMES: Record<string, string> = {
@@ -465,6 +497,116 @@ export async function buildMomentumMapData(now: Date = new Date()): Promise<Mome
       ? `The 90-day map where ${leader.categoryName.toLowerCase()} overtook foundation models as AI's primary battleground.`
       : `90 days of AI product attention — tracking breakouts, category leaders, and lab gravity across 16 markets.`
 
+  // --- MONTHLY REPORT: MoM (Last 30d vs Previous 30d) + News Evidence ---
+  const prev30Start = new Date(now.getTime() - 59 * 86_400_000)
+  const curr30Start = new Date(now.getTime() - 29 * 86_400_000)
+  const previousPeriodLabel = `${fmtShortDate(prev30Start)} – ${fmtShortDate(new Date(curr30Start.getTime() - 86_400_000))}`
+  const currentPeriodLabel = `${fmtShortDate(curr30Start)} – ${fmtShortDate(now)}`
+
+  const momCandidates = normalized
+    .filter((p) => p.history.length >= 60 && p.categorySlug !== 'other')
+    .map((p) => {
+      const h = p.history
+      const prevSlice = h.slice(Math.max(0, h.length - 60), h.length - 30)
+      const currSlice = h.slice(h.length - 30)
+      const prev30Avg = prevSlice.reduce((s, x) => s + (x.value ?? 0), 0) / Math.max(1, prevSlice.length)
+      const curr30Avg = currSlice.reduce((s, x) => s + (x.value ?? 0), 0) / Math.max(1, currSlice.length)
+      const deltaAbs = curr30Avg - prev30Avg
+      const deltaPct = prev30Avg >= 1 ? Math.round(((curr30Avg - prev30Avg) / prev30Avg) * 100) : null
+      return {
+        id: p.id,
+        name: p.name,
+        vendor: p.vendor,
+        slug: p.slug,
+        categoryName: categoryNameEn(p.categorySlug, catFallback.get(p.categorySlug)),
+        currentMomentum: Math.round(p.momentum * 10) / 10,
+        prev30Avg: Math.round(prev30Avg * 10) / 10,
+        curr30Avg: Math.round(curr30Avg * 10) / 10,
+        deltaAbs: Math.round(deltaAbs * 10) / 10,
+        deltaPct,
+        mentionCount: p.mentionCount,
+      }
+    })
+
+  // 1. New entrants: near-zero in prior 30d (< 1.0 avg) and strong surge in current 30d
+  const newEntrantsBase = momCandidates
+    .filter((c) => c.prev30Avg < 1.0 && c.curr30Avg >= 5)
+    .sort((a, b) => b.curr30Avg - a.curr30Avg)
+    .slice(0, 4)
+  const newEntrantIds = new Set(newEntrantsBase.map((c) => c.id))
+
+  // 2. Biggest risers: established (>= 1.0 prior avg) with largest absolute momentum gain
+  const risersBase = momCandidates
+    .filter((c) => !newEntrantIds.has(c.id) && c.prev30Avg >= 1.0 && c.deltaAbs > 2)
+    .sort((a, b) => b.deltaAbs - a.deltaAbs)
+    .slice(0, 5)
+
+  // 3. Biggest cool-downs: largest absolute momentum drop vs previous month
+  const fallersBase = momCandidates
+    .filter((c) => c.prev30Avg >= 5 && c.deltaAbs < -2)
+    .sort((a, b) => a.deltaAbs - b.deltaAbs)
+    .slice(0, 4)
+
+  const featuredIds = [...new Set([...risersBase, ...newEntrantsBase, ...fallersBase].map((m) => m.id))]
+  const evidenceByProduct = new Map<string, NewsEvidence[]>()
+
+  if (featuredIds.length > 0) {
+    const since30Iso = curr30Start.toISOString().slice(0, 10)
+    const { data: mentionRows } = await supabase
+      .from('product_mentions')
+      .select('product_id, mention_date, excerpt, sentiment, source_credibility, daily_repo(title, source_url, newsletter_date)')
+      .in('product_id', featuredIds)
+      .gte('mention_date', since30Iso)
+      .order('source_credibility', { ascending: false, nullsFirst: false })
+      .order('mention_date', { ascending: false })
+      .limit(240)
+
+    type RawMention = {
+      product_id: string
+      mention_date: string | null
+      excerpt: string | null
+      sentiment: string | null
+      daily_repo:
+        | { title: string | null; source_url: string | null; newsletter_date: string | null }
+        | Array<{ title: string | null; source_url: string | null; newsletter_date: string | null }>
+        | null
+    }
+
+    for (const row of (mentionRows ?? []) as unknown as RawMention[]) {
+      const list = evidenceByProduct.get(row.product_id) ?? []
+      if (list.length >= 3) continue
+      const dr = Array.isArray(row.daily_repo) ? row.daily_repo[0] : row.daily_repo
+      const title = (dr?.title ?? '').trim()
+      const excerpt = (row.excerpt ?? '').trim()
+      if (!title && !excerpt) continue
+      const url = dr?.source_url && /^https?:\/\//i.test(dr.source_url) ? dr.source_url : null
+      // Deduplicate by normalized title or excerpt prefix
+      const dedupeKey = (title || excerpt).toLowerCase().slice(0, 55)
+      if (list.some((e) => (e.title || e.excerpt).toLowerCase().slice(0, 55) === dedupeKey)) continue
+      list.push({
+        date: (row.mention_date ?? dr?.newsletter_date ?? '').slice(0, 10),
+        title: title || excerpt.slice(0, 90),
+        excerpt: excerpt.slice(0, 220),
+        url,
+        sentiment: row.sentiment ?? null,
+      })
+      evidenceByProduct.set(row.product_id, list)
+    }
+  }
+
+  const attachEvidence = (m: (typeof momCandidates)[number]): MomentumMover => ({
+    ...m,
+    evidence: evidenceByProduct.get(m.id) ?? [],
+  })
+
+  const monthlyReport: MonthlyMomentumReport = {
+    currentPeriodLabel,
+    previousPeriodLabel,
+    risers: risersBase.map(attachEvidence),
+    newEntrants: newEntrantsBase.map(attachEvidence),
+    fallers: fallersBase.map(attachEvidence),
+  }
+
   return {
     issueNumber,
     monthLabel,
@@ -481,5 +623,6 @@ export async function buildMomentumMapData(now: Date = new Date()): Promise<Mome
     categories,
     vendorGravity,
     callouts,
+    monthlyReport,
   }
 }
