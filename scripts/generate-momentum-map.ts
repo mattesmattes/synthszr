@@ -13,7 +13,6 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { chromium } from 'playwright'
 import { buildMomentumMapData } from '@/lib/rankings/momentum-map'
 import { MomentumMapPoster } from '@/components/rankings/momentum-map-poster'
 
@@ -45,6 +44,10 @@ async function main() {
 
   writeFileSync(join(outDir, `${baseName}.svg`), `<?xml version="1.0" encoding="UTF-8"?>\n${svgMarkup}`, 'utf8')
 
+  const playwrightPkg = 'playwright'
+  const { chromium } = (await import(playwrightPkg)) as {
+    chromium: { launch: (opts?: { channel?: string }) => Promise<{ newPage: (opts?: Record<string, unknown>) => Promise<{ setContent: (html: string, opts?: Record<string, unknown>) => Promise<void>; pdf: (opts?: Record<string, unknown>) => Promise<Buffer>; screenshot: (opts?: Record<string, unknown>) => Promise<Buffer> }>; close: () => Promise<void> }> }
+  }
   const browser = await chromium.launch({ channel: 'chrome' }).catch(() => chromium.launch())
   try {
     const page = await browser.newPage({ viewport: { width: 1260, height: 1782 }, deviceScaleFactor: 2 })
