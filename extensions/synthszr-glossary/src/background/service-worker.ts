@@ -1,3 +1,4 @@
+import { addAsyncMessageListener, getExtensionApi } from '../shared/ext-api'
 import {
   DEFAULT_SETTINGS,
   STORAGE_KEYS,
@@ -9,6 +10,7 @@ import {
   type TermDetailResponse,
 } from '../shared/types'
 
+const ext = getExtensionApi()
 const API_BASE = 'https://www.synthszr.com'
 const ALARM_NAME = 'synthszr-glossary-sync'
 const SYNC_INTERVAL_MINUTES = 360 // 6 hours
@@ -23,17 +25,42 @@ function indexStorageKey(lang: SupportedLang): string {
 }
 
 async function ensureInitialized(): Promise<void> {
-  const stored = await chrome.storage.sync.get([STORAGE_KEYS.SETTINGS])
+  const stored = await ext.storage.sync.get([STORAGE_KEYS.SETTINGS])
   if (!stored[STORAGE_KEYS.SETTINGS]) {
-    await chrome.storage.sync.set({ [STORAGE_KEYS.SETTINGS]: DEFAULT_SETTINGS })
+    await ext.storage.sync.set({ [STORAGE_KEYS.SETTINGS]: DEFAULT_SETTINGS })
   }
 
-  const existingAlarm = await chrome.alarms.get(ALARM_NAME)
+  const existingAlarm = await ext.alarms.get(ALARM_NAME)
   if (!existingAlarm) {
-    await chrome.alarms.create(ALARM_NAME, {
+    await ext.alarms.create(ALARM_NAME, {
       delayInMinutes: 1,
       periodInMinutes: SYNC_INTERVAL_MINUTES,
     })
+  }
+}
+
+async function saveGlossaryCache(
+  key: string,
+  lang: SupportedLang,
+  nextCache: StoredGlossaryCache,
+): Promise<void> {
+  try {
+    await ext.storage.local.set({
+      [key]: nextCache,
+      [STORAGE_KEYS.LAST_SYNC_ERROR]: null,
+    })
+  } catch (storageErr) {
+    // Evict opposite language index if Safari/iOS storage quota is tight, then retry once
+    const otherKey = lang === 'de' ? STORAGE_KEYS.INDEX_EN : STORAGE_KEYS.INDEX_DE
+    await ext.storage.local.remove(otherKey).catch(() => undefined)
+    try {
+      await ext.storage.local.set({
+        [key]: nextCache,
+        [STORAGE_KEYS.LAST_SYNC_ERROR]: null,
+      })
+    } catch {
+      throw storageErr
+    }
   }
 }
 
@@ -46,7 +73,7 @@ async function syncGlossaryIndex(
 
   const task = (async () => {
     const key = indexStorageKey(lang)
-    const stored = await chrome.storage.local.get<Record<string, StoredGlossaryCache>>([key])
+    const stored = await ext.storage.local.get<Record<string, StoredGlossaryCache>>([key])
     const cached = stored[key]
 
     const headers: Record<string, string> = {}
@@ -61,16 +88,13 @@ async function syncGlossaryIndex(
 
     if (res.status === 304 && cached) {
       const refreshed: StoredGlossaryCache = { ...cached, fetchedAt: Date.now() }
-      await chrome.storage.local.set({
-        [key]: refreshed,
-        [STORAGE_KEYS.LAST_SYNC_ERROR]: null,
-      })
+      await saveGlossaryCache(key, lang, refreshed)
       return refreshed
     }
 
     if (!res.ok) {
       if (cached) {
-        await chrome.storage.local.set({
+        await ext.storage.local.set({
           [STORAGE_KEYS.LAST_SYNC_ERROR]: `HTTP ${res.status} (${lang})`,
         })
         return cached
@@ -100,10 +124,7 @@ async function syncGlossaryIndex(
       items: payload.items,
     }
 
-    await chrome.storage.local.set({
-      [key]: nextCache,
-      [STORAGE_KEYS.LAST_SYNC_ERROR]: null,
-    })
+    await saveGlossaryCache(key, lang, nextCache)
 
     return nextCache
   })()
@@ -118,13 +139,12 @@ async function syncGlossaryIndex(
 
 async function getGlossaryIndex(lang: SupportedLang): Promise<StoredGlossaryCache> {
   const key = indexStorageKey(lang)
-  const stored = await chrome.storage.local.get<Record<string, StoredGlossaryCache>>([key])
+  const stored = await ext.storage.local.get<Record<string, StoredGlossaryCache>>([key])
   const cached = stored[key]
 
   if (cached && Array.isArray(cached.items) && cached.items.length > 0) {
     const ageMs = Date.now() - (cached.fetchedAt ?? 0)
     if (ageMs > SYNC_INTERVAL_MINUTES * 60 * 1000) {
-      // Background ETag check without blocking page render
       void syncGlossaryIndex(lang).catch(() => undefined)
     }
     return cached
@@ -159,7 +179,7 @@ async function getTermDetail(slug: string, lang: SupportedLang): Promise<TermDet
 }
 
 async function getStatus(): Promise<ExtensionStatus> {
-  const stored = await chrome.storage.local.get<Record<string, unknown>>([
+  const stored = await ext.storage.local.get<Record<string, unknown>>([
     STORAGE_KEYS.INDEX_DE,
     STORAGE_KEYS.INDEX_EN,
     STORAGE_KEYS.LAST_SYNC_ERROR,
@@ -176,27 +196,27 @@ async function getStatus(): Promise<ExtensionStatus> {
   }
 }
 
-chrome.runtime.onInstalled.addListener(() => {
+ext.runtime.onInstalled.addListener(() => {
   void (async () => {
     await ensureInitialized()
     await Promise.allSettled([syncGlossaryIndex('de'), syncGlossaryIndex('en')])
   })()
 })
 
-chrome.runtime.onStartup.addListener(() => {
+ext.runtime.onStartup.addListener(() => {
   void ensureInitialized()
 })
 
-chrome.alarms.onAlarm.addListener((alarm) => {
+ext.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== ALARM_NAME) return
   void Promise.allSettled([syncGlossaryIndex('de'), syncGlossaryIndex('en')])
 })
 
-chrome.runtime.onMessage.addListener((rawMessage, _sender, sendResponse) => {
+addAsyncMessageListener((rawMessage): Promise<BackgroundResponse> | undefined => {
   const msg = rawMessage as BackgroundRequest | undefined
-  if (!msg || typeof msg.type !== 'string') return false
+  if (!msg || typeof msg.type !== 'string') return undefined
 
-  void (async (): Promise<BackgroundResponse> => {
+  return (async (): Promise<BackgroundResponse> => {
     try {
       switch (msg.type) {
         case 'GET_GLOSSARY_INDEX': {
@@ -226,7 +246,7 @@ chrome.runtime.onMessage.addListener((rawMessage, _sender, sendResponse) => {
             (msg.url.startsWith('https://www.synthszr.com/') ||
               msg.url.startsWith('https://synthszr.vercel.app/'))
           ) {
-            await chrome.tabs.create({ url: msg.url })
+            await ext.tabs.create({ url: msg.url })
           }
           return { ok: true, data: null }
         }
@@ -235,10 +255,8 @@ chrome.runtime.onMessage.addListener((rawMessage, _sender, sendResponse) => {
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Unknown background error'
-      await chrome.storage.local.set({ [STORAGE_KEYS.LAST_SYNC_ERROR]: errorMsg }).catch(() => undefined)
+      await ext.storage.local.set({ [STORAGE_KEYS.LAST_SYNC_ERROR]: errorMsg }).catch(() => undefined)
       return { ok: false, error: errorMsg }
     }
-  })().then(sendResponse)
-
-  return true
+  })()
 })

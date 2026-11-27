@@ -27,13 +27,13 @@ async function buildExtension() {
   fs.mkdirSync(path.join(DIST_DIR, 'popup'), { recursive: true })
   fs.mkdirSync(path.join(DIST_DIR, 'icons'), { recursive: true })
 
-  // 1. Bundle background service worker (ESM), content script (IIFE), and popup script (IIFE)
+  // 1. Bundle background service worker, content script, and popup script (IIFE for Chrome + Safari parity)
   await Promise.all([
     esbuild.build({
       entryPoints: [path.join(__dirname, 'src/background/service-worker.ts')],
       bundle: true,
-      format: 'esm',
-      target: ['chrome120'],
+      format: 'iife',
+      target: ['chrome120', 'safari17'],
       minify: true,
       outfile: path.join(DIST_DIR, 'background/service-worker.js'),
     }),
@@ -41,7 +41,7 @@ async function buildExtension() {
       entryPoints: [path.join(__dirname, 'src/content/content.ts')],
       bundle: true,
       format: 'iife',
-      target: ['chrome120'],
+      target: ['chrome120', 'safari17'],
       minify: true,
       outfile: path.join(DIST_DIR, 'content/content.js'),
     }),
@@ -49,7 +49,7 @@ async function buildExtension() {
       entryPoints: [path.join(__dirname, 'src/popup/popup.ts')],
       bundle: true,
       format: 'iife',
-      target: ['chrome120'],
+      target: ['chrome120', 'safari17'],
       minify: true,
       outfile: path.join(DIST_DIR, 'popup/popup.js'),
     }),

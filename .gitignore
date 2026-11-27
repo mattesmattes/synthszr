@@ -46,3 +46,4 @@ scripts/taste-dataset.json
 # Browser Extension build artifacts
 extensions/synthszr-glossary/dist/
 extensions/synthszr-glossary/*.zip
+extensions/synthszr-glossary/safari/

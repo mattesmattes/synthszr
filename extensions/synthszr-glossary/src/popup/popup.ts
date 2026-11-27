@@ -1,3 +1,4 @@
+import { getExtensionApi } from '../shared/ext-api'
 import {
   DEFAULT_SETTINGS,
   STORAGE_KEYS,
@@ -7,6 +8,8 @@ import {
   type HighlightStyle,
   type LanguageMode,
 } from '../shared/types'
+
+const ext = getExtensionApi()
 
 const enabledToggle = document.getElementById('enabled-toggle') as HTMLInputElement
 const langSelect = document.getElementById('lang-select') as HTMLSelectElement
@@ -32,7 +35,7 @@ function isExcluded(hostname: string, list: string[]): boolean {
 
 async function saveSettings(next: ExtensionSettings): Promise<void> {
   currentSettings = next
-  await chrome.storage.sync.set({ [STORAGE_KEYS.SETTINGS]: next })
+  await ext.storage.sync.set({ [STORAGE_KEYS.SETTINGS]: next })
   renderSettings()
 }
 
@@ -96,7 +99,7 @@ function formatStatus(status: ExtensionStatus): string {
 }
 
 async function refreshStatus(): Promise<void> {
-  const res = (await chrome.runtime.sendMessage<BackgroundResponse<ExtensionStatus>>({
+  const res = (await ext.runtime.sendMessage<BackgroundResponse<ExtensionStatus>>({
     type: 'GET_STATUS',
   })) as BackgroundResponse<ExtensionStatus> | undefined
   if (res?.ok) {
@@ -108,8 +111,8 @@ async function refreshStatus(): Promise<void> {
 
 async function init(): Promise<void> {
   const [stored, tabs] = await Promise.all([
-    chrome.storage.sync.get<Record<string, ExtensionSettings>>([STORAGE_KEYS.SETTINGS]),
-    chrome.tabs.query({ active: true, currentWindow: true }),
+    ext.storage.sync.get<Record<string, ExtensionSettings>>([STORAGE_KEYS.SETTINGS]),
+    ext.tabs.query({ active: true, currentWindow: true }),
   ])
 
   if (stored[STORAGE_KEYS.SETTINGS]) {
@@ -164,7 +167,7 @@ async function init(): Promise<void> {
     syncStatusEl.textContent = 'Synchronisiere…'
     void (async () => {
       try {
-        const res = (await chrome.runtime.sendMessage<BackgroundResponse<ExtensionStatus>>({
+        const res = (await ext.runtime.sendMessage<BackgroundResponse<ExtensionStatus>>({
           type: 'SYNC_NOW',
         })) as BackgroundResponse<ExtensionStatus> | undefined
         if (res?.ok) {

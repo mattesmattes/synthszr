@@ -32,7 +32,8 @@
     "wrapup:research-dry": "tsx scripts/wrapup-research-dry.ts",
     "agents:house": "tsx scripts/house-agent.ts",
     "moltbook:post": "tsx scripts/moltbook-post.ts",
-    "ext:build": "node extensions/synthszr-glossary/build.mjs"
+    "ext:build": "node extensions/synthszr-glossary/build.mjs",
+    "ext:build:safari": "node extensions/synthszr-glossary/build-safari.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.46",

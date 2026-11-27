@@ -23,7 +23,7 @@ declare namespace chrome {
           message: unknown,
           sender: MessageSender,
           sendResponse: (response?: unknown) => void,
-        ) => boolean | void,
+        ) => Promise<unknown> | boolean | void,
       ): void
     }
   }
@@ -67,6 +67,8 @@ declare namespace chrome {
     function create(createProperties: { url: string }): Promise<Tab>
   }
 }
+
+declare var browser: typeof chrome | undefined
 
 interface Highlight extends Set<AbstractRange> {
   priority: number

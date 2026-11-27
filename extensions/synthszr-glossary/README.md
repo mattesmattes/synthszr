@@ -12,6 +12,28 @@ Erkennt automatisch Begriffe aus dem zweisprachigen Synthszr-Lexikon (`https://w
 3. Oben rechts **Entwicklermodus** aktivieren.
 4. Auf **Entpackte Erweiterung laden** klicken und den Ordner `extensions/synthszr-glossary/dist` auswählen.
 
+## Safari (macOS & iOS)
+
+Die gemeinsame MV3-Codebasis (`src/`) läuft über die Cross-Browser-Bridge `src/shared/ext-api.ts` (`browser.*` / `chrome.*`) auch nativ als **Safari Web Extension** für macOS und iOS.
+
+1. Xcode-Projekt (macOS + iOS) generieren und macOS-App bauen (erfordert Xcode auf macOS):
+   ```bash
+   pnpm ext:build:safari
+   ```
+   Optional mit Apple Developer Team-ID signieren:
+   ```bash
+   APPLE_TEAM_ID=VW4CW344Y5 pnpm ext:build:safari
+   ```
+2. Gebaute macOS-App einmalig starten:
+   ```bash
+   open "extensions/synthszr-glossary/safari/build/Build/Products/Release/Synthszr Lexikon.app"
+   ```
+3. Bei lokalem Ad-hoc-Build (ohne `APPLE_TEAM_ID`) in Safari aktivieren:
+   - *Safari → Einstellungen → Erweitert* → **Funktionen für Webentwickler anzeigen**
+   - *Safari → Entwickler* → **Nicht signierte Erweiterungen erlauben**
+4. Unter *Safari → Einstellungen → Erweiterungen* **Synthszr Lexikon** aktivieren und Zugriff auf Websites gewähren.
+5. Für iOS oder App-Store-Release das generierte Projekt unter `extensions/synthszr-glossary/safari/Synthszr Lexikon/Synthszr Lexikon.xcodeproj` in Xcode öffnen.
+
 ## Architektur & Umsetzungsstrategien
 
 - **Zero DOM Mutation:** Keine `<span>`-Wrapper — Markierungen entstehen über `CSS.highlights` + `Range` (`::highlight(synthszr-glossary)`). React/Next.js-Hydration, Layout (CLS = 0) und Web-Editoren bleiben unberührt.

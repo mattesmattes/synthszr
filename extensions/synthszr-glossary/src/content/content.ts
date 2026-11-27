@@ -5,6 +5,7 @@ import {
   type CompiledGlossaryMatcher,
   type GlossaryMatch,
 } from '../matcher/aho-corasick'
+import { getExtensionApi } from '../shared/ext-api'
 import {
   DEFAULT_SETTINGS,
   STORAGE_KEYS,
@@ -18,6 +19,8 @@ import {
   type TermDetailResponse,
 } from '../shared/types'
 import { GlossaryPopoverController } from '../ui/popover'
+
+const ext = getExtensionApi()
 
 interface HitEntry {
   range: Range
@@ -101,7 +104,7 @@ let hoverRafPending = false
 let lastPointer = { x: 0, y: 0 }
 
 async function sendBg<T>(msg: BackgroundRequest): Promise<T> {
-  const res = (await chrome.runtime.sendMessage<BackgroundResponse<T>>(msg)) as
+  const res = (await ext.runtime.sendMessage<BackgroundResponse<T>>(msg)) as
     | BackgroundResponse<T>
     | undefined
   if (!res || !res.ok) {
@@ -120,7 +123,7 @@ const popover = new GlossaryPopoverController({
         ...currentSettings,
         excludedDomains: [...currentSettings.excludedDomains, clean],
       }
-      await chrome.storage.sync.set({ [STORAGE_KEYS.SETTINGS]: next })
+      await ext.storage.sync.set({ [STORAGE_KEYS.SETTINGS]: next })
     }
   },
 })
@@ -146,14 +149,20 @@ function injectHighlightStyles(styleMode: HighlightStyle): void {
       ? `
 ::highlight(${HIGHLIGHT_NAME}) {
   background-color: rgba(204, 255, 0, 0.30);
-  text-decoration: underline rgba(180, 145, 0, 0.85) 1.5px;
+  text-decoration-line: underline;
+  text-decoration-style: solid;
+  text-decoration-color: rgba(180, 145, 0, 0.85);
+  text-decoration-thickness: 1.5px;
   text-underline-offset: 3px;
 }
 `
       : `
 ::highlight(${HIGHLIGHT_NAME}) {
   background-color: rgba(250, 215, 20, 0.14);
-  text-decoration: underline rgba(224, 180, 0, 0.92) 2px;
+  text-decoration-line: underline;
+  text-decoration-style: solid;
+  text-decoration-color: rgba(224, 180, 0, 0.92);
+  text-decoration-thickness: 2px;
   text-underline-offset: 3px;
 }
 `
@@ -267,7 +276,7 @@ async function scanAndHighlight(): Promise<void> {
 
   injectHighlightStyles(currentSettings.highlightStyle)
 
-  const bodyTextSample = document.body?.innerText?.slice(0, 3000) ?? ''
+  const bodyTextSample = document.body?.textContent?.slice(0, 3000) ?? ''
   activeLang =
     currentSettings.languageMode === 'auto'
       ? detectPageLanguage(document.documentElement.lang, bodyTextSample)
@@ -429,7 +438,7 @@ function setupListeners(): void {
     observer.observe(document.body, { childList: true, subtree: true })
   }
 
-  chrome.storage.onChanged.addListener((changes, areaName) => {
+  ext.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'sync') return
     const next = changes[STORAGE_KEYS.SETTINGS]?.newValue as ExtensionSettings | undefined
     if (!next) return
@@ -442,7 +451,7 @@ async function init(): Promise<void> {
   if (!CSS.highlights) return
   if (document.contentType && document.contentType !== 'text/html') return
 
-  const stored = await chrome.storage.sync.get<Record<string, ExtensionSettings>>([
+  const stored = await ext.storage.sync.get<Record<string, ExtensionSettings>>([
     STORAGE_KEYS.SETTINGS,
   ])
   if (stored[STORAGE_KEYS.SETTINGS]) {
