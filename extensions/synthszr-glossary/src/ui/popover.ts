@@ -22,7 +22,7 @@ const POPOVER_CSS = `
 
 .sg-card {
   width: min(390px, calc(100vw - 24px));
-  max-height: min(580px, calc(100vh - 24px));
+  height: min(560px, calc(100vh - 24px));
   display: flex;
   flex-direction: column;
   background: #ffffff;
@@ -128,6 +128,8 @@ const POPOVER_CSS = `
 }
 
 .sg-body {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 14px;
   overflow-y: auto;
   display: flex;
@@ -136,26 +138,129 @@ const POPOVER_CSS = `
 }
 
 .sg-illustration-wrap {
+  position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
+  height: 202px;
+  flex: 0 0 202px;
   padding: 4px 0 2px;
+  transition: height 180ms ease-out, flex-basis 180ms ease-out, padding 180ms ease-out, opacity 180ms ease-out;
 }
 
-.sg-illustration-wrap[hidden] {
-  display: none;
+.sg-illustration-wrap.sg-illustration-empty {
+  height: 0;
+  flex-basis: 0;
+  padding: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.sg-illustration-placeholder {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 172px;
+  height: 172px;
+  border-radius: 14px;
+  background: radial-gradient(circle, rgba(0, 0, 0, 0.045) 0%, rgba(0, 0, 0, 0.015) 70%, transparent 100%);
+  transition: opacity 200ms ease-out;
+  pointer-events: none;
+}
+
+.sg-illustration-wrap.sg-has-img .sg-illustration-placeholder {
+  opacity: 0;
 }
 
 .sg-illustration-canvas {
+  position: relative;
   width: 196px;
   height: 196px;
   display: block;
   image-rendering: auto;
+  opacity: 0;
+  transform: scale(0.97);
+  filter: blur(8px);
+  transition:
+    opacity 240ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 240ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform, filter;
+}
+
+.sg-illustration-canvas.sg-ready {
+  opacity: 1;
+  transform: scale(1);
+  filter: blur(0px);
 }
 
 @media (prefers-color-scheme: dark) {
+  .sg-illustration-placeholder {
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.065) 0%, rgba(255, 255, 255, 0.02) 70%, transparent 100%);
+  }
   .sg-illustration-canvas {
-    filter: invert(1) brightness(0.92);
+    filter: invert(1) brightness(0.92) blur(8px);
+  }
+  .sg-illustration-canvas.sg-ready {
+    filter: invert(1) brightness(0.92) blur(0px);
+  }
+}
+
+.sg-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sg-skel-line {
+  height: 11px;
+  border-radius: 4px;
+  background: rgba(113, 113, 122, 0.14);
+  animation: sg-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes sg-pulse {
+  0%, 100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.sg-fade-in {
+  animation: sg-text-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes sg-text-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sg-illustration-canvas,
+  .sg-illustration-placeholder,
+  .sg-illustration-wrap {
+    transition: none;
+    filter: none;
+    transform: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    .sg-illustration-canvas,
+    .sg-illustration-canvas.sg-ready {
+      filter: invert(1) brightness(0.92);
+    }
+  }
+  .sg-skel-line,
+  .sg-fade-in {
+    animation: none;
   }
 }
 
@@ -498,10 +603,11 @@ export class GlossaryPopoverController {
 
     const illustrationWrap = document.createElement('div')
     illustrationWrap.className = 'sg-illustration-wrap'
-    illustrationWrap.hidden = true
+    const placeholder = document.createElement('div')
+    placeholder.className = 'sg-illustration-placeholder'
     const illustrationCanvas = document.createElement('canvas')
     illustrationCanvas.className = 'sg-illustration-canvas'
-    illustrationWrap.appendChild(illustrationCanvas)
+    illustrationWrap.append(placeholder, illustrationCanvas)
     body.appendChild(illustrationWrap)
 
     const titleRow = document.createElement('div')
@@ -527,10 +633,7 @@ export class GlossaryPopoverController {
 
     const detailContainer = document.createElement('div')
     detailContainer.className = 'sg-paragraphs'
-    const statusEl = document.createElement('div')
-    statusEl.className = 'sg-status'
-    statusEl.textContent = l.loading
-    detailContainer.appendChild(statusEl)
+    this.renderSkeletonLines(detailContainer)
     body.appendChild(detailContainer)
 
     // Footer
@@ -588,6 +691,18 @@ export class GlossaryPopoverController {
     )
   }
 
+  private renderSkeletonLines(container: HTMLElement): void {
+    const skel = document.createElement('div')
+    skel.className = 'sg-skeleton'
+    for (const w of ['96%', '92%', '86%', '62%']) {
+      const line = document.createElement('div')
+      line.className = 'sg-skel-line'
+      line.style.width = w
+      skel.appendChild(line)
+    }
+    container.replaceChildren(skel)
+  }
+
   private async loadTermDetail(
     slug: string,
     lang: SupportedLang,
@@ -601,9 +716,54 @@ export class GlossaryPopoverController {
     anchorRect: DOMRect,
   ): Promise<void> {
     const l = LABELS[lang]
+    let resolvedDetail: TermDetailResponse | null = null
+    let resolvedBase64: string | null = null
+    let kornStarted = false
+
+    const mountAndReveal = async (
+      base64: string,
+      anim: TermDetailResponse['animationParams'],
+      alreadyRevealed: boolean,
+    ) => {
+      this.stopIllustration?.()
+      this.stopIllustration = null
+      const cleanup = await mountDitherIllustration(illustrationCanvas, base64, anim)
+      if (requestToken !== this.activeRequestToken || !this.host) {
+        cleanup()
+        return
+      }
+      this.stopIllustration = cleanup
+      if (!alreadyRevealed) {
+        illustrationWrap.classList.add('sg-has-img')
+        window.requestAnimationFrame(() => {
+          if (requestToken === this.activeRequestToken && this.host) {
+            illustrationCanvas.classList.add('sg-ready')
+          }
+        })
+      }
+    }
+
+    const detailPromise = this.handlers.onRequestDetail(slug, lang)
+    const illustrationPromise = this.handlers.onRequestIllustration(slug)
+
+    void illustrationPromise
+      .then(async ({ base64 }) => {
+        if (requestToken !== this.activeRequestToken || !this.host) return
+        if (resolvedDetail && !resolvedDetail.illustrationUrl) return
+        resolvedBase64 = base64
+        const anim = resolvedDetail?.animationParams ?? null
+        if (anim?.verfahren === 'korn') kornStarted = true
+        await mountAndReveal(base64, anim, false)
+      })
+      .catch(() => {
+        if (requestToken !== this.activeRequestToken || !this.host) return
+        illustrationWrap.classList.add('sg-illustration-empty')
+      })
+
     try {
-      const detail = await this.handlers.onRequestDetail(slug, lang)
+      const detail = await detailPromise
       if (requestToken !== this.activeRequestToken || !this.host) return
+      resolvedDetail = detail
 
       titleEl.textContent = detail.canonicalName
       if (detail.summary) {
@@ -613,38 +773,19 @@ export class GlossaryPopoverController {
         ctaEl.href = detail.url
       }
 
-      if (detail.illustrationUrl) {
-        void (async () => {
-          try {
-            const { base64 } = await this.handlers.onRequestIllustration(slug)
-            if (requestToken !== this.activeRequestToken || !this.host) return
-
-            illustrationCanvas.setAttribute('role', 'img')
-            illustrationCanvas.setAttribute('aria-label', detail.illustrationAlt || detail.canonicalName)
-            illustrationWrap.hidden = false
-            this.refineVerticalPlacement(this.host, anchorRect)
-
-            this.stopIllustration?.()
-            this.stopIllustration = null
-            const cleanup = await mountDitherIllustration(
-              illustrationCanvas,
-              base64,
-              detail.animationParams,
-            )
-            if (requestToken !== this.activeRequestToken || !this.host) {
-              cleanup()
-              return
-            }
-            this.stopIllustration = cleanup
-          } catch {
-            if (requestToken === this.activeRequestToken) {
-              illustrationWrap.hidden = true
-            }
-          }
-        })()
+      if (!detail.illustrationUrl) {
+        illustrationWrap.classList.add('sg-illustration-empty')
+      } else {
+        illustrationCanvas.setAttribute('role', 'img')
+        illustrationCanvas.setAttribute('aria-label', detail.illustrationAlt || detail.canonicalName)
+        if (resolvedBase64 && !kornStarted && detail.animationParams?.verfahren === 'korn') {
+          kornStarted = true
+          void mountAndReveal(resolvedBase64, detail.animationParams, true)
+        }
       }
 
-      detailContainer.replaceChildren()
+      const contentWrap = document.createElement('div')
+      contentWrap.className = 'sg-paragraphs sg-fade-in'
 
       const blocks =
         Array.isArray(detail.blocks) && detail.blocks.length > 0
@@ -657,7 +798,7 @@ export class GlossaryPopoverController {
           if (!activeList) {
             activeList = document.createElement('ul')
             activeList.className = 'sg-ul'
-            detailContainer.appendChild(activeList)
+            contentWrap.appendChild(activeList)
           }
           const li = document.createElement('li')
           li.className = 'sg-li'
@@ -671,17 +812,17 @@ export class GlossaryPopoverController {
           const h3 = document.createElement('h3')
           h3.className = 'sg-h3'
           h3.textContent = block.text
-          detailContainer.appendChild(h3)
+          contentWrap.appendChild(h3)
         } else if (block.type === 'quote') {
           const bq = document.createElement('blockquote')
           bq.className = 'sg-quote'
           bq.textContent = block.text
-          detailContainer.appendChild(bq)
+          contentWrap.appendChild(bq)
         } else {
           const p = document.createElement('p')
           p.className = 'sg-p'
           p.textContent = block.text
-          detailContainer.appendChild(p)
+          contentWrap.appendChild(p)
         }
       }
 
@@ -689,7 +830,7 @@ export class GlossaryPopoverController {
         const label = document.createElement('div')
         label.className = 'sg-section-label'
         label.textContent = l.related
-        detailContainer.appendChild(label)
+        contentWrap.appendChild(label)
 
         const chips = document.createElement('div')
         chips.className = 'sg-chips'
@@ -708,10 +849,10 @@ export class GlossaryPopoverController {
           })
           chips.appendChild(btn)
         }
-        detailContainer.appendChild(chips)
+        contentWrap.appendChild(chips)
       }
 
-      this.refineVerticalPlacement(this.host, anchorRect)
+      detailContainer.replaceChildren(contentWrap)
     } catch {
       if (requestToken !== this.activeRequestToken || !this.host) return
       detailContainer.replaceChildren()
@@ -723,11 +864,7 @@ export class GlossaryPopoverController {
       retryBtn.className = 'sg-chip'
       retryBtn.textContent = l.retry
       retryBtn.addEventListener('click', () => {
-        detailContainer.replaceChildren()
-        const loadingEl = document.createElement('div')
-        loadingEl.className = 'sg-status'
-        loadingEl.textContent = l.loading
-        detailContainer.appendChild(loadingEl)
+        this.renderSkeletonLines(detailContainer)
         void this.loadTermDetail(
           slug,
           lang,
