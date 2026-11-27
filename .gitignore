@@ -42,3 +42,7 @@ scripts/taste-dataset.json
 
 # Git-Worktrees fuer isolierte Feature-Arbeit
 .worktrees/
+
+# Browser Extension build artifacts
+extensions/synthszr-glossary/dist/
+extensions/synthszr-glossary/*.zip

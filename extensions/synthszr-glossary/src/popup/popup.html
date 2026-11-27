@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Synthszr Lexikon</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <header class="header">
+        <div class="brand">
+          <span class="badge">SYNTHSZR</span>
+          <span class="subtitle">LEXIKON</span>
+        </div>
+        <span class="version">v1.0.0</span>
+      </header>
+
+      <section class="card site-card">
+        <div class="row">
+          <div>
+            <div class="label">Aktuelle Website</div>
+            <div id="site-host" class="site-host">—</div>
+          </div>
+          <button id="site-toggle-btn" class="btn-secondary" type="button" disabled>
+            …
+          </button>
+        </div>
+      </section>
+
+      <section class="card">
+        <label class="row toggle-row" for="enabled-toggle">
+          <span>
+            <span class="label-strong">Begriffe markieren</span>
+            <span class="hint">Gelbe Unterstreichung auf HTML-Seiten</span>
+          </span>
+          <input id="enabled-toggle" type="checkbox" />
+        </label>
+
+        <div class="divider"></div>
+
+        <label class="field" for="lang-select">
+          <span class="label">Sprache des Lexikons</span>
+          <select id="lang-select">
+            <option value="auto">Automatisch (DE / EN)</option>
+            <option value="de">Deutsch (DE)</option>
+            <option value="en">Englisch (EN)</option>
+          </select>
+        </label>
+
+        <label class="field" for="style-select">
+          <span class="label">Darstellung</span>
+          <select id="style-select">
+            <option value="underline">Gelbe Unterstreichung</option>
+            <option value="subtle-bg">Gelb hinterlegt + unterstrichen</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="card">
+        <div class="row">
+          <div>
+            <div class="label">Lokaler Index-Cache</div>
+            <div id="sync-status" class="hint">Lade Status…</div>
+          </div>
+          <button id="sync-now-btn" class="btn-primary" type="button">Sync</button>
+        </div>
+      </section>
+
+      <section id="paused-section" class="card" hidden>
+        <div class="label">Pausierte Domains</div>
+        <div id="paused-list" class="chips"></div>
+      </section>
+
+      <footer class="footer">
+        <a
+          id="open-glossary-link"
+          href="https://www.synthszr.com/de/glossary"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Vollständiges Lexikon öffnen ↗
+        </a>
+      </footer>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

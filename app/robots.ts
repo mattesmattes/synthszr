@@ -5,7 +5,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: '*',
-        allow: ['/', '/api/agents/', '/api/mcp'],
+        allow: ['/', '/api/agents/', '/api/mcp', '/api/glossary/'],
         // Kein /_next/-Disallow: Googlebot braucht CSS/JS zum Rendern und
         // /_next/image für Google Images. Kein /newsletter/-Disallow: die
         // Seiten tragen noindex (Layout-Metadata) — das Signal wirkt nur,

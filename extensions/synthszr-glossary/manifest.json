@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Synthszr Lexikon",
+  "short_name": "Synthszr",
+  "version": "1.0.0",
+  "description": "Erkennt und erklärt AI- und Tech-Begriffe aus dem Synthszr Lexikon direkt auf jeder Webseite — ohne Seiten-Layout oder DOM zu verändern.",
+  "permissions": ["storage", "alarms", "activeTab"],
+  "host_permissions": [
+    "https://www.synthszr.com/*",
+    "https://synthszr.vercel.app/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Synthszr Lexikon",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

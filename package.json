@@ -31,7 +31,8 @@
     "takes:measure": "tsx scripts/measure-takes.ts",
     "wrapup:research-dry": "tsx scripts/wrapup-research-dry.ts",
     "agents:house": "tsx scripts/house-agent.ts",
-    "moltbook:post": "tsx scripts/moltbook-post.ts"
+    "moltbook:post": "tsx scripts/moltbook-post.ts",
+    "ext:build": "node extensions/synthszr-glossary/build.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.46",
