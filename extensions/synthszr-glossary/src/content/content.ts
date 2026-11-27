@@ -17,7 +17,7 @@ import {
   type SupportedLang,
   type TermDetailResponse,
 } from '../shared/types'
-import { GlossaryMarkerOverlay, MARKER_CANVAS_ID } from '../ui/marker-overlay'
+import { GlossaryMarkerOverlay, MARKER_LAYER_ID } from '../ui/marker-overlay'
 import { GlossaryPopoverController } from '../ui/popover'
 
 const ext = getExtensionApi()
@@ -67,7 +67,7 @@ const FORBIDDEN_ANCESTOR_SELECTOR = [
   '.ProseMirror',
   '.tiptap',
   'synthszr-glossary-host',
-  `#${MARKER_CANVAS_ID}`,
+  `#${MARKER_LAYER_ID}`,
 ].join(', ')
 
 const FORBIDDEN_TAGS = new Set([
@@ -215,6 +215,17 @@ function reportPageState(count: number, paused: boolean): void {
   void ext.runtime
     .sendMessage({ type: 'REPORT_PAGE_STATE', count, paused } satisfies BackgroundRequest)
     .catch(() => undefined)
+}
+
+function isInsideFixedContainer(el: Element | null): boolean {
+  let cur: Element | null = el
+  let hops = 0
+  while (cur && cur !== document.body && cur !== document.documentElement && hops < 12) {
+    if (window.getComputedStyle(cur).position === 'fixed') return true
+    cur = cur.parentElement
+    hops++
+  }
+  return false
 }
 
 function clearHighlights(): void {
@@ -423,6 +434,7 @@ async function scanAndHighlight(): Promise<void> {
     for (let i = 0; i < pending.length && ranges.length < MAX_HIGHLIGHTS_PER_PAGE; i++) {
       const { node, matches } = pending[i]
       if (!node.isConnected) continue
+      if (isInsideFixedContainer(node.parentElement)) continue
 
       const entries: HitEntry[] = []
       const nodeLen = node.nodeValue?.length ?? 0
@@ -505,7 +517,7 @@ function setupListeners(): void {
             const added = m.addedNodes[j]
             if (
               added instanceof Element &&
-              (added.tagName === 'SYNTHSZR-GLOSSARY-HOST' || added.id === MARKER_CANVAS_ID)
+              (added.tagName === 'SYNTHSZR-GLOSSARY-HOST' || added.id === MARKER_LAYER_ID)
             ) {
               continue
             }
