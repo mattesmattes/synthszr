@@ -90,6 +90,25 @@ function main() {
     fail(`Could not locate generated .xcodeproj inside ${SAFARI_DIR}`)
   }
 
+  // Use Safari MV3 non-persistent event page instead of service_worker to prevent WebKit cold-wake IPC hangs
+  const safariManifestPath = findFileRecursive(
+    SAFARI_DIR,
+    (entry, full) =>
+      entry.isFile() &&
+      entry.name === 'manifest.json' &&
+      full.includes('Resources'),
+  )
+  if (!safariManifestPath) {
+    fail(`Could not locate Safari Resources/manifest.json inside ${SAFARI_DIR}`)
+  }
+  const safariManifest = JSON.parse(fs.readFileSync(safariManifestPath, 'utf8'))
+  safariManifest.background = {
+    scripts: ['background/service-worker.js'],
+    persistent: false,
+  }
+  fs.writeFileSync(safariManifestPath, `${JSON.stringify(safariManifest, null, 2)}\n`)
+  console.log(`[Safari Build] Patched Safari manifest background -> non-persistent scripts (${safariManifestPath})`)
+
   const scheme = resolveMacOsScheme(xcodeproj)
   console.log(`[Safari Build] 3/3 Building macOS app scheme "${scheme}" via xcodebuild...`)
 

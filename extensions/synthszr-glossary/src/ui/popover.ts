@@ -381,7 +381,8 @@ const LABELS = {
     brand: 'LEXIKON',
     matchedAs: 'Im Text als',
     loading: 'Lade vollständigen Eintrag…',
-    offlineFallback: 'Detailansicht offline nicht verfügbar.',
+    offlineFallback: 'Detailansicht konnte nicht geladen werden.',
+    retry: 'Erneut laden',
     related: 'Verwandte Begriffe',
     pauseSite: 'Auf dieser Site pausieren',
     openFull: 'Im Lexikon öffnen ↗',
@@ -391,7 +392,8 @@ const LABELS = {
     brand: 'GLOSSARY',
     matchedAs: 'Matched as',
     loading: 'Loading full entry…',
-    offlineFallback: 'Full entry unavailable offline.',
+    offlineFallback: 'Could not load full entry.',
+    retry: 'Retry',
     related: 'Related terms',
     pauseSite: 'Pause on this site',
     openFull: 'Open in glossary ↗',
@@ -716,7 +718,30 @@ export class GlossaryPopoverController {
       const err = document.createElement('div')
       err.className = 'sg-status'
       err.textContent = l.offlineFallback
-      detailContainer.appendChild(err)
+      const retryBtn = document.createElement('button')
+      retryBtn.type = 'button'
+      retryBtn.className = 'sg-chip'
+      retryBtn.textContent = l.retry
+      retryBtn.addEventListener('click', () => {
+        detailContainer.replaceChildren()
+        const loadingEl = document.createElement('div')
+        loadingEl.className = 'sg-status'
+        loadingEl.textContent = l.loading
+        detailContainer.appendChild(loadingEl)
+        void this.loadTermDetail(
+          slug,
+          lang,
+          requestToken,
+          illustrationWrap,
+          illustrationCanvas,
+          titleEl,
+          summaryEl,
+          detailContainer,
+          ctaEl,
+          anchorRect,
+        )
+      })
+      detailContainer.append(err, retryBtn)
     }
   }
 

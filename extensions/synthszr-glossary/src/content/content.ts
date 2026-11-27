@@ -17,9 +17,11 @@ import {
   type SupportedLang,
   type TermDetailResponse,
 } from '../shared/types'
+import { GlossaryMarkerOverlay, MARKER_CANVAS_ID } from '../ui/marker-overlay'
 import { GlossaryPopoverController } from '../ui/popover'
 
 const ext = getExtensionApi()
+const API_BASE = 'https://www.synthszr.com'
 
 interface HitEntry {
   range: Range
@@ -34,8 +36,6 @@ interface PendingNodeMatches {
   matches: GlossaryMatch[]
 }
 
-const HIGHLIGHT_UNDERLINE = 'synthszr-glossary'
-const HIGHLIGHT_BG = 'synthszr-glossary-bg'
 const MAX_HIGHLIGHTS_PER_PAGE = 600
 const FRAME_BUDGET_MS = 8
 
@@ -67,6 +67,7 @@ const FORBIDDEN_ANCESTOR_SELECTOR = [
   '.ProseMirror',
   '.tiptap',
   'synthszr-glossary-host',
+  `#${MARKER_CANVAS_ID}`,
 ].join(', ')
 
 const FORBIDDEN_TAGS = new Set([
@@ -93,6 +94,7 @@ const FORBIDDEN_TAGS = new Set([
 ])
 
 const matcherCache = new Map<SupportedLang, { version: string; matcher: CompiledGlossaryMatcher }>()
+const markerOverlay = new GlossaryMarkerOverlay()
 
 let currentSettings: ExtensionSettings = DEFAULT_SETTINGS
 let activeLang: SupportedLang = 'en'
@@ -102,21 +104,86 @@ let mutationTimer: number | null = null
 let hoverRafPending = false
 let lastPointer = { x: 0, y: 0 }
 
-async function sendBg<T>(msg: BackgroundRequest): Promise<T> {
-  const res = (await ext.runtime.sendMessage<BackgroundResponse<T>>(msg)) as
-    | BackgroundResponse<T>
-    | undefined
-  if (!res || !res.ok) {
-    throw new Error(res?.error || 'Synthszr background service unavailable')
+async function fetchWithTimeout(url: string, timeoutMs = 6500): Promise<Response> {
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { signal: controller.signal })
+  } finally {
+    window.clearTimeout(timer)
   }
-  return res.data
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  const chunkSize = 0x8000
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const slice = bytes.subarray(i, i + chunkSize)
+    binary += String.fromCharCode(...slice)
+  }
+  return btoa(binary)
+}
+
+async function sendBgOnce<T>(msg: BackgroundRequest, timeoutMs: number): Promise<T> {
+  let timerId: number | null = null
+  try {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timerId = window.setTimeout(() => reject(new Error('Background IPC timeout')), timeoutMs)
+    })
+    const res = (await Promise.race([
+      ext.runtime.sendMessage<BackgroundResponse<T>>(msg),
+      timeoutPromise,
+    ])) as BackgroundResponse<T> | undefined
+    if (!res || !res.ok) {
+      throw new Error(res?.error || 'Synthszr background service unavailable')
+    }
+    return res.data
+  } finally {
+    if (timerId !== null) window.clearTimeout(timerId)
+  }
+}
+
+async function sendBg<T>(msg: BackgroundRequest, timeoutMs = 4500): Promise<T> {
+  try {
+    return await sendBgOnce<T>(msg, timeoutMs)
+  } catch (firstErr) {
+    await new Promise((resolve) => window.setTimeout(resolve, 200))
+    try {
+      return await sendBgOnce<T>(msg, timeoutMs)
+    } catch {
+      throw firstErr
+    }
+  }
+}
+
+async function requestTermDetail(slug: string, lang: SupportedLang): Promise<TermDetailResponse> {
+  try {
+    return await sendBg<TermDetailResponse>({ type: 'GET_TERM_DETAIL', slug, lang })
+  } catch {
+    const res = await fetchWithTimeout(
+      `${API_BASE}/api/glossary/term/${encodeURIComponent(slug)}?lang=${lang}`,
+    )
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return (await res.json()) as TermDetailResponse
+  }
+}
+
+async function requestTermIllustration(slug: string): Promise<{ base64: string }> {
+  try {
+    return await sendBg<{ base64: string }>({ type: 'GET_TERM_ILLUSTRATION', slug })
+  } catch {
+    const res = await fetchWithTimeout(
+      `${API_BASE}/api/glossary/term/${encodeURIComponent(slug)}/illustration`,
+    )
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return { base64: arrayBufferToBase64(await res.arrayBuffer()) }
+  }
 }
 
 const popover = new GlossaryPopoverController({
-  onRequestDetail: (slug, lang) =>
-    sendBg<TermDetailResponse>({ type: 'GET_TERM_DETAIL', slug, lang }),
-  onRequestIllustration: (slug) =>
-    sendBg<{ base64: string }>({ type: 'GET_TERM_ILLUSTRATION', slug }),
+  onRequestDetail: requestTermDetail,
+  onRequestIllustration: requestTermIllustration,
   onPauseDomain: async (hostname) => {
     const clean = hostname.toLowerCase()
     if (!currentSettings.excludedDomains.includes(clean)) {
@@ -124,7 +191,7 @@ const popover = new GlossaryPopoverController({
         ...currentSettings,
         excludedDomains: [...currentSettings.excludedDomains, clean],
       }
-      await ext.storage.sync.set({ [STORAGE_KEYS.SETTINGS]: next })
+      await ext.storage.sync.set({ [STORAGE_KEYS.SETTINGS]: next }).catch(() => undefined)
     }
   },
 })
@@ -153,8 +220,7 @@ function reportPageState(count: number, paused: boolean): void {
 function clearHighlights(): void {
   scanGeneration++
   hitMap = new WeakMap<Text, HitEntry[]>()
-  CSS.highlights?.delete(HIGHLIGHT_UNDERLINE)
-  CSS.highlights?.delete(HIGHLIGHT_BG)
+  markerOverlay.clear()
   document.documentElement.style.cursor = ''
 }
 
@@ -231,16 +297,24 @@ function hitTestPoint(x: number, y: number): { hit: HitEntry; rect: DOMRect } | 
 
 async function getMatcherForLang(lang: SupportedLang): Promise<CompiledGlossaryMatcher> {
   const key = lang === 'de' ? STORAGE_KEYS.INDEX_DE : STORAGE_KEYS.INDEX_EN
-  const stored = await ext.storage.local.get<Record<string, StoredGlossaryCache>>([key])
-  let index = stored[key]
+  const stored = await ext.storage.local
+    .get<Record<string, StoredGlossaryCache>>([key])
+    .catch(() => ({}) as Record<string, StoredGlossaryCache>)
+  let index: StoredGlossaryCache | undefined = stored[key]
 
   if (!index || !Array.isArray(index.items) || index.items.length === 0) {
-    await sendBg<{ version: string; count: number }>({
-      type: 'ENSURE_GLOSSARY_INDEX',
-      lang,
-    })
-    const refreshed = await ext.storage.local.get<Record<string, StoredGlossaryCache>>([key])
-    index = refreshed[key]
+    try {
+      await sendBg<{ version: string; count: number }>({
+        type: 'ENSURE_GLOSSARY_INDEX',
+        lang,
+      })
+      const refreshed = await ext.storage.local
+        .get<Record<string, StoredGlossaryCache>>([key])
+        .catch(() => ({}) as Record<string, StoredGlossaryCache>)
+      index = refreshed[key]
+    } catch {
+      // Fallback to direct CORS fetch if background IPC stalled
+    }
   } else {
     const ageMs = Date.now() - (index.fetchedAt ?? 0)
     if (ageMs > 6 * 60 * 60 * 1000) {
@@ -249,7 +323,27 @@ async function getMatcherForLang(lang: SupportedLang): Promise<CompiledGlossaryM
   }
 
   if (!index || !Array.isArray(index.items) || index.items.length === 0) {
-    throw new Error(`Glossary index unavailable for ${lang}`)
+    const res = await fetchWithTimeout(`${API_BASE}/api/glossary/extension-index?lang=${lang}`, 8000)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const payload = (await res.json()) as {
+      version: string
+      lang: SupportedLang
+      count: number
+      generatedAt: string
+      items: StoredGlossaryCache['items']
+    }
+    if (!Array.isArray(payload.items) || payload.items.length === 0) {
+      throw new Error(`Glossary index unavailable for ${lang}`)
+    }
+    index = {
+      version: payload.version,
+      lang: payload.lang,
+      count: payload.count,
+      generatedAt: payload.generatedAt,
+      fetchedAt: Date.now(),
+      items: payload.items,
+    }
+    await ext.storage.local.set({ [key]: index }).catch(() => undefined)
   }
 
   const cached = matcherCache.get(lang)
@@ -264,7 +358,6 @@ async function getMatcherForLang(lang: SupportedLang): Promise<CompiledGlossaryM
 async function scanAndHighlight(): Promise<void> {
   const gen = ++scanGeneration
 
-  if (!CSS.highlights) return
   if (
     !currentSettings.enabled ||
     isGlossarySelfPage() ||
@@ -322,7 +415,7 @@ async function scanAndHighlight(): Promise<void> {
       }
     }
 
-    // Pass 2: Register non-mutating CSS Custom Highlight ranges
+    // Pass 2: Collect non-mutating Range highlights & render 6px overlapping neon-lime marker canvas
     const isAiPageContext = unambiguousSlugs.size >= 1
     const nextHitMap = new WeakMap<Text, HitEntry[]>()
     const ranges: Range[] = []
@@ -360,19 +453,7 @@ async function scanAndHighlight(): Promise<void> {
     if (gen !== scanGeneration) return
 
     hitMap = nextHitMap
-    const activeHighlightName =
-      currentSettings.highlightStyle === 'subtle-bg' ? HIGHLIGHT_BG : HIGHLIGHT_UNDERLINE
-    const inactiveHighlightName =
-      activeHighlightName === HIGHLIGHT_BG ? HIGHLIGHT_UNDERLINE : HIGHLIGHT_BG
-
-    CSS.highlights?.delete(inactiveHighlightName)
-    if (ranges.length > 0) {
-      const highlight = new Highlight(...ranges)
-      highlight.priority = 1
-      CSS.highlights?.set(activeHighlightName, highlight)
-    } else {
-      CSS.highlights?.delete(activeHighlightName)
-    }
+    markerOverlay.setRanges(ranges, currentSettings.highlightStyle)
     reportPageState(ranges.length, false)
   }
 
@@ -422,7 +503,10 @@ function setupListeners(): void {
         if (m.addedNodes.length > 0) {
           for (let j = 0; j < m.addedNodes.length; j++) {
             const added = m.addedNodes[j]
-            if (added instanceof Element && added.tagName === 'SYNTHSZR-GLOSSARY-HOST') {
+            if (
+              added instanceof Element &&
+              (added.tagName === 'SYNTHSZR-GLOSSARY-HOST' || added.id === MARKER_CANVAS_ID)
+            ) {
               continue
             }
             hasRelevantChange = true
@@ -453,14 +537,17 @@ function setupListeners(): void {
 }
 
 async function init(): Promise<void> {
-  if (!CSS.highlights) return
   if (document.contentType && document.contentType !== 'text/html') return
 
-  const stored = await ext.storage.sync.get<Record<string, ExtensionSettings>>([
-    STORAGE_KEYS.SETTINGS,
-  ])
-  if (stored[STORAGE_KEYS.SETTINGS]) {
-    currentSettings = { ...DEFAULT_SETTINGS, ...stored[STORAGE_KEYS.SETTINGS] }
+  try {
+    const stored = await ext.storage.sync.get<Record<string, ExtensionSettings>>([
+      STORAGE_KEYS.SETTINGS,
+    ])
+    if (stored[STORAGE_KEYS.SETTINGS]) {
+      currentSettings = { ...DEFAULT_SETTINGS, ...stored[STORAGE_KEYS.SETTINGS] }
+    }
+  } catch {
+    // Use defaults if storage.sync is restricted
   }
 
   setupListeners()

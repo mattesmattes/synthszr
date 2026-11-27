@@ -1,17 +1,1 @@
-::highlight(synthszr-glossary) {
-  background-color: transparent;
-  text-decoration-line: underline;
-  text-decoration-style: solid;
-  text-decoration-color: #ccff00;
-  text-decoration-thickness: 3px;
-  text-underline-offset: 2px;
-}
-
-::highlight(synthszr-glossary-bg) {
-  background-color: rgba(204, 255, 0, 0.35);
-  text-decoration-line: underline;
-  text-decoration-style: solid;
-  text-decoration-color: #ccff00;
-  text-decoration-thickness: 3px;
-  text-underline-offset: 2px;
-}
+/* Markers are rendered via GlossaryMarkerOverlay canvas for 6px baseline overlap behind glyphs. */

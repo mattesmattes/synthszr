@@ -27,18 +27,37 @@ function indexStorageKey(lang: SupportedLang): string {
   return lang === 'de' ? STORAGE_KEYS.INDEX_DE : STORAGE_KEYS.INDEX_EN
 }
 
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = 8000,
+): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function ensureInitialized(): Promise<void> {
-  const stored = await ext.storage.sync.get([STORAGE_KEYS.SETTINGS])
+  const syncStorage = ext.storage.sync ?? ext.storage.local
+  const stored = await syncStorage.get([STORAGE_KEYS.SETTINGS]).catch(() => ({} as Record<string, unknown>))
   if (!stored[STORAGE_KEYS.SETTINGS]) {
-    await ext.storage.sync.set({ [STORAGE_KEYS.SETTINGS]: DEFAULT_SETTINGS })
+    await syncStorage.set({ [STORAGE_KEYS.SETTINGS]: DEFAULT_SETTINGS }).catch(() => undefined)
   }
 
-  const existingAlarm = await ext.alarms.get(ALARM_NAME)
-  if (!existingAlarm) {
-    await ext.alarms.create(ALARM_NAME, {
-      delayInMinutes: 1,
-      periodInMinutes: SYNC_INTERVAL_MINUTES,
-    })
+  if (ext.alarms?.get && ext.alarms?.create) {
+    const existingAlarm = await ext.alarms.get(ALARM_NAME).catch(() => undefined)
+    if (!existingAlarm) {
+      await Promise.resolve(
+        ext.alarms.create(ALARM_NAME, {
+          delayInMinutes: 1,
+          periodInMinutes: SYNC_INTERVAL_MINUTES,
+        }),
+      ).catch(() => undefined)
+    }
   }
 }
 
@@ -84,10 +103,10 @@ async function syncGlossaryIndex(
       headers['If-None-Match'] = `"${cached.version}"`
     }
 
-    const res = await fetch(`${API_BASE}/api/glossary/extension-index?lang=${lang}`, {
+    const res = await fetchWithTimeout(`${API_BASE}/api/glossary/extension-index?lang=${lang}`, {
       headers,
       cache: 'no-store',
-    })
+    }, 15000)
 
     if (res.status === 304 && cached) {
       const refreshed: StoredGlossaryCache = { ...cached, fetchedAt: Date.now() }
@@ -167,7 +186,9 @@ async function getTermDetail(slug: string, lang: SupportedLang): Promise<TermDet
     return hit.data
   }
 
-  const res = await fetch(`${API_BASE}/api/glossary/term/${encodeURIComponent(slug)}?lang=${lang}`)
+  const res = await fetchWithTimeout(
+    `${API_BASE}/api/glossary/term/${encodeURIComponent(slug)}?lang=${lang}`,
+  )
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`)
   }
@@ -202,7 +223,9 @@ async function getTermIllustration(slug: string): Promise<{ base64: string }> {
     return { base64: hit.base64 }
   }
 
-  const res = await fetch(`${API_BASE}/api/glossary/term/${encodeURIComponent(slug)}/illustration`)
+  const res = await fetchWithTimeout(
+    `${API_BASE}/api/glossary/term/${encodeURIComponent(slug)}/illustration`,
+  )
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`)
   }
@@ -237,18 +260,18 @@ async function getStatus(): Promise<ExtensionStatus> {
   }
 }
 
-ext.runtime.onInstalled.addListener(() => {
+ext.runtime.onInstalled?.addListener(() => {
   void (async () => {
     await ensureInitialized()
     await Promise.allSettled([syncGlossaryIndex('de'), syncGlossaryIndex('en')])
   })()
 })
 
-ext.runtime.onStartup.addListener(() => {
+ext.runtime.onStartup?.addListener(() => {
   void ensureInitialized()
 })
 
-ext.alarms.onAlarm.addListener((alarm) => {
+ext.alarms?.onAlarm?.addListener((alarm) => {
   if (alarm.name !== ALARM_NAME) return
   void Promise.allSettled([syncGlossaryIndex('de'), syncGlossaryIndex('en')])
 })
