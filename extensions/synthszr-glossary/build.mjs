@@ -57,6 +57,7 @@ async function buildExtension() {
 
   // 2. Copy static assets
   fs.copyFileSync(MANIFEST_PATH, path.join(DIST_DIR, 'manifest.json'))
+  fs.copyFileSync(path.join(__dirname, 'src/content/highlight.css'), path.join(DIST_DIR, 'content/highlight.css'))
   fs.copyFileSync(path.join(__dirname, 'src/popup/popup.html'), path.join(DIST_DIR, 'popup/popup.html'))
   fs.copyFileSync(path.join(__dirname, 'src/popup/popup.css'), path.join(DIST_DIR, 'popup/popup.css'))
 

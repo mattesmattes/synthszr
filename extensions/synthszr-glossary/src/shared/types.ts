@@ -45,9 +45,6 @@ export interface ExtensionSettings {
 }
 
 export const DEFAULT_EXCLUDED_DOMAINS: string[] = [
-  'synthszr.com',
-  'www.synthszr.com',
-  'synthszr.vercel.app',
   'localhost',
   '127.0.0.1',
   'mail.google.com',
@@ -67,7 +64,7 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
 }
 
 export const STORAGE_KEYS = {
-  SETTINGS: 'synthszr_settings_v1',
+  SETTINGS: 'synthszr_settings_v2',
   INDEX_DE: 'synthszr_index_de_v1',
   INDEX_EN: 'synthszr_index_en_v1',
   LAST_SYNC_ERROR: 'synthszr_last_sync_error_v1',
@@ -75,6 +72,8 @@ export const STORAGE_KEYS = {
 
 export type BackgroundRequest =
   | { type: 'GET_GLOSSARY_INDEX'; lang: SupportedLang }
+  | { type: 'ENSURE_GLOSSARY_INDEX'; lang: SupportedLang }
+  | { type: 'REPORT_PAGE_STATE'; count: number; paused: boolean }
   | { type: 'SYNC_NOW'; lang?: SupportedLang }
   | { type: 'GET_TERM_DETAIL'; slug: string; lang: SupportedLang }
   | { type: 'GET_STATUS' }

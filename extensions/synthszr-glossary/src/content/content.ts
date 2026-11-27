@@ -13,7 +13,6 @@ import {
   type BackgroundResponse,
   type ExtensionGlossaryTerm,
   type ExtensionSettings,
-  type HighlightStyle,
   type StoredGlossaryCache,
   type SupportedLang,
   type TermDetailResponse,
@@ -35,8 +34,8 @@ interface PendingNodeMatches {
   matches: GlossaryMatch[]
 }
 
-const HIGHLIGHT_NAME = 'synthszr-glossary'
-const STYLE_ELEMENT_ID = 'synthszr-glossary-highlight-css'
+const HIGHLIGHT_UNDERLINE = 'synthszr-glossary'
+const HIGHLIGHT_BG = 'synthszr-glossary-bg'
 const MAX_HIGHLIGHTS_PER_PAGE = 600
 const FRAME_BUDGET_MS = 8
 
@@ -136,46 +135,24 @@ function isDomainExcluded(hostname: string, excluded: string[]): boolean {
   })
 }
 
-function injectHighlightStyles(styleMode: HighlightStyle): void {
-  let styleEl = document.getElementById(STYLE_ELEMENT_ID) as HTMLStyleElement | null
-  if (!styleEl) {
-    styleEl = document.createElement('style')
-    styleEl.id = STYLE_ELEMENT_ID
-    ;(document.head ?? document.documentElement).appendChild(styleEl)
-  }
-
-  const css =
-    styleMode === 'subtle-bg'
-      ? `
-::highlight(${HIGHLIGHT_NAME}) {
-  background-color: rgba(204, 255, 0, 0.30);
-  text-decoration-line: underline;
-  text-decoration-style: solid;
-  text-decoration-color: rgba(180, 145, 0, 0.85);
-  text-decoration-thickness: 1.5px;
-  text-underline-offset: 3px;
+function isGlossarySelfPage(): boolean {
+  const host = window.location.hostname.toLowerCase()
+  const isSynthszr =
+    host === 'synthszr.com' || host === 'www.synthszr.com' || host === 'synthszr.vercel.app'
+  return isSynthszr && /^\/(de|en)\/glossary(\/|$)/.test(window.location.pathname)
 }
-`
-      : `
-::highlight(${HIGHLIGHT_NAME}) {
-  background-color: rgba(250, 215, 20, 0.14);
-  text-decoration-line: underline;
-  text-decoration-style: solid;
-  text-decoration-color: rgba(224, 180, 0, 0.92);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 3px;
-}
-`
 
-  if (styleEl.textContent !== css) {
-    styleEl.textContent = css
-  }
+function reportPageState(count: number, paused: boolean): void {
+  void ext.runtime
+    .sendMessage({ type: 'REPORT_PAGE_STATE', count, paused } satisfies BackgroundRequest)
+    .catch(() => undefined)
 }
 
 function clearHighlights(): void {
   scanGeneration++
   hitMap = new WeakMap<Text, HitEntry[]>()
-  CSS.highlights?.delete(HIGHLIGHT_NAME)
+  CSS.highlights?.delete(HIGHLIGHT_UNDERLINE)
+  CSS.highlights?.delete(HIGHLIGHT_BG)
   document.documentElement.style.cursor = ''
 }
 
@@ -251,7 +228,28 @@ function hitTestPoint(x: number, y: number): { hit: HitEntry; rect: DOMRect } | 
 }
 
 async function getMatcherForLang(lang: SupportedLang): Promise<CompiledGlossaryMatcher> {
-  const index = await sendBg<StoredGlossaryCache>({ type: 'GET_GLOSSARY_INDEX', lang })
+  const key = lang === 'de' ? STORAGE_KEYS.INDEX_DE : STORAGE_KEYS.INDEX_EN
+  const stored = await ext.storage.local.get<Record<string, StoredGlossaryCache>>([key])
+  let index = stored[key]
+
+  if (!index || !Array.isArray(index.items) || index.items.length === 0) {
+    await sendBg<{ version: string; count: number }>({
+      type: 'ENSURE_GLOSSARY_INDEX',
+      lang,
+    })
+    const refreshed = await ext.storage.local.get<Record<string, StoredGlossaryCache>>([key])
+    index = refreshed[key]
+  } else {
+    const ageMs = Date.now() - (index.fetchedAt ?? 0)
+    if (ageMs > 6 * 60 * 60 * 1000) {
+      void sendBg({ type: 'ENSURE_GLOSSARY_INDEX', lang }).catch(() => undefined)
+    }
+  }
+
+  if (!index || !Array.isArray(index.items) || index.items.length === 0) {
+    throw new Error(`Glossary index unavailable for ${lang}`)
+  }
+
   const cached = matcherCache.get(lang)
   if (cached && cached.version === index.version) {
     return cached.matcher
@@ -267,14 +265,14 @@ async function scanAndHighlight(): Promise<void> {
   if (!CSS.highlights) return
   if (
     !currentSettings.enabled ||
+    isGlossarySelfPage() ||
     isDomainExcluded(window.location.hostname, currentSettings.excludedDomains)
   ) {
     clearHighlights()
     popover.close()
+    reportPageState(0, true)
     return
   }
-
-  injectHighlightStyles(currentSettings.highlightStyle)
 
   const bodyTextSample = document.body?.textContent?.slice(0, 3000) ?? ''
   activeLang =
@@ -285,7 +283,8 @@ async function scanAndHighlight(): Promise<void> {
   let matcher: CompiledGlossaryMatcher
   try {
     matcher = await getMatcherForLang(activeLang)
-  } catch {
+  } catch (err) {
+    console.warn('[Synthszr Lexikon] Glossary index load failed:', err)
     return
   }
 
@@ -322,7 +321,7 @@ async function scanAndHighlight(): Promise<void> {
     }
 
     // Pass 2: Register non-mutating CSS Custom Highlight ranges
-    const isAiPageContext = unambiguousSlugs.size >= 2
+    const isAiPageContext = unambiguousSlugs.size >= 1
     const nextHitMap = new WeakMap<Text, HitEntry[]>()
     const ranges: Range[] = []
 
@@ -359,13 +358,20 @@ async function scanAndHighlight(): Promise<void> {
     if (gen !== scanGeneration) return
 
     hitMap = nextHitMap
+    const activeHighlightName =
+      currentSettings.highlightStyle === 'subtle-bg' ? HIGHLIGHT_BG : HIGHLIGHT_UNDERLINE
+    const inactiveHighlightName =
+      activeHighlightName === HIGHLIGHT_BG ? HIGHLIGHT_UNDERLINE : HIGHLIGHT_BG
+
+    CSS.highlights?.delete(inactiveHighlightName)
     if (ranges.length > 0) {
       const highlight = new Highlight(...ranges)
       highlight.priority = 1
-      CSS.highlights?.set(HIGHLIGHT_NAME, highlight)
+      CSS.highlights?.set(activeHighlightName, highlight)
     } else {
-      CSS.highlights?.delete(HIGHLIGHT_NAME)
+      CSS.highlights?.delete(activeHighlightName)
     }
+    reportPageState(ranges.length, false)
   }
 
   scheduleIdle(processChunk)
@@ -414,10 +420,7 @@ function setupListeners(): void {
         if (m.addedNodes.length > 0) {
           for (let j = 0; j < m.addedNodes.length; j++) {
             const added = m.addedNodes[j]
-            if (
-              added instanceof Element &&
-              (added.tagName === 'SYNTHSZR-GLOSSARY-HOST' || added.id === STYLE_ELEMENT_ID)
-            ) {
+            if (added instanceof Element && added.tagName === 'SYNTHSZR-GLOSSARY-HOST') {
               continue
             }
             hasRelevantChange = true

@@ -212,7 +212,7 @@ ext.alarms.onAlarm.addListener((alarm) => {
   void Promise.allSettled([syncGlossaryIndex('de'), syncGlossaryIndex('en')])
 })
 
-addAsyncMessageListener((rawMessage): Promise<BackgroundResponse> | undefined => {
+addAsyncMessageListener((rawMessage, sender): Promise<BackgroundResponse> | undefined => {
   const msg = rawMessage as BackgroundRequest | undefined
   if (!msg || typeof msg.type !== 'string') return undefined
 
@@ -222,6 +222,32 @@ addAsyncMessageListener((rawMessage): Promise<BackgroundResponse> | undefined =>
         case 'GET_GLOSSARY_INDEX': {
           const data = await getGlossaryIndex(msg.lang === 'en' ? 'en' : 'de')
           return { ok: true, data }
+        }
+        case 'ENSURE_GLOSSARY_INDEX': {
+          const data = await getGlossaryIndex(msg.lang === 'en' ? 'en' : 'de')
+          return { ok: true, data: { version: data.version, count: data.count } }
+        }
+        case 'REPORT_PAGE_STATE': {
+          const tabId = sender.tab?.id
+          if (tabId !== undefined && ext.action?.setBadgeText) {
+            try {
+              if (msg.paused) {
+                await ext.action.setBadgeText({ tabId, text: 'OFF' })
+                await ext.action.setBadgeBackgroundColor?.({ tabId, color: '#71717a' })
+                await ext.action.setBadgeTextColor?.({ tabId, color: '#ffffff' })
+              } else if (msg.count > 0) {
+                const label = msg.count > 99 ? '99+' : String(msg.count)
+                await ext.action.setBadgeText({ tabId, text: label })
+                await ext.action.setBadgeBackgroundColor?.({ tabId, color: '#ccff00' })
+                await ext.action.setBadgeTextColor?.({ tabId, color: '#111111' })
+              } else {
+                await ext.action.setBadgeText({ tabId, text: '' })
+              }
+            } catch {
+              // Ignore badge errors on browsers without full action badge styling support
+            }
+          }
+          return { ok: true, data: null }
         }
         case 'SYNC_NOW': {
           if (msg.lang) {

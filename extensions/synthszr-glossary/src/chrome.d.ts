@@ -66,6 +66,14 @@ declare namespace chrome {
     function query(queryInfo: { active?: boolean; currentWindow?: boolean }): Promise<Tab[]>
     function create(createProperties: { url: string }): Promise<Tab>
   }
+
+  const action:
+    | {
+        setBadgeText(details: { text: string; tabId?: number }): Promise<void> | void
+        setBadgeBackgroundColor?(details: { color: string; tabId?: number }): Promise<void> | void
+        setBadgeTextColor?(details: { color: string; tabId?: number }): Promise<void> | void
+      }
+    | undefined
 }
 
 declare var browser: typeof chrome | undefined

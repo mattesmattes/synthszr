@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Synthszr Lexikon",
   "short_name": "Synthszr",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Erkennt und erklärt AI- und Tech-Begriffe aus dem Synthszr Lexikon direkt auf jeder Webseite — ohne Seiten-Layout oder DOM zu verändern.",
   "permissions": ["storage", "alarms", "activeTab"],
   "host_permissions": [
@@ -15,6 +15,7 @@
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*"],
+      "css": ["content/highlight.css"],
       "js": ["content/content.js"],
       "run_at": "document_idle"
     }

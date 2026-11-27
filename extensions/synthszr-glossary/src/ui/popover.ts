@@ -379,9 +379,22 @@ export class GlossaryPopoverController {
     host.setAttribute('data-synthszr-ui', 'true')
     const shadow = host.attachShadow({ mode: 'closed' })
 
-    const style = document.createElement('style')
-    style.textContent = POPOVER_CSS
-    shadow.appendChild(style)
+    let styledViaSheet = false
+    if ('adoptedStyleSheets' in shadow && typeof CSSStyleSheet !== 'undefined') {
+      try {
+        const sheet = new CSSStyleSheet()
+        sheet.replaceSync(POPOVER_CSS)
+        shadow.adoptedStyleSheets = [sheet]
+        styledViaSheet = true
+      } catch {
+        styledViaSheet = false
+      }
+    }
+    if (!styledViaSheet) {
+      const style = document.createElement('style')
+      style.textContent = POPOVER_CSS
+      shadow.appendChild(style)
+    }
 
     const card = document.createElement('div')
     card.className = 'sg-card'
