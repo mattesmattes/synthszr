@@ -94,6 +94,7 @@ const FORBIDDEN_TAGS = new Set([
 ])
 
 const matcherCache = new Map<SupportedLang, { version: string; matcher: CompiledGlossaryMatcher }>()
+const termMapByLang = new Map<SupportedLang, Map<string, ExtensionGlossaryTerm>>()
 const markerOverlay = new GlossaryMarkerOverlay()
 
 let currentSettings: ExtensionSettings = DEFAULT_SETTINGS
@@ -363,6 +364,7 @@ async function getMatcherForLang(lang: SupportedLang): Promise<CompiledGlossaryM
   }
   const matcher = compileGlossaryMatcher(index.items)
   matcherCache.set(lang, { version: index.version, matcher })
+  termMapByLang.set(lang, new Map(index.items.map((item) => [item.s, item])))
   return matcher
 }
 
@@ -466,7 +468,8 @@ async function scanAndHighlight(): Promise<void> {
 
     hitMap = nextHitMap
     markerOverlay.setRanges(ranges, currentSettings.highlightStyle)
-    reportPageState(ranges.length, false)
+    const nativeGlossaryCount = document.querySelectorAll('a[data-glossary-slug]').length
+    reportPageState(ranges.length + nativeGlossaryCount, false)
   }
 
   scheduleIdle(processChunk)
@@ -492,19 +495,54 @@ function setupListeners(): void {
     { passive: true },
   )
 
-  document.addEventListener('click', (e: MouseEvent) => {
-    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return
-    if (popover.isEventInside(e.target)) return
-    if (e.target instanceof Element && e.target.closest('a[href], button, [role="button"]')) {
-      return
-    }
+  document.addEventListener(
+    'click',
+    (e: MouseEvent) => {
+      if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return
+      if (popover.isEventInside(e.target)) return
 
-    const result = hitTestPoint(e.clientX, e.clientY)
-    if (!result) return
+      if (
+        currentSettings.enabled &&
+        !isGlossarySelfPage() &&
+        !isDomainExcluded(window.location.hostname, currentSettings.excludedDomains)
+      ) {
+        const nativeAnchor =
+          e.target instanceof Element
+            ? e.target.closest<HTMLAnchorElement>('a[data-glossary-slug]')
+            : null
+        if (nativeAnchor) {
+          const slug = (nativeAnchor.getAttribute('data-glossary-slug') ?? '').trim()
+          if (/^[a-z0-9-]{1,120}$/.test(slug)) {
+            e.preventDefault()
+            e.stopPropagation()
 
-    e.stopPropagation()
-    popover.open(result.hit.term, result.hit.surface, result.rect, activeLang)
-  })
+            const href = nativeAnchor.getAttribute('href') ?? ''
+            const langMatch = href.match(/^\/(de|en)\/glossary\//)
+            const linkLang: SupportedLang =
+              langMatch?.[1] === 'en' ? 'en' : langMatch?.[1] === 'de' ? 'de' : activeLang
+            const surface = (nativeAnchor.textContent ?? '').trim() || slug
+            const cachedTerm =
+              termMapByLang.get(linkLang)?.get(slug) ??
+              termMapByLang.get(activeLang)?.get(slug) ?? { s: slug, n: surface, d: '' }
+
+            popover.open(cachedTerm, surface, nativeAnchor.getBoundingClientRect(), linkLang)
+            return
+          }
+        }
+      }
+
+      if (e.target instanceof Element && e.target.closest('a[href], button, [role="button"]')) {
+        return
+      }
+
+      const result = hitTestPoint(e.clientX, e.clientY)
+      if (!result) return
+
+      e.stopPropagation()
+      popover.open(result.hit.term, result.hit.surface, result.rect, activeLang)
+    },
+    true,
+  )
 
   if (document.body) {
     const observer = new MutationObserver((mutations) => {
