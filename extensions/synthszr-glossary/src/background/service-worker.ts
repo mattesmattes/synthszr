@@ -16,9 +16,12 @@ const ALARM_NAME = 'synthszr-glossary-sync'
 const SYNC_INTERVAL_MINUTES = 360 // 6 hours
 const DETAIL_CACHE_TTL_MS = 15 * 60 * 1000
 const DETAIL_CACHE_MAX = 120
+const ILLUSTRATION_CACHE_TTL_MS = 30 * 60 * 1000
+const ILLUSTRATION_CACHE_MAX = 60
 
 const inflightIndexSync = new Map<SupportedLang, Promise<StoredGlossaryCache>>()
 const detailCache = new Map<string, { expiresAt: number; data: TermDetailResponse }>()
+const illustrationCache = new Map<string, { expiresAt: number; base64: string }>()
 
 function indexStorageKey(lang: SupportedLang): string {
   return lang === 'de' ? STORAGE_KEYS.INDEX_DE : STORAGE_KEYS.INDEX_EN
@@ -178,6 +181,44 @@ async function getTermDetail(slug: string, lang: SupportedLang): Promise<TermDet
   return data
 }
 
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  const chunkSize = 0x8000
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const slice = bytes.subarray(i, i + chunkSize)
+    binary += String.fromCharCode(...slice)
+  }
+  return btoa(binary)
+}
+
+async function getTermIllustration(slug: string): Promise<{ base64: string }> {
+  if (!/^[a-z0-9-]{1,120}$/.test(slug)) {
+    throw new Error('Invalid glossary slug')
+  }
+
+  const hit = illustrationCache.get(slug)
+  if (hit && hit.expiresAt > Date.now()) {
+    return { base64: hit.base64 }
+  }
+
+  const res = await fetch(`${API_BASE}/api/glossary/term/${encodeURIComponent(slug)}/illustration`)
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`)
+  }
+
+  const base64 = arrayBufferToBase64(await res.arrayBuffer())
+  if (illustrationCache.size >= ILLUSTRATION_CACHE_MAX) {
+    const oldestKey = illustrationCache.keys().next().value
+    if (oldestKey) illustrationCache.delete(oldestKey)
+  }
+  illustrationCache.set(slug, {
+    expiresAt: Date.now() + ILLUSTRATION_CACHE_TTL_MS,
+    base64,
+  })
+  return { base64 }
+}
+
 async function getStatus(): Promise<ExtensionStatus> {
   const stored = await ext.storage.local.get<Record<string, unknown>>([
     STORAGE_KEYS.INDEX_DE,
@@ -260,6 +301,10 @@ addAsyncMessageListener((rawMessage, sender): Promise<BackgroundResponse> | unde
         }
         case 'GET_TERM_DETAIL': {
           const data = await getTermDetail(msg.slug, msg.lang === 'en' ? 'en' : 'de')
+          return { ok: true, data }
+        }
+        case 'GET_TERM_ILLUSTRATION': {
+          const data = await getTermIllustration(msg.slug)
           return { ok: true, data }
         }
         case 'GET_STATUS': {

@@ -115,6 +115,8 @@ async function sendBg<T>(msg: BackgroundRequest): Promise<T> {
 const popover = new GlossaryPopoverController({
   onRequestDetail: (slug, lang) =>
     sendBg<TermDetailResponse>({ type: 'GET_TERM_DETAIL', slug, lang }),
+  onRequestIllustration: (slug) =>
+    sendBg<{ base64: string }>({ type: 'GET_TERM_ILLUSTRATION', slug }),
   onPauseDomain: async (hostname) => {
     const clean = hostname.toLowerCase()
     if (!currentSettings.excludedDomains.includes(clean)) {

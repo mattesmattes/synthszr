@@ -24,6 +24,11 @@ export interface TermDetailRelated {
   canonicalName: string
 }
 
+export interface GlossaryAnimationParams {
+  verfahren: 'korn'
+  region?: [number, number, number, number]
+}
+
 export interface TermDetailResponse {
   slug: string
   lang: SupportedLang
@@ -33,6 +38,9 @@ export interface TermDetailResponse {
   paragraphs: string[]
   relatedTerms: TermDetailRelated[]
   products: TermDetailRelated[]
+  illustrationUrl: string | null
+  illustrationAlt: string | null
+  animationParams: GlossaryAnimationParams | null
   url: string
   updatedAt: string | null
 }
@@ -76,6 +84,7 @@ export type BackgroundRequest =
   | { type: 'REPORT_PAGE_STATE'; count: number; paused: boolean }
   | { type: 'SYNC_NOW'; lang?: SupportedLang }
   | { type: 'GET_TERM_DETAIL'; slug: string; lang: SupportedLang }
+  | { type: 'GET_TERM_ILLUSTRATION'; slug: string }
   | { type: 'GET_STATUS' }
   | { type: 'OPEN_URL'; url: string }
 

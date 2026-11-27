@@ -3,9 +3,11 @@ import type {
   SupportedLang,
   TermDetailResponse,
 } from '../shared/types'
+import { mountDitherIllustration } from './korn-animator'
 
 interface PopoverHandlers {
   onRequestDetail: (slug: string, lang: SupportedLang) => Promise<TermDetailResponse>
+  onRequestIllustration: (slug: string) => Promise<{ base64: string }>
   onPauseDomain: (hostname: string) => Promise<void>
 }
 
@@ -20,7 +22,7 @@ const POPOVER_CSS = `
 
 .sg-card {
   width: min(390px, calc(100vw - 24px));
-  max-height: min(460px, calc(100vh - 24px));
+  max-height: min(540px, calc(100vh - 24px));
   display: flex;
   flex-direction: column;
   background: #ffffff;
@@ -131,6 +133,30 @@ const POPOVER_CSS = `
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.sg-illustration-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4px 0 2px;
+}
+
+.sg-illustration-wrap[hidden] {
+  display: none;
+}
+
+.sg-illustration-canvas {
+  width: 196px;
+  height: 196px;
+  display: block;
+  image-rendering: auto;
+}
+
+@media (prefers-color-scheme: dark) {
+  .sg-illustration-canvas {
+    filter: invert(1) brightness(0.92);
+  }
 }
 
 .sg-title-row {
@@ -337,6 +363,7 @@ export class GlossaryPopoverController {
   private host: HTMLElement | null = null
   private shadow: ShadowRoot | null = null
   private card: HTMLDivElement | null = null
+  private stopIllustration: (() => void) | null = null
   private activeRequestToken = 0
   private readonly handlers: PopoverHandlers
 
@@ -427,6 +454,14 @@ export class GlossaryPopoverController {
     const body = document.createElement('div')
     body.className = 'sg-body'
 
+    const illustrationWrap = document.createElement('div')
+    illustrationWrap.className = 'sg-illustration-wrap'
+    illustrationWrap.hidden = true
+    const illustrationCanvas = document.createElement('canvas')
+    illustrationCanvas.className = 'sg-illustration-canvas'
+    illustrationWrap.appendChild(illustrationCanvas)
+    body.appendChild(illustrationWrap)
+
     const titleRow = document.createElement('div')
     titleRow.className = 'sg-title-row'
 
@@ -501,6 +536,8 @@ export class GlossaryPopoverController {
       term.s,
       lang,
       requestToken,
+      illustrationWrap,
+      illustrationCanvas,
       title,
       summaryEl,
       detailContainer,
@@ -513,6 +550,8 @@ export class GlossaryPopoverController {
     slug: string,
     lang: SupportedLang,
     requestToken: number,
+    illustrationWrap: HTMLElement,
+    illustrationCanvas: HTMLCanvasElement,
     titleEl: HTMLElement,
     summaryEl: HTMLElement,
     detailContainer: HTMLElement,
@@ -530,6 +569,37 @@ export class GlossaryPopoverController {
       }
       if (detail.url && detail.url.startsWith('https://')) {
         ctaEl.href = detail.url
+      }
+
+      if (detail.illustrationUrl) {
+        void (async () => {
+          try {
+            const { base64 } = await this.handlers.onRequestIllustration(slug)
+            if (requestToken !== this.activeRequestToken || !this.host) return
+
+            illustrationCanvas.setAttribute('role', 'img')
+            illustrationCanvas.setAttribute('aria-label', detail.illustrationAlt || detail.canonicalName)
+            illustrationWrap.hidden = false
+            this.refineVerticalPlacement(this.host, anchorRect)
+
+            this.stopIllustration?.()
+            this.stopIllustration = null
+            const cleanup = await mountDitherIllustration(
+              illustrationCanvas,
+              base64,
+              detail.animationParams,
+            )
+            if (requestToken !== this.activeRequestToken || !this.host) {
+              cleanup()
+              return
+            }
+            this.stopIllustration = cleanup
+          } catch {
+            if (requestToken === this.activeRequestToken) {
+              illustrationWrap.hidden = true
+            }
+          }
+        })()
       }
 
       detailContainer.replaceChildren()
@@ -605,6 +675,8 @@ export class GlossaryPopoverController {
 
   close(): void {
     this.activeRequestToken++
+    this.stopIllustration?.()
+    this.stopIllustration = null
     document.removeEventListener('keydown', this.onKeyDown, true)
     document.removeEventListener('pointerdown', this.onOutsidePointerDown, true)
     if (this.host) {

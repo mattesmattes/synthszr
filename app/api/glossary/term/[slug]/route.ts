@@ -58,6 +58,13 @@ export async function GET(
 
     const baseUrl = SITE_URL.replace(/\/$/, '')
     const canonicalUrl = `${baseUrl}/${lang}/glossary/${detail.slug}`
+    const animationParams =
+      detail.animationParams?.verfahren === 'korn'
+        ? {
+            verfahren: 'korn' as const,
+            ...(detail.animationParams.region ? { region: detail.animationParams.region } : {}),
+          }
+        : null
 
     return NextResponse.json(
       {
@@ -75,6 +82,9 @@ export async function GET(
           slug: p.slug,
           canonicalName: p.canonicalName,
         })),
+        illustrationUrl: detail.illustrationUrl ?? null,
+        illustrationAlt: detail.illustrationAlt ?? null,
+        animationParams,
         url: canonicalUrl,
         updatedAt: detail.updatedAt,
       },

@@ -27,6 +27,7 @@ vi.mock('@/lib/rate-limit', () => ({
 
 import { GET as getExtensionIndex } from '@/app/api/glossary/extension-index/route'
 import { GET as getTermDetail } from '@/app/api/glossary/term/[slug]/route'
+import { GET as getTermIllustration } from '@/app/api/glossary/term/[slug]/illustration/route'
 
 describe('Glossary Extension API routes', () => {
   beforeEach(() => {
@@ -104,9 +105,9 @@ describe('Glossary Extension API routes', () => {
           },
         ],
       },
-      illustrationUrl: null,
-      illustrationAlt: null,
-      animationParams: null,
+      illustrationUrl: 'https://abc123.public.blob.vercel-storage.com/glossary/vibe-coding.png',
+      illustrationAlt: 'Dither graphic of vibe coding',
+      animationParams: { verfahren: 'korn', region: [10, 10, 80, 80] },
       updatedAt: '2026-11-20T00:00:00Z',
       relatedTerms: [{ slug: 'prompt', canonicalName: 'Prompt' }],
       products: [{ slug: 'cursor', canonicalName: 'Cursor', relevance: 0.9 }],
@@ -127,7 +128,50 @@ describe('Glossary Extension API routes', () => {
       paragraphs: ['Begriff geprägt von Andrej Karpathy.'],
       relatedTerms: [{ slug: 'prompt', canonicalName: 'Prompt' }],
       products: [{ slug: 'cursor', canonicalName: 'Cursor' }],
+      illustrationUrl: 'https://abc123.public.blob.vercel-storage.com/glossary/vibe-coding.png',
+      illustrationAlt: 'Dither graphic of vibe coding',
+      animationParams: { verfahren: 'korn', region: [10, 10, 80, 80] },
       url: 'https://www.synthszr.com/de/glossary/vibe-coding',
     })
+  })
+
+  it('GET /api/glossary/term/[slug]/illustration validates slug, enforces blob host allowlist, and proxies PNG', async () => {
+    const badReq = new NextRequest('https://www.synthszr.com/api/glossary/term/Bad_Slug!/illustration')
+    const badRes = await getTermIllustration(badReq, { params: Promise.resolve({ slug: 'Bad_Slug!' }) })
+    expect(badRes.status).toBe(400)
+
+    mockGetGlossaryTerm.mockResolvedValueOnce({ illustrationUrl: null })
+    const noImgReq = new NextRequest('https://www.synthszr.com/api/glossary/term/no-img/illustration')
+    const noImgRes = await getTermIllustration(noImgReq, { params: Promise.resolve({ slug: 'no-img' }) })
+    expect(noImgRes.status).toBe(404)
+
+    mockGetGlossaryTerm.mockResolvedValueOnce({
+      illustrationUrl: 'https://evil.example.com/ssrf.png',
+    })
+    const ssrfReq = new NextRequest('https://www.synthszr.com/api/glossary/term/ssrf/illustration')
+    const ssrfRes = await getTermIllustration(ssrfReq, { params: Promise.resolve({ slug: 'ssrf' }) })
+    expect(ssrfRes.status).toBe(403)
+
+    const pngBytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    const origFetch = globalThis.fetch
+    globalThis.fetch = vi.fn().mockResolvedValueOnce(
+      new Response(pngBytes, { status: 200, headers: { 'Content-Type': 'image/png' } }),
+    ) as unknown as typeof fetch
+
+    try {
+      mockGetGlossaryTerm.mockResolvedValueOnce({
+        illustrationUrl: 'https://lbrzdn804nhy3kox.public.blob.vercel-storage.com/glossary/patch-tempo.png',
+      })
+      const okReq = new NextRequest('https://www.synthszr.com/api/glossary/term/patch-tempo/illustration')
+      const okRes = await getTermIllustration(okReq, { params: Promise.resolve({ slug: 'patch-tempo' }) })
+      expect(okRes.status).toBe(200)
+      expect(okRes.headers.get('Content-Type')).toBe('image/png')
+      expect(okRes.headers.get('Access-Control-Allow-Origin')).toBe('*')
+      expect(okRes.headers.get('Cache-Control')).toContain('s-maxage=2592000')
+      const out = new Uint8Array(await okRes.arrayBuffer())
+      expect(Array.from(out.slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47])
+    } finally {
+      globalThis.fetch = origFetch
+    }
   })
 })
