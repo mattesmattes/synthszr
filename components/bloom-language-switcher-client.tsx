@@ -16,6 +16,8 @@ interface BloomLanguageSwitcherClientProps {
   languages: ActiveLanguage[]
 }
 
+const HEADER_TAGLINE = 'High-signal news across AI, business, UX, and tech. Every morning.'
+
 export function BloomLanguageSwitcherClient({
   currentLocale,
   languages,
@@ -70,36 +72,46 @@ export function BloomLanguageSwitcherClient({
 
   const linkStyle = "font-mono text-xs text-muted-foreground hover:text-foreground transition-colors"
 
+  const tagline = (
+    <p className="mt-2.5 text-center font-serif italic text-xs sm:text-sm leading-snug text-muted-foreground text-balance">
+      {HEADER_TAGLINE}
+    </p>
+  )
+
   // Don't render language switcher if only one language, but still show companies link
   if (languages.length <= 1) {
     return (
-      <div className="flex justify-center items-center gap-4 mb-6">
-        <ThemeToggle mode="light" />
-        <span className={`${linkStyle} opacity-50`}>Language</span>
-        {/* Zweite Fassung desselben Headers (nur eine Sprache aktiv). Muss
-            identisch bleiben — die beiden Zweige sind heute schon einmal
-            auseinandergelaufen, deshalb hier dieselbe Wortmarke und dieselben
-            Trennstriche wie unten. */}
-        <span aria-hidden className="h-5 w-px shrink-0 bg-border" />
-        <Link
-          href={currentLocale === 'de' ? '/' : `/${currentLocale}`}
-          aria-label="Home"
-          className="flex-shrink-0"
-        >
-          <Image src="/synthszr-logo-dark.svg" alt="synthszr" width={120} height={24} className="h-5 w-auto dark:hidden" priority />
-          <Image src="/synthszr-logo.svg" alt="" width={120} height={24} className="hidden h-5 w-auto dark:block" aria-hidden />
-        </Link>
-        <span aria-hidden className="h-5 w-px shrink-0 bg-border" />
-        <button onClick={() => window.dispatchEvent(new Event('synthszr-search-open'))} className={`${linkStyle} cursor-pointer`}>
-          Search
-        </button>
-        <ThemeToggle mode="dark" />
+      <div className="mb-6 flex flex-col items-center">
+        <div className="flex justify-center items-center gap-4">
+          <ThemeToggle mode="light" />
+          <span className={`${linkStyle} opacity-50`}>Language</span>
+          {/* Zweite Fassung desselben Headers (nur eine Sprache aktiv). Muss
+              identisch bleiben — die beiden Zweige sind heute schon einmal
+              auseinandergelaufen, deshalb hier dieselbe Wortmarke und dieselben
+              Trennstriche wie unten. */}
+          <span aria-hidden className="h-5 w-px shrink-0 bg-border" />
+          <Link
+            href={currentLocale === 'de' ? '/' : `/${currentLocale}`}
+            aria-label="Home"
+            className="flex-shrink-0"
+          >
+            <Image src="/synthszr-logo-dark.svg" alt="synthszr" width={120} height={24} className="h-5 w-auto dark:hidden" priority />
+            <Image src="/synthszr-logo.svg" alt="" width={120} height={24} className="hidden h-5 w-auto dark:block" aria-hidden />
+          </Link>
+          <span aria-hidden className="h-5 w-px shrink-0 bg-border" />
+          <button onClick={() => window.dispatchEvent(new Event('synthszr-search-open'))} className={`${linkStyle} cursor-pointer`}>
+            Search
+          </button>
+          <ThemeToggle mode="dark" />
+        </div>
+        {tagline}
       </div>
     )
   }
 
   return (
-    <div ref={containerRef} className="flex justify-center items-center gap-4 mb-6">
+    <div ref={containerRef} className="mb-6 flex flex-col items-center">
+      <div className="flex justify-center items-center gap-4">
       {/* Hell-Schalter LINKS neben „Language" — das Gegenstück zum Dunkel-Schalter
           ganz rechts. Er fehlte hier, während er im Zweig oben (nur eine Sprache
           aktiv) stand; produktiv gerendert wird aber dieser Zweig, also war auf
@@ -191,6 +203,8 @@ export function BloomLanguageSwitcherClient({
         Search
       </button>
       <ThemeToggle mode="dark" />
+      </div>
+      {tagline}
     </div>
   )
 }

@@ -37,6 +37,11 @@ export default async function MomentumMapPosterPage({ params }: PageProps) {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+        <div className="print:hidden">
+          <Suspense fallback={null}>
+            <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
+          </Suspense>
+        </div>
         <div className="mb-4 flex items-center justify-between gap-4 print:hidden">
           <Link
             href={`/${lang}/rankings`}
@@ -45,9 +50,6 @@ export default async function MomentumMapPosterPage({ params }: PageProps) {
             <ArrowLeft className="h-3.5 w-3.5" />
             {de ? 'Zurück zu Synthszr Charts' : 'Back to Synthszr Charts'}
           </Link>
-          <Suspense fallback={null}>
-            <BloomLanguageSwitcher currentLocale={lang as LanguageCode} />
-          </Suspense>
         </div>
 
         <MomentumMapViewer data={data} locale={lang} />
