@@ -98,6 +98,12 @@ const POPOVER_CSS = `
   background: #ccff00;
   color: #111111;
   font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.sg-badge:hover {
+  filter: brightness(0.95);
 }
 
 .sg-close {
@@ -581,8 +587,11 @@ export class GlossaryPopoverController {
 
     const brand = document.createElement('div')
     brand.className = 'sg-brand'
-    const badge = document.createElement('span')
+    const badge = document.createElement('a')
     badge.className = 'sg-badge'
+    badge.href = 'https://www.synthszr.com'
+    badge.target = '_blank'
+    badge.rel = 'noopener noreferrer'
     badge.textContent = 'SYNTHSZR'
     const brandText = document.createElement('span')
     brandText.textContent = l.brand
