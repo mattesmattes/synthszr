@@ -22,7 +22,7 @@ const POPOVER_CSS = `
 
 .sg-card {
   width: min(390px, calc(100vw - 24px));
-  max-height: min(540px, calc(100vh - 24px));
+  max-height: min(580px, calc(100vh - 24px));
   display: flex;
   flex-direction: column;
   background: #ffffff;
@@ -212,9 +212,49 @@ const POPOVER_CSS = `
   color: #3f3f46;
 }
 
+.sg-h3 {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #18181b;
+}
+
+.sg-ul {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sg-li {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #3f3f46;
+}
+
+.sg-quote {
+  margin: 2px 0;
+  padding-left: 10px;
+  border-left: 2px solid #a1a1aa;
+  font-style: italic;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #52525b;
+}
+
 @media (prefers-color-scheme: dark) {
-  .sg-p {
+  .sg-p,
+  .sg-li {
     color: #d4d4d8;
+  }
+  .sg-h3 {
+    color: #f4f4f5;
+  }
+  .sg-quote {
+    color: #a1a1aa;
+    border-left-color: #52525b;
   }
 }
 
@@ -604,12 +644,43 @@ export class GlossaryPopoverController {
 
       detailContainer.replaceChildren()
 
-      const paragraphs = detail.paragraphs.slice(0, 3)
-      for (const text of paragraphs) {
-        const p = document.createElement('p')
-        p.className = 'sg-p'
-        p.textContent = text
-        detailContainer.appendChild(p)
+      const blocks =
+        Array.isArray(detail.blocks) && detail.blocks.length > 0
+          ? detail.blocks
+          : detail.paragraphs.map((text) => ({ type: 'paragraph' as const, text }))
+
+      let activeList: HTMLUListElement | null = null
+      for (const block of blocks) {
+        if (block.type === 'listItem') {
+          if (!activeList) {
+            activeList = document.createElement('ul')
+            activeList.className = 'sg-ul'
+            detailContainer.appendChild(activeList)
+          }
+          const li = document.createElement('li')
+          li.className = 'sg-li'
+          li.textContent = block.text
+          activeList.appendChild(li)
+          continue
+        }
+
+        activeList = null
+        if (block.type === 'heading') {
+          const h3 = document.createElement('h3')
+          h3.className = 'sg-h3'
+          h3.textContent = block.text
+          detailContainer.appendChild(h3)
+        } else if (block.type === 'quote') {
+          const bq = document.createElement('blockquote')
+          bq.className = 'sg-quote'
+          bq.textContent = block.text
+          detailContainer.appendChild(bq)
+        } else {
+          const p = document.createElement('p')
+          p.className = 'sg-p'
+          p.textContent = block.text
+          detailContainer.appendChild(p)
+        }
       }
 
       if (detail.relatedTerms.length > 0) {

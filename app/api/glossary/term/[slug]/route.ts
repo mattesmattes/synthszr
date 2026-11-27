@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGlossaryTerm } from '@/lib/glossary/detail'
 import {
+  extractTipTapPlainBlocks,
   extractTipTapPlainParagraphs,
   stripPlainText,
   type SupportedExtensionLang,
@@ -72,8 +73,9 @@ export async function GET(
         lang,
         canonicalName: detail.canonicalName,
         aliases: detail.aliases ?? [],
-        summary: stripPlainText(detail.summary ?? '', 360),
-        paragraphs: extractTipTapPlainParagraphs(detail.body, 5, 1400),
+        summary: stripPlainText(detail.summary ?? '', 1000),
+        paragraphs: extractTipTapPlainParagraphs(detail.body, 100, 20000),
+        blocks: extractTipTapPlainBlocks(detail.body, 100, 20000),
         relatedTerms: (detail.relatedTerms ?? []).slice(0, 6).map((t) => ({
           slug: t.slug,
           canonicalName: t.canonicalName,

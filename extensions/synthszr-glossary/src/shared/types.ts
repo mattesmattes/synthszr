@@ -29,6 +29,11 @@ export interface GlossaryAnimationParams {
   region?: [number, number, number, number]
 }
 
+export interface GlossaryPlainBlock {
+  type: 'heading' | 'paragraph' | 'quote' | 'listItem'
+  text: string
+}
+
 export interface TermDetailResponse {
   slug: string
   lang: SupportedLang
@@ -36,6 +41,7 @@ export interface TermDetailResponse {
   aliases: string[]
   summary: string
   paragraphs: string[]
+  blocks?: GlossaryPlainBlock[]
   relatedTerms: TermDetailRelated[]
   products: TermDetailRelated[]
   illustrationUrl: string | null

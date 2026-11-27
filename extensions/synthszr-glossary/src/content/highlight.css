@@ -1,17 +1,17 @@
 ::highlight(synthszr-glossary) {
-  background-color: rgba(255, 232, 0, 0.24);
+  background-color: transparent;
   text-decoration-line: underline;
   text-decoration-style: solid;
-  text-decoration-color: #eab308;
-  text-decoration-thickness: 2px;
+  text-decoration-color: #ccff00;
+  text-decoration-thickness: 3px;
   text-underline-offset: 2px;
 }
 
 ::highlight(synthszr-glossary-bg) {
-  background-color: rgba(204, 255, 0, 0.44);
+  background-color: rgba(204, 255, 0, 0.35);
   text-decoration-line: underline;
   text-decoration-style: solid;
-  text-decoration-color: #ca8a04;
-  text-decoration-thickness: 2px;
+  text-decoration-color: #ccff00;
+  text-decoration-thickness: 3px;
   text-underline-offset: 2px;
 }

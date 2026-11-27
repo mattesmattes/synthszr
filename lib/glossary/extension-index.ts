@@ -296,6 +296,11 @@ export function cleanAliasList(canonicalName: string, rawAliases: string[]): str
   return result
 }
 
+export interface GlossaryPlainBlock {
+  type: 'heading' | 'paragraph' | 'quote' | 'listItem'
+  text: string
+}
+
 interface TipTapNode {
   type?: string
   text?: string
@@ -310,41 +315,72 @@ function collectNodePlainText(node: TipTapNode): string {
   return node.content.map(collectNodePlainText).join('')
 }
 
-function walkTipTapBlocks(node: TipTapNode, out: string[]): void {
+function cleanBlockText(raw: string): string {
+  return raw
+    .replace(LEX_TAG_RE, '$1')
+    .replace(HTML_TAG_RE, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([.,;:!?])/g, '$1')
+    .trim()
+}
+
+function walkTipTapStructuredBlocks(
+  node: TipTapNode,
+  out: GlossaryPlainBlock[],
+  inListItem = false,
+  inBlockquote = false,
+): void {
   if (!node || typeof node !== 'object') return
 
-  if (
-    node.type === 'paragraph' ||
-    node.type === 'heading' ||
-    node.type === 'blockquote' ||
-    node.type === 'codeBlock'
-  ) {
-    const raw = collectNodePlainText(node)
-      .replace(LEX_TAG_RE, '$1')
-      .replace(HTML_TAG_RE, ' ')
-      .replace(/\s+/g, ' ')
-      .replace(/\s+([.,;:!?])/g, '$1')
-      .trim()
-    if (raw.length > 0) out.push(raw)
+  if (node.type === 'heading') {
+    const clean = cleanBlockText(collectNodePlainText(node))
+    if (clean.length > 0) out.push({ type: 'heading', text: clean })
+    return
+  }
+
+  if (node.type === 'paragraph' || node.type === 'codeBlock') {
+    const clean = cleanBlockText(collectNodePlainText(node))
+    if (clean.length > 0) {
+      out.push({
+        type: inListItem ? 'listItem' : inBlockquote ? 'quote' : 'paragraph',
+        text: clean,
+      })
+    }
+    return
+  }
+
+  if (node.type === 'listItem' || node.type === 'blockquote') {
+    const nextList = inListItem || node.type === 'listItem'
+    const nextQuote = inBlockquote || node.type === 'blockquote'
+    if (Array.isArray(node.content)) {
+      for (const child of node.content) {
+        walkTipTapStructuredBlocks(child, out, nextList, nextQuote)
+      }
+    } else {
+      const clean = cleanBlockText(collectNodePlainText(node))
+      if (clean.length > 0) {
+        out.push({ type: nextList ? 'listItem' : 'quote', text: clean })
+      }
+    }
     return
   }
 
   if (Array.isArray(node.content)) {
     for (const child of node.content) {
-      walkTipTapBlocks(child, out)
+      walkTipTapStructuredBlocks(child, out, inListItem, inBlockquote)
     }
   }
 }
 
 /**
- * Extracts strictly plain-text paragraphs from a TipTap JSON document (or plain/string body).
- * Never emits HTML so extension popovers can safely render via `textContent`.
+ * Extracts strictly plain-text structured blocks from a TipTap JSON document (or plain/string body).
+ * Preserves headings, quotes, list items, and full length up to generous safety limits.
  */
-export function extractTipTapPlainParagraphs(
+export function extractTipTapPlainBlocks(
   body: unknown,
-  maxParagraphs = 6,
-  maxTotalChars = 1400,
-): string[] {
+  maxBlocks = 100,
+  maxTotalChars = 20000,
+): GlossaryPlainBlock[] {
   if (!body) return []
 
   let doc: unknown = body
@@ -360,31 +396,43 @@ export function extractTipTapPlainParagraphs(
     }
   }
 
-  const rawBlocks: string[] = []
+  const rawBlocks: GlossaryPlainBlock[] = []
   if (typeof doc === 'string') {
     for (const chunk of doc.split(/\n{2,}/)) {
-      const clean = stripPlainText(chunk, 500)
-      if (clean) rawBlocks.push(clean)
+      const clean = stripPlainText(chunk, maxTotalChars)
+      if (clean) rawBlocks.push({ type: 'paragraph', text: clean })
     }
   } else if (doc && typeof doc === 'object') {
-    walkTipTapBlocks(doc as TipTapNode, rawBlocks)
+    walkTipTapStructuredBlocks(doc as TipTapNode, rawBlocks)
   }
 
-  const result: string[] = []
+  const result: GlossaryPlainBlock[] = []
   let totalChars = 0
 
   for (const block of rawBlocks) {
-    if (result.length >= maxParagraphs) break
+    if (result.length >= maxBlocks) break
     const remaining = maxTotalChars - totalChars
     if (remaining <= 40) break
 
-    const text = block.length > remaining ? stripPlainText(block, remaining) : block
+    const text = block.text.length > remaining ? stripPlainText(block.text, remaining) : block.text
     if (!text) continue
-    result.push(text)
+    result.push({ type: block.type, text })
     totalChars += text.length
   }
 
   return result
+}
+
+/**
+ * Extracts strictly plain-text paragraphs from a TipTap JSON document (or plain/string body).
+ * Never emits HTML so extension popovers can safely render via `textContent`.
+ */
+export function extractTipTapPlainParagraphs(
+  body: unknown,
+  maxParagraphs = 100,
+  maxTotalChars = 20000,
+): string[] {
+  return extractTipTapPlainBlocks(body, maxParagraphs, maxTotalChars).map((b) => b.text)
 }
 
 /**

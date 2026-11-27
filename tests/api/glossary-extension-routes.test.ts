@@ -100,6 +100,10 @@ describe('Glossary Extension API routes', () => {
         type: 'doc',
         content: [
           {
+            type: 'heading',
+            content: [{ type: 'text', text: 'Hintergrund' }],
+          },
+          {
             type: 'paragraph',
             content: [{ type: 'text', text: 'Begriff geprägt von Andrej Karpathy.' }],
           },
@@ -125,7 +129,11 @@ describe('Glossary Extension API routes', () => {
       lang: 'de',
       canonicalName: 'Vibe Coding',
       summary: 'Software entsteht über Prompts.',
-      paragraphs: ['Begriff geprägt von Andrej Karpathy.'],
+      paragraphs: ['Hintergrund', 'Begriff geprägt von Andrej Karpathy.'],
+      blocks: [
+        { type: 'heading', text: 'Hintergrund' },
+        { type: 'paragraph', text: 'Begriff geprägt von Andrej Karpathy.' },
+      ],
       relatedTerms: [{ slug: 'prompt', canonicalName: 'Prompt' }],
       products: [{ slug: 'cursor', canonicalName: 'Cursor' }],
       illustrationUrl: 'https://abc123.public.blob.vercel-storage.com/glossary/vibe-coding.png',

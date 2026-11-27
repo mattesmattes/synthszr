@@ -6,6 +6,7 @@ import {
 } from '../../extensions/synthszr-glossary/src/matcher/aho-corasick'
 import {
   cleanAliasList,
+  extractTipTapPlainBlocks,
   extractTipTapPlainParagraphs,
   isAmbiguousTerm,
   stripPlainText,
@@ -110,30 +111,47 @@ describe('Backend extension index helpers', () => {
     expect(isAmbiguousTerm('Retrieval-Augmented Generation', ['RAG'])).toBe(false)
   })
 
-  it('extracts plain-text paragraphs from TipTap JSON without emitting HTML', () => {
+  it('extracts full structured plain-text blocks from TipTap JSON beyond 1,400 chars without emitting HTML', () => {
+    const longParagraph = 'A'.repeat(1600)
     const doc = {
       type: 'doc',
       content: [
         {
+          type: 'heading',
+          content: [{ type: 'text', text: 'Wie es funktioniert' }],
+        },
+        {
           type: 'paragraph',
           content: [{ type: 'text', text: 'Erster Absatz über {lex:Transformer} und <script>alert(1)</script>.' }],
+        },
+        {
+          type: 'blockquote',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Ein wichtiges Zitat.' }] }],
         },
         {
           type: 'bulletList',
           content: [
             {
               type: 'listItem',
-              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Zweiter Punkt.' }] }],
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Listenpunkt eins.' }] }],
             },
           ],
+        },
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: longParagraph }],
         },
       ],
     }
 
-    expect(extractTipTapPlainParagraphs(doc)).toEqual([
-      'Erster Absatz über Transformer und alert(1).',
-      'Zweiter Punkt.',
+    expect(extractTipTapPlainBlocks(doc)).toEqual([
+      { type: 'heading', text: 'Wie es funktioniert' },
+      { type: 'paragraph', text: 'Erster Absatz über Transformer und alert(1).' },
+      { type: 'quote', text: 'Ein wichtiges Zitat.' },
+      { type: 'listItem', text: 'Listenpunkt eins.' },
+      { type: 'paragraph', text: longParagraph },
     ])
+    expect(extractTipTapPlainParagraphs(doc)).toHaveLength(5)
     expect(stripPlainText('See [Docs](https://example.com) and <b>RAG</b>.', 100)).toBe(
       'See Docs and RAG.',
     )
