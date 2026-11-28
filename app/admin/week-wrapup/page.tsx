@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, CalendarRange, AlertCircle, CheckCircle2, CircleSlash } from 'lucide-react'
+import { AdminPageHeader } from '@/components/admin/admin-page'
 
 /**
  * AI-Week Wrap-up: fasst die „Thema des Tages"-Nachrichten eines Zeitraums zu
@@ -81,17 +82,13 @@ export default function WeekWrapupPage() {
   useEffect(() => { void loadStatus() }, [loadStatus])
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <CalendarRange className="h-6 w-6" />
-          AI-Week Wrap-up
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Fasst die „Thema des Tages"-Nachrichten eines wählbaren Zeitraums (die letzten zehn
-          Tage, heute eingeschlossen) zu einem Rückblick zusammen.
-        </p>
-      </div>
+    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6 lg:p-8">
+      <AdminPageHeader
+        icon={<CalendarRange className="h-6 w-6" />}
+        title="AI-Week Wrap-up"
+        description='Fasst die „Thema des Tages"-Nachrichten eines wählbaren Zeitraums (die letzten zehn Tage, heute eingeschlossen) zu einem Rückblick zusammen.'
+        className="mb-0"
+      />
 
       {status && (
         <Card>
@@ -162,7 +159,7 @@ export default function WeekWrapupPage() {
                 <label key={key} className="flex flex-col gap-1 text-xs text-muted-foreground">
                   {key === 'from' ? 'Von' : 'Bis'}
                   <select
-                    className="rounded-md border bg-background px-3 py-2 text-sm text-foreground"
+                    className="h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                     value={range[key]}
                     disabled={running}
                     onChange={(e) => setRange({ ...range, [key]: e.target.value })}

@@ -175,13 +175,13 @@ export default function PremarketPage() {
   const totalPages = pagination ? Math.ceil(pagination.total / ITEMS_PER_PAGE) : 1
 
   return (
-    <div className="p-4 md:p-8 max-w-full overflow-x-hidden">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tighter flex items-center gap-3">
-          <TrendingUp className="h-8 w-8" />
+    <div className="p-4 md:p-6 lg:p-8 max-w-full overflow-x-hidden">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
+          <TrendingUp className="h-6 w-6" />
           Premarket AI Synthesen
         </h1>
-        <p className="mt-1 text-muted-foreground">
+        <p className="mt-1 text-sm text-muted-foreground">
           AI-generierte Analysen für Pre-IPO & Private Market Instrumente von Forge Global
         </p>
       </div>
@@ -276,12 +276,12 @@ export default function PremarketPage() {
       )}
 
       {cacheStatus && cacheStatus.expired === 0 && cacheStatus.total > 0 && (
-        <Card className="mb-4 border-green-200">
+        <Card className="mb-4 border-green-200 dark:border-green-800/50">
           <CardContent className="py-3">
             <div className="flex items-center gap-3 text-sm">
-              <Badge className="bg-green-100 text-green-800">Alle aktuell</Badge>
+              <Badge className="bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200">Alle aktuell</Badge>
               {cacheStatus.expiringSoon > 0 && (
-                <Badge variant="outline" className="text-yellow-700 border-yellow-400">{cacheStatus.expiringSoon} bald ablaufend</Badge>
+                <Badge variant="outline" className="text-yellow-700 border-yellow-400 dark:text-yellow-300 dark:border-yellow-700">{cacheStatus.expiringSoon} bald ablaufend</Badge>
               )}
               <span className="text-muted-foreground">{cacheStatus.total} Einträge</span>
             </div>

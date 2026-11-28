@@ -29,6 +29,8 @@ export function LogoutButton() {
       size="sm"
       onClick={handleLogout}
       disabled={isLoading}
+      aria-label="Abmelden"
+      title="Abmelden"
     >
       {isLoading ? (
         <Loader2 className="h-4 w-4 animate-spin" />

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo, startTransition } from 'react'
+import { toast } from 'sonner'
 import {
   Wand2,
   Sparkles,
@@ -371,7 +372,7 @@ export default function CreateArticlePage() {
   const generateArticle = useCallback(async () => {
     // Check for selected items first (priority), then pending items (fallback)
     if (queueStats.selected === 0 && queueStats.pending === 0) {
-      alert('Keine Items in der Queue. Bitte zuerst Items auswählen (News Queue → Selected) oder die Synthese-Pipeline ausführen.')
+      toast.error('Keine Items in der Queue. Bitte zuerst Items auswählen (News Queue → Selected) oder die Synthese-Pipeline ausführen.')
       return
     }
 
@@ -412,7 +413,7 @@ export default function CreateArticlePage() {
       setGenerating(false)
       setPipelineStatus(null)
       setPipelineProgress(null)
-      alert(error instanceof Error ? error.message : 'Unbekannter Fehler bei der Generierung')
+      toast.error(error instanceof Error ? error.message : 'Unbekannter Fehler bei der Generierung')
     }
   }, [queueStats.selected, queueStats.pending, maxQueueItems, vocabularyIntensity, repoIntensity, router])
 
@@ -725,7 +726,7 @@ export default function CreateArticlePage() {
           .catch(err => console.error('[EditLearning] Failed to store applied patterns:', err))
       }
 
-      alert('Artikel als Entwurf gespeichert! Queue-Items markiert, Bilder und Übersetzungen werden im Hintergrund generiert.')
+      toast.success('Artikel als Entwurf gespeichert! Queue-Items markiert, Bilder und Übersetzungen werden im Hintergrund generiert.')
 
       // Reset form after successful save
       setArticleContent('')
@@ -733,7 +734,7 @@ export default function CreateArticlePage() {
       setUsedQueueItemIds([])
     } catch (error) {
       console.error('Save error:', error)
-      alert('Fehler beim Speichern')
+      toast.error('Fehler beim Speichern')
     } finally {
       setSaving(false)
     }
@@ -754,13 +755,13 @@ export default function CreateArticlePage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tighter flex items-center gap-3">
-          <Wand2 className="h-8 w-8" />
+    <div className="p-4 md:p-6 lg:p-8 max-w-full overflow-x-hidden">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
+          <Wand2 className="h-6 w-6" />
           AI Artikel erstellen
         </h1>
-        <p className="mt-1 text-muted-foreground">
+        <p className="mt-1 text-sm text-muted-foreground">
           Generiere einen Blogartikel aus der News-Queue (max 30% pro Quelle)
         </p>
       </div>

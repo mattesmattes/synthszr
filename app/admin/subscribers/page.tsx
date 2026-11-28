@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import { useSearchParams } from 'next/navigation'
 import { Users, Mail, CheckCircle, XCircle, Clock, Trash2, Loader2, Download, Search, UserCheck, Pencil, Check, X, TrendingUp, TrendingDown, Languages } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -63,6 +65,7 @@ interface LanguageChange {
 }
 
 export default function SubscribersPage() {
+  const confirmDialog = useConfirm()
   const [data, setData] = useState<SubscribersResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
@@ -144,7 +147,7 @@ export default function SubscribersPage() {
   }
 
   async function deleteSubscriber(id: string) {
-    if (!confirm('Subscriber wirklich löschen?')) return
+    if (!(await confirmDialog({ title: 'Subscriber wirklich löschen?', confirmLabel: 'Löschen', destructive: true }))) return
 
     setDeletingId(id)
     try {
@@ -173,7 +176,7 @@ export default function SubscribersPage() {
         fetchSubscribers()
       } else {
         const error = await res.json()
-        alert(error.error || 'Aktivierung fehlgeschlagen')
+        toast.error(error.error || 'Aktivierung fehlgeschlagen')
       }
     } catch (error) {
       console.error('Activate error:', error)
@@ -197,7 +200,7 @@ export default function SubscribersPage() {
         fetchSubscribers()
       } else {
         const error = await res.json()
-        alert(error.error || 'E-Mail-Update fehlgeschlagen')
+        toast.error(error.error || 'E-Mail-Update fehlgeschlagen')
       }
     } catch (error) {
       console.error('Save email error:', error)
@@ -244,7 +247,7 @@ export default function SubscribersPage() {
         }
       })
       if (result.failed.length > 0) {
-        alert(`${result.failed.length} von ${ids.length} Aktivierungen fehlgeschlagen: ${result.failed[0].error}`)
+        toast.error(`${result.failed.length} von ${ids.length} Aktivierungen fehlgeschlagen: ${result.failed[0].error}`)
       }
       if (result.succeeded > 0) {
         selection.clear()
@@ -257,7 +260,7 @@ export default function SubscribersPage() {
 
   async function bulkDeleteSubscribers(ids: string[]) {
     if (ids.length === 0) return
-    if (!confirm(`${ids.length} Subscriber wirklich löschen?`)) return
+    if (!(await confirmDialog({ title: `${ids.length} Subscriber wirklich löschen?`, confirmLabel: 'Löschen', destructive: true }))) return
     setBulkBusy('delete')
     try {
       const result = await runBatched(ids, async (id) => {
@@ -270,7 +273,7 @@ export default function SubscribersPage() {
         }
       })
       if (result.failed.length > 0) {
-        alert(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen: ${result.failed[0].error}`)
+        toast.error(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen: ${result.failed[0].error}`)
       }
       if (result.succeeded > 0) {
         selection.clear()
@@ -312,14 +315,14 @@ export default function SubscribersPage() {
   ]
 
   return (
-    <div className="p-4 md:p-6 max-w-full">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="p-4 md:p-6 lg:p-8 mx-auto max-w-6xl overflow-x-hidden">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
-            <Users className="h-5 w-5" />
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
+            <Users className="h-6 w-6" />
             Newsletter-Subscriber
           </h1>
-          <p className="text-xs text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
             {data?.counts.active || 0} aktive Subscriber
           </p>
         </div>

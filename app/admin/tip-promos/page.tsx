@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,6 +15,7 @@ import type { TipPromo, TipPromoConfig } from '@/lib/tip-promos/types'
 const DEFAULT_GRADIENT = { from: '#B4E37A', to: '#F6E23E', direction: 'to bottom' as const, text: '#1a1a0a' }
 
 export default function TipPromosAdminPage() {
+  const confirmDialog = useConfirm()
   const [promos, setPromos] = useState<TipPromo[]>([])
   const [config, setConfig] = useState<TipPromoConfig>({ mode: 'rotate', constantId: null })
   const [podcastPreview, setPodcastPreview] = useState<{ episodeTitle: string; episodeSubtitle: string | null; appleUrl: string | null } | null>(null)
@@ -72,7 +74,7 @@ export default function TipPromosAdminPage() {
   }
 
   const deletePromo = async (id: string) => {
-    if (!confirm('Tipp wirklich löschen?')) return
+    if (!(await confirmDialog({ title: 'Tipp wirklich löschen?', confirmLabel: 'Löschen', destructive: true }))) return
     await fetch(`/api/admin/tip-promos/${id}`, { method: 'DELETE' })
     setPromos(prev => prev.filter(p => p.id !== id))
   }
@@ -119,10 +121,10 @@ export default function TipPromosAdminPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-6">
-      <div>
-        <h1 className="font-mono text-2xl font-bold">Tip Promos</h1>
-        <p className="text-sm text-muted-foreground">
+    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6 lg:p-8">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight">Tip Promos</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           &quot;Tipp des Tages&quot;-Boxen verwalten — erscheinen im ersten Artikel eines Posts, direkt vor dem Synthszr Take (Web + Newsletter).
         </p>
       </div>
@@ -159,7 +161,7 @@ export default function TipPromosAdminPage() {
             <select
               value={config.constantId ?? ''}
               onChange={e => saveConfig({ mode: 'constant', constantId: e.target.value || null })}
-              className="text-xs rounded border px-2 py-1 bg-background"
+              className="h-8 rounded-md border border-input bg-background px-2.5 py-1 text-xs text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
               disabled={savingConfig}
             >
               <option value="">— wählen —</option>
@@ -244,7 +246,7 @@ function TipEditor({ promo, podcastPreview, onUpdate, onDelete, onDuplicate }: {
             <select
               value={promo.type}
               onChange={e => onUpdate({ type: e.target.value as TipPromo['type'] })}
-              className="w-full rounded border px-2 py-2 text-sm bg-background"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="static">Statisch</option>
               <option value="podcast">Podcast</option>
@@ -311,7 +313,7 @@ function TipEditor({ promo, podcastPreview, onUpdate, onDelete, onDuplicate }: {
             <select
               value={promo.gradient_direction}
               onChange={e => onUpdate({ gradient_direction: e.target.value })}
-              className="w-full rounded border px-2 py-2 text-sm bg-background"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="to bottom">nach unten</option>
               <option value="to top">nach oben</option>

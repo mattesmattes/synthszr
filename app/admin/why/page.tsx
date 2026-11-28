@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -8,6 +9,7 @@ import { TiptapEditor } from '@/components/tiptap-editor'
 import { createClient } from '@/lib/supabase/client'
 import { Loader2, Save, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
+import { AdminPage, AdminPageHeader } from '@/components/admin/admin-page'
 
 interface StaticPage {
   id: string
@@ -60,7 +62,7 @@ export default function AdminWhyPage() {
 
     // Validate content
     if (!content || Object.keys(content).length === 0) {
-      alert('Fehler: Inhalt ist leer!')
+      toast.error('Fehler: Inhalt ist leer!')
       setSaving(false)
       return
     }
@@ -77,12 +79,12 @@ export default function AdminWhyPage() {
     if (error) console.log('[Why Save] Error:', error)
 
     if (!res.ok) {
-      alert(`Fehler beim Speichern: ${error}`)
+      toast.error(`Fehler beim Speichern: ${error}`)
     } else {
       if (savedPage) {
         setPage(savedPage)
       }
-      alert('Gespeichert!')
+      toast.success('Gespeichert!')
     }
 
     setSaving(false)
@@ -97,31 +99,29 @@ export default function AdminWhyPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Why Page</h1>
-          <p className="text-sm text-muted-foreground">
-            Bearbeite die statische &quot;Why&quot; Seite
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link href="/why" target="_blank">
-            <Button variant="outline" size="sm" className="gap-2">
-              <ExternalLink className="h-4 w-4" />
-              Vorschau
+    <AdminPage>
+      <AdminPageHeader
+        title="Why Page"
+        description={<>Bearbeite die statische &quot;Why&quot; Seite</>}
+        actions={
+          <>
+            <Link href="/why" target="_blank">
+              <Button variant="outline" size="sm" className="gap-2">
+                <ExternalLink className="h-4 w-4" />
+                Vorschau
+              </Button>
+            </Link>
+            <Button onClick={handleSave} disabled={saving} className="gap-2">
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              Speichern
             </Button>
-          </Link>
-          <Button onClick={handleSave} disabled={saving} className="gap-2">
-            {saving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4" />
-            )}
-            Speichern
-          </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="space-y-4">
         <div className="space-y-2">
@@ -142,6 +142,6 @@ export default function AdminWhyPage() {
           <TiptapEditor content={content} onChange={setContent} />
         </div>
       </div>
-    </div>
+    </AdminPage>
   )
 }

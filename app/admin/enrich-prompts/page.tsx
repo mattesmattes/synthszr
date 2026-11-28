@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import { Sparkles, Plus, Trash2, Edit2, Loader2, Check, Star } from 'lucide-react'
 import {
   useMultiSelect,
@@ -52,6 +54,7 @@ interface EnrichPrompt {
 }
 
 export default function EnrichPromptsPage() {
+  const confirmDialog = useConfirm()
   const [prompts, setPrompts] = useState<EnrichPrompt[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -134,11 +137,11 @@ export default function EnrichPromptsPage() {
         fetchPrompts()
       } else {
         const error = await res.json()
-        alert(error.error || 'Fehler beim Speichern')
+        toast.error(error.error || 'Fehler beim Speichern')
       }
     } catch (error) {
       console.error('Error saving prompt:', error)
-      alert('Fehler beim Speichern')
+      toast.error('Fehler beim Speichern')
     } finally {
       setSaving(false)
     }
@@ -159,11 +162,11 @@ export default function EnrichPromptsPage() {
         fetchPrompts()
       } else {
         const error = await res.json()
-        alert(error.error || 'Fehler beim Löschen')
+        toast.error(error.error || 'Fehler beim Löschen')
       }
     } catch (error) {
       console.error('Error deleting prompt:', error)
-      alert('Fehler beim Löschen')
+      toast.error('Fehler beim Löschen')
     }
   }
 
@@ -192,7 +195,11 @@ export default function EnrichPromptsPage() {
   async function bulkDeletePrompts() {
     const ids = selection.visibleSelectedIds
     if (ids.length === 0) return
-    if (!confirm(`${ids.length} Enrich-Prompt${ids.length === 1 ? '' : 's'} wirklich löschen?`)) return
+    if (!(await confirmDialog({
+      title: `${ids.length} Enrich-Prompt${ids.length === 1 ? '' : 's'} wirklich löschen?`,
+      confirmLabel: 'Löschen',
+      destructive: true,
+    }))) return
     setBulkDeleting(true)
     try {
       const result = await runBatched(ids, async (id) => {
@@ -206,7 +213,7 @@ export default function EnrichPromptsPage() {
         }
       })
       if (result.failed.length > 0) {
-        alert(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen`)
+        toast.error(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen`)
       }
       if (result.succeeded > 0) {
         selection.clear()
@@ -218,11 +225,11 @@ export default function EnrichPromptsPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="p-4 md:p-6 lg:p-8 mx-auto max-w-6xl">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tighter">Enrich-Prompts</h1>
-          <p className="mt-1 text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight">Enrich-Prompts</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Prompt für den Enrich-Pass: Nachrecherche, sprachliche Verfeinerung und Schärfung des Synthszr Take
           </p>
         </div>

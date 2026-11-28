@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { AdminSidebar } from './admin-sidebar'
+import { AdminFeedbackProvider } from './admin-feedback'
+import { AdminCommandPalette } from './admin-command-palette'
+import { SystemAlertBanner } from './system-alert-banner'
 
 /** Merkt den Zustand nur im Browser des Betreibers (Komfort, keine fachliche Einstellung). */
 const STORAGE_KEY = 'admin-sidebar-collapsed'
@@ -16,6 +19,7 @@ const STORAGE_KEY = 'admin-sidebar-collapsed'
  */
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
+  const [commandOpen, setCommandOpen] = useState(false)
 
   useEffect(() => {
     try {
@@ -36,12 +40,23 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <>
-      <AdminSidebar collapsed={collapsed} onToggle={toggle} />
+    <AdminFeedbackProvider>
+      <AdminSidebar
+        collapsed={collapsed}
+        onToggle={toggle}
+        onOpenCommand={() => setCommandOpen(true)}
+      />
+      <AdminCommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
       {/* pt-14 auf Mobil für den festen Kopf, links Platz für die Leiste auf Desktop */}
-      <main className={cn('flex-1 pt-14 md:pt-0 transition-[margin] duration-300', collapsed ? 'md:ml-16' : 'md:ml-64')}>
+      <main
+        className={cn(
+          'flex-1 min-w-0 pt-14 md:pt-0 transition-[margin] duration-300',
+          collapsed ? 'md:ml-16' : 'md:ml-64',
+        )}
+      >
+        <SystemAlertBanner className="mx-4 mt-4 md:mx-6 lg:mx-8 mb-0" />
         {children}
       </main>
-    </>
+    </AdminFeedbackProvider>
   )
 }

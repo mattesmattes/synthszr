@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { toast } from 'sonner'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import { History, Search, Download, ChevronDown, ChevronUp, Clock, FileText, Loader2, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -46,6 +48,7 @@ function formatTime(iso: string): string {
 // ---------------------------------------------------------------------------
 
 export function PodcastTimeMachine() {
+  const confirmDialog = useConfirm()
   // Filter state
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
   const today = new Date().toISOString().split('T')[0]
@@ -95,7 +98,13 @@ export function PodcastTimeMachine() {
   }, [dateFrom, dateTo, search])
 
   const deleteEpisode = useCallback(async (ep: PodcastEpisode) => {
-    if (!window.confirm(`"${ep.title || 'Ohne Titel'}" wirklich löschen? Audio-Datei und DB-Eintrag werden entfernt.`)) return
+    const ok = await confirmDialog({
+      title: `"${ep.title || 'Ohne Titel'}" wirklich löschen?`,
+      description: 'Audio-Datei und DB-Eintrag werden entfernt.',
+      confirmLabel: 'Löschen',
+      destructive: true,
+    })
+    if (!ok) return
     setDeletingId(ep.id)
     try {
       const res = await fetch('/api/admin/podcast-history', {
@@ -105,17 +114,18 @@ export function PodcastTimeMachine() {
       })
       if (res.ok) {
         setEpisodes(prev => prev.filter(e => e.id !== ep.id))
+        toast.success('Episode gelöscht')
       } else {
         const json = await res.json()
-        alert(`Fehler: ${json.error || 'Unbekannter Fehler'}`)
+        toast.error(`Fehler: ${json.error || 'Unbekannter Fehler'}`)
       }
     } catch (err) {
-      alert('Netzwerkfehler beim Löschen')
+      toast.error('Netzwerkfehler beim Löschen')
       console.error(err)
     } finally {
       setDeletingId(null)
     }
-  }, [])
+  }, [confirmDialog])
 
   // Initial load + refetch on filter change
   useEffect(() => {

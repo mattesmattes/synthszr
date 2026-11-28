@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import { Loader2, CheckCircle2, XCircle, Trash2, RefreshCw, Eye, EyeOff, BookOpen, Languages, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -179,6 +181,7 @@ const REVIEW_ORDER: Record<GlossaryReviewState, number> = { revision_pending: 0,
 // --- Component ---
 
 export default function GlossaryAdminPage() {
+  const confirmDialog = useConfirm()
   const [terms, setTerms] = useState<GlossaryTermRow[]>([])
   const [details, setDetails] = useState<Record<string, GlossaryTermDetail>>({})
   // Review-Fund Important 5: ein fehlgeschlagener Detail-Fetch verschwand
@@ -322,14 +325,19 @@ export default function GlossaryAdminPage() {
       }
       await fetchTerms()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Aktion fehlgeschlagen')
+      toast.error(err instanceof Error ? err.message : 'Aktion fehlgeschlagen')
     } finally {
       setActionLoading((s) => ({ ...s, [slug]: false }))
     }
   }
 
   async function deleteTerm(slug: string) {
-    if (!confirm(`Begriff "${slug}" wirklich löschen? Übersetzungen, Produkt- und News-Zuordnungen werden mitgelöscht.`)) return
+    if (!(await confirmDialog({
+      title: `Begriff "${slug}" wirklich löschen?`,
+      description: 'Übersetzungen, Produkt- und News-Zuordnungen werden mitgelöscht.',
+      confirmLabel: 'Löschen',
+      destructive: true,
+    }))) return
     setActionLoading((s) => ({ ...s, [slug]: true }))
     try {
       const res = await fetch('/api/admin/glossary', {
@@ -343,7 +351,7 @@ export default function GlossaryAdminPage() {
       }
       await fetchTerms()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Löschen fehlgeschlagen')
+      toast.error(err instanceof Error ? err.message : 'Löschen fehlgeschlagen')
     } finally {
       setActionLoading((s) => ({ ...s, [slug]: false }))
     }
@@ -397,7 +405,12 @@ export default function GlossaryAdminPage() {
     if (slugs.length === 0) return
     if (
       action === 'delete' &&
-      !confirm(`${slugs.length} Begriffe wirklich löschen? Übersetzungen, Produkt- und News-Zuordnungen werden mitgelöscht.`)
+      !(await confirmDialog({
+        title: `${slugs.length} Begriffe wirklich löschen?`,
+        description: 'Übersetzungen, Produkt- und News-Zuordnungen werden mitgelöscht.',
+        confirmLabel: 'Löschen',
+        destructive: true,
+      }))
     ) {
       return
     }
@@ -428,7 +441,7 @@ export default function GlossaryAdminPage() {
         },
       )
       if (result.failed.length > 0) {
-        alert(`${result.failed.length} von ${slugs.length} Aktionen fehlgeschlagen (${result.failed[0].item}: ${result.failed[0].error})`)
+        toast.error(`${result.failed.length} von ${slugs.length} Aktionen fehlgeschlagen (${result.failed[0].item}: ${result.failed[0].error})`)
       }
       if (result.succeeded > 0) {
         selection.clear()
@@ -440,14 +453,14 @@ export default function GlossaryAdminPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="p-4 md:p-6 lg:p-8 mx-auto max-w-6xl">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tighter flex items-center gap-2">
-            <BookOpen className="h-7 w-7" />
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
+            <BookOpen className="h-6 w-6" />
             Lexikon
           </h1>
-          <p className="mt-1 text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
             Fachbegriffe, Aktualitätsstatus und offene Revisionen aus der täglichen Aktualitätsprüfung
           </p>
         </div>

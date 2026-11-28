@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 import { Wallet, Loader2, RefreshCw, EyeOff, Ban, ExternalLink, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -75,7 +76,7 @@ export default function SubscriptionsPage() {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, status }),
     })
-    if (!res.ok) { const d = await res.json(); alert('Fehler: ' + (d.error || 'unbekannt')) }
+    if (!res.ok) { const d = await res.json(); toast.error('Fehler: ' + (d.error || 'unbekannt')) }
     else fetchSubs()
   }
 
@@ -111,7 +112,7 @@ export default function SubscriptionsPage() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
       })
       if (result.failed.length > 0) {
-        alert(`${result.failed.length} von ${activeSelectedIds.length} Updates fehlgeschlagen`)
+        toast.error(`${result.failed.length} von ${activeSelectedIds.length} Updates fehlgeschlagen`)
       }
       if (result.succeeded > 0) {
         selection.clear()
@@ -136,7 +137,7 @@ export default function SubscriptionsPage() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
       })
       if (result.failed.length > 0) {
-        alert(`${result.failed.length} von ${ids.length} Updates fehlgeschlagen`)
+        toast.error(`${result.failed.length} von ${ids.length} Updates fehlgeschlagen`)
       }
       if (result.succeeded > 0) {
         selection.clear()
@@ -163,7 +164,7 @@ export default function SubscriptionsPage() {
           const url = cancelTarget.unsubscribe_target
             || `https://www.google.com/search?q=${encodeURIComponent(cancelTarget.provider_name + ' Abo kündigen')}`
           window.open(url, '_blank', 'noopener,noreferrer')
-          alert('Automatische Kündigung fehlgeschlagen (' + (data.detail || data.error || 'unbekannt') + ') — die Seite wurde geöffnet, bitte manuell abschließen.')
+          toast.warning('Automatische Kündigung fehlgeschlagen (' + (data.detail || data.error || 'unbekannt') + ') — die Seite wurde geöffnet, bitte manuell abschließen.')
         }
       } else {
         // Fall B: Ziel im Browser des Nutzers öffnen (mailto/login_portal/unknown)
@@ -196,17 +197,17 @@ export default function SubscriptionsPage() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ providerName: addName, amount, interval: addInterval }),
     })
-    if (!res.ok) { const d = await res.json(); alert('Fehler: ' + (d.error || 'unbekannt')) }
+    if (!res.ok) { const d = await res.json(); toast.error('Fehler: ' + (d.error || 'unbekannt')) }
     else { setAddName(''); setAddAmount(''); setAddInterval('monthly'); setAddOpen(false); fetchSubs() }
     setAddSaving(false)
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="p-4 md:p-6 lg:p-8 mx-auto max-w-6xl">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tighter">Abo-Kosten</h1>
-          <p className="mt-1 text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight">Abo-Kosten</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Monatlich gesamt: <span className="font-semibold text-foreground">{totalMonthly.toFixed(2)} €</span>
             {scanMsg && <span className="ml-3 text-xs">· {scanMsg}</span>}
           </p>
@@ -325,7 +326,7 @@ export default function SubscriptionsPage() {
                                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ id: s.id, manual: true }),
                               })
-                              if (!res.ok) alert('Fehler beim Markieren als gekündigt')
+                              if (!res.ok) toast.error('Fehler beim Markieren als gekündigt')
                               await fetchSubs()
                             }}>
                             ✓ erledigt
@@ -377,7 +378,7 @@ export default function SubscriptionsPage() {
           <div className="space-y-3 py-2">
             <Input placeholder="Anbieter (z. B. Stratechery)" value={addName} onChange={(e) => setAddName(e.target.value)} />
             <Input placeholder="Betrag (z. B. 12.00)" value={addAmount} onChange={(e) => setAddAmount(e.target.value)} />
-            <select className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+            <select className="h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               value={addInterval} onChange={(e) => setAddInterval(e.target.value)}>
               <option value="monthly">monatlich</option>
               <option value="yearly">jährlich</option>

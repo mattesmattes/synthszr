@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
+import { toast } from 'sonner'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import { Database, Calendar, Mail, FileText, Link2, Loader2, ExternalLink, Eye, Trash2, Plus, RefreshCw, StickyNote, Download, PenLine, Globe, ListTodo, Newspaper } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -11,7 +13,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { FetchProgress } from '@/components/admin/fetch-progress'
-import { SystemAlertBanner } from '@/components/admin/system-alert-banner'
 import {
   useMultiSelect,
   MultiSelectBar,
@@ -44,6 +45,7 @@ interface RepoSummary {
 }
 
 export default function DailyRepoPage() {
+  const confirmDialog = useConfirm()
   const [repoSummaries, setRepoSummaries] = useState<RepoSummary[]>([])
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
   const [items, setItems] = useState<DailyRepoItem[]>([])
@@ -142,7 +144,11 @@ export default function DailyRepoPage() {
   }
 
   async function deleteRepo(date: string) {
-    if (!confirm(`Alle Einträge für ${new Date(date).toLocaleDateString('de-DE')} wirklich löschen?`)) return
+    if (!(await confirmDialog({
+      title: `Alle Einträge für ${new Date(date).toLocaleDateString('de-DE')} wirklich löschen?`,
+      confirmLabel: 'Löschen',
+      destructive: true,
+    }))) return
     setDeletingId(date)
     try {
       const res = await fetch('/api/admin/daily-repo', {
@@ -157,7 +163,7 @@ export default function DailyRepoPage() {
       }
     } catch (error) {
       console.error('Delete error:', error)
-      alert('Fehler beim Löschen')
+      toast.error('Fehler beim Löschen')
     } finally {
       setDeletingId(null)
     }
@@ -175,13 +181,13 @@ export default function DailyRepoPage() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        alert(`Fehler: ${data.error || `HTTP ${res.status}`}`)
+        toast.error(`Fehler: ${data.error || `HTTP ${res.status}`}`)
         return
       }
       selection.clear()
-      alert(`${data.added ?? 0} zur News Queue hinzugefügt (${data.skipped ?? 0} übersprungen).`)
+      toast.success(`${data.added ?? 0} zur News Queue hinzugefügt (${data.skipped ?? 0} übersprungen).`)
     } catch {
-      alert('Netzwerkfehler beim Hinzufügen zur News Queue')
+      toast.error('Netzwerkfehler beim Hinzufügen zur News Queue')
     } finally {
       setBulkBusy(null)
     }
@@ -190,7 +196,11 @@ export default function DailyRepoPage() {
   async function bulkDeleteSelected() {
     const ids = selection.visibleSelectedIds
     if (ids.length === 0) return
-    if (!confirm(`${ids.length} Artikel aus dem Daily Repo wirklich löschen?`)) return
+    if (!(await confirmDialog({
+      title: `${ids.length} Artikel aus dem Daily Repo wirklich löschen?`,
+      confirmLabel: 'Löschen',
+      destructive: true,
+    }))) return
     setBulkBusy('delete')
     try {
       const res = await fetch('/api/admin/daily-repo', {
@@ -200,13 +210,13 @@ export default function DailyRepoPage() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        alert(`Fehler: ${data.error || `HTTP ${res.status}`}`)
+        toast.error(`Fehler: ${data.error || `HTTP ${res.status}`}`)
         return
       }
       selection.clear()
       await Promise.all([fetchItemsForDate(selectedDate), fetchRepoSummaries()])
     } catch {
-      alert('Netzwerkfehler beim Löschen')
+      toast.error('Netzwerkfehler beim Löschen')
     } finally {
       setBulkBusy(null)
     }
@@ -232,7 +242,7 @@ export default function DailyRepoPage() {
       }
     } catch (err) {
       console.error('Failed to fetch markdown:', err)
-      alert('Markdown konnte nicht geladen werden: ' + (err instanceof Error ? err.message : 'Unbekannter Fehler'))
+      toast.error('Markdown konnte nicht geladen werden: ' + (err instanceof Error ? err.message : 'Unbekannter Fehler'))
     } finally {
       setManualFetching(false)
     }
@@ -275,7 +285,7 @@ export default function DailyRepoPage() {
       fetchItemsForDate(targetDate)
     } catch (error) {
       console.error('Manual article save error:', error)
-      alert('Fehler beim Speichern')
+      toast.error('Fehler beim Speichern')
     } finally {
       setManualSaving(false)
     }
@@ -327,10 +337,10 @@ export default function DailyRepoPage() {
       // promoteExistingTopicSources) — ohne diesen Hinweis sieht "0 Quellen
       // neu" wie ein leerer Lauf aus, obwohl gerade das die Story sichtbar macht.
       const gehoben = data.themenNachtraeglich > 0 ? `\n${data.themenNachtraeglich} bereits vorhandene Quelle(n) nachträglich als Thema gebündelt.` : ''
-      alert(`Techmeme: ${data.hinzugefuegt} Quellen neu in der Queue, ${data.themen} als Thema des Tages.\n${data.relevant} von ${data.stories} Meldungen waren KI-relevant.${gehoben}${rest}${fehler}`)
+      toast.success(`Techmeme: ${data.hinzugefuegt} Quellen neu in der Queue, ${data.themen} als Thema des Tages. ${data.relevant} von ${data.stories} Meldungen waren KI-relevant.${gehoben}${rest}${fehler}`)
       fetchRepoSummaries()
     } catch (err) {
-      alert('Techmeme-Lauf fehlgeschlagen: ' + (err instanceof Error ? err.message : 'Unbekannter Fehler'))
+      toast.error('Techmeme-Lauf fehlgeschlagen: ' + (err instanceof Error ? err.message : 'Unbekannter Fehler'))
     } finally {
       setTechmemeRunning(false)
     }
@@ -501,12 +511,11 @@ export default function DailyRepoPage() {
   const selectedSummary = repoSummaries.find(r => r.date === selectedDate)
 
   return (
-    <div className="p-4 md:p-6 max-w-full">
-      <SystemAlertBanner />
+    <div className="p-4 md:p-6 lg:p-8 max-w-full overflow-x-hidden">
       {/* Header */}
-      <div className="mb-5">
-        <h1 className="text-lg font-semibold tracking-tight">Daily Repo</h1>
-        <p className="text-xs text-muted-foreground mt-0.5">Newsletter &amp; Artikel</p>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight">Daily Repo</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Newsletter &amp; Artikel</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5">
@@ -803,14 +812,14 @@ export default function DailyRepoPage() {
                               })
                               const data = await res.json()
                               if (data.added > 0) {
-                                alert('Zur News Queue hinzugefügt')
+                                toast.success('Zur News Queue hinzugefügt')
                               } else if (data.skipped > 0) {
-                                alert('Bereits in der Queue')
+                                toast.info('Bereits in der Queue')
                               } else if (data.errors?.length) {
-                                alert(`Fehler: ${data.errors[0]}`)
+                                toast.error(`Fehler: ${data.errors[0]}`)
                               }
                             } catch {
-                              alert('Netzwerkfehler')
+                              toast.error('Netzwerkfehler')
                             }
                             setQueuingId(null)
                           }}

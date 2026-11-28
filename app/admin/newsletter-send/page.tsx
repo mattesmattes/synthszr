@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo, startTransition } from 'react'
+import { toast } from 'sonner'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import { Send, FileText, Mail, Loader2, CheckCircle, AlertCircle, Clock, Users, History, Settings, FileEdit, Globe, AlertTriangle, Image, Megaphone, Mic, Lock, Unlock, BookOpen } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -59,6 +61,7 @@ const DEFAULT_TEMPLATE: EmailTemplateSettings = {
 }
 
 export default function NewsletterSendPage() {
+  const confirmDialog = useConfirm()
   const [posts, setPosts] = useState<Post[]>([])
   const [sends, setSends] = useState<NewsletterSend[]>([])
   const [selectedPostId, setSelectedPostId] = useState<string>('')
@@ -544,7 +547,11 @@ export default function NewsletterSendPage() {
       return
     }
 
-    if (!confirm(`Newsletter wirklich an ${activeSubscriberCount} Subscriber senden?`)) {
+    if (!(await confirmDialog({
+      title: `Newsletter wirklich an ${activeSubscriberCount} Subscriber senden?`,
+      confirmLabel: 'Jetzt senden',
+      destructive: true,
+    }))) {
       return
     }
 
@@ -583,14 +590,14 @@ export default function NewsletterSendPage() {
   const selectedPost = posts.find(p => p.id === selectedPostId)
 
   return (
-    <div className="p-4 md:p-6 max-w-full">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="p-4 md:p-6 lg:p-8 max-w-full overflow-x-hidden">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
-            <Send className="h-5 w-5" />
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
+            <Send className="h-6 w-6" />
             Newsletter versenden
           </h1>
-          <p className="text-xs text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
             {activeSubscriberCount} aktive Subscriber
           </p>
         </div>
@@ -635,7 +642,7 @@ export default function NewsletterSendPage() {
                 <select
                   value={selectedPostId}
                   onChange={(e) => setSelectedPostId(e.target.value)}
-                  className="w-full rounded border px-3 py-2 text-sm"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {posts.map(post => (
                     <option key={post.id} value={post.id}>
@@ -947,7 +954,7 @@ export default function NewsletterSendPage() {
                         const newSettings = { ...cronSettings, hour: parseInt(e.target.value) }
                         setCronSettings(newSettings)
                       }}
-                      className="rounded border px-3 py-2 text-sm w-20"
+                      className="h-9 w-20 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                       disabled={!cronSettings.enabled}
                     >
                       {Array.from({ length: 24 }, (_, i) => (
@@ -963,7 +970,7 @@ export default function NewsletterSendPage() {
                         const newSettings = { ...cronSettings, minute: parseInt(e.target.value) }
                         setCronSettings(newSettings)
                       }}
-                      className="rounded border px-3 py-2 text-sm w-20"
+                      className="h-9 w-20 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                       disabled={!cronSettings.enabled}
                     >
                       {[0, 15, 30, 45].map(m => (

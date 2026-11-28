@@ -175,10 +175,10 @@ export default function MattesCorpusPage() {
   }
 
   return (
-    <div className="p-8 max-w-5xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tighter">Mattes-Korpus</h1>
-        <p className="mt-1 text-muted-foreground">
+    <div className="p-4 md:p-6 lg:p-8 mx-auto max-w-6xl">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight">Mattes-Korpus</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Quellgrundlage für die Synthszr-Take-Stimme. Lade ein .zip des
           repo.md-Ordners hoch, um die Embeddings zu aktualisieren.
         </p>

@@ -1,6 +1,7 @@
 'use client'
 
 import { Suspense, useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Volume2, Mic, CheckCircle, Loader2, Save, Play, AlertTriangle, Info, Pause, Sparkles, Clock, FileText, Headphones, Users, SlidersHorizontal, RotateCcw, Database, MessageSquare, BrainCircuit, ArrowRight, TrendingUp, BookOpen, History, Radio, FlaskConical } from 'lucide-react'
 import { StereoPodcastPlayer } from '@/components/stereo-podcast-player'
@@ -575,6 +576,7 @@ export default function AudioPageWrapper() {
 }
 
 function AudioPage() {
+  const confirmDialog = useConfirm()
   const searchParams = useSearchParams()
   const router = useRouter()
   const [ttsSettings, setTtsSettings] = useState<TTSSettings | null>(null)
@@ -1258,13 +1260,13 @@ function AudioPage() {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tighter flex items-center gap-3">
-          <Volume2 className="h-8 w-8" />
+    <div className="p-4 md:p-6 lg:p-8 max-w-full overflow-x-hidden">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
+          <Volume2 className="h-6 w-6" />
           Audio
         </h1>
-        <p className="mt-1 text-muted-foreground">
+        <p className="mt-1 text-sm text-muted-foreground">
           Podcast-Episoden, Aufnahme-Einstellungen und Charakter-Entwicklung
         </p>
       </div>
@@ -2267,11 +2269,16 @@ function AudioPage() {
                         size="sm"
                         className="w-full text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700"
                         disabled={!personality}
-                        onClick={() => {
+                        onClick={async () => {
                           if (!personality) return
                           const newComfort = Math.max(0, Math.round((personality.mutual_comfort - 0.1) * 1000) / 1000)
                           const newFlirt = Math.max(0, Math.round((personality.flirtation_tendency - 0.05) * 1000) / 1000)
-                          if (window.confirm(`Cooldown: Komfort ${Math.round(personality.mutual_comfort * 100)}% → ${Math.round(newComfort * 100)}%, Flirt ${Math.round(personality.flirtation_tendency * 100)}% → ${Math.round(newFlirt * 100)}%`)) {
+                          if (await confirmDialog({
+                            title: 'Relationship Cooldown anwenden?',
+                            description: `Komfort ${Math.round(personality.mutual_comfort * 100)}% → ${Math.round(newComfort * 100)}%, Flirt ${Math.round(personality.flirtation_tendency * 100)}% → ${Math.round(newFlirt * 100)}%`,
+                            confirmLabel: 'Anwenden',
+                            destructive: false,
+                          })) {
                             updateRelationship({ mutual_comfort: newComfort, flirtation_tendency: newFlirt })
                           }
                         }}

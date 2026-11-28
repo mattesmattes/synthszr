@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useRef, useMemo } from 'react'
 import Link from 'next/link'
+import { toast } from 'sonner'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import {
   FileText,
   Loader2,
@@ -62,10 +64,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { GmailCountdown } from '@/components/gmail-countdown'
-import { FetchStatusBanner } from '@/components/admin/fetch-status-banner'
-import { HealthStatusBanner } from '@/components/admin/health-status-banner'
-import { RecentCommentsBanner } from '@/components/admin/recent-comments-banner'
+import { AdminStatusStrip } from '@/components/admin/admin-status-strip'
 import { TiptapEditor } from '@/components/tiptap-editor'
 import { TiptapRenderer } from '@/components/tiptap-renderer'
 import { PostImageGallery } from '@/components/post-image-gallery'
@@ -163,6 +162,7 @@ function countWords(content: Record<string, unknown>): number {
 }
 
 export default function AdminPage() {
+  const confirmDialog = useConfirm()
   const [posts, setPosts] = useState<CombinedPost[]>([])
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(0)
@@ -302,7 +302,7 @@ export default function AdminPage() {
 
   // Delete all article thumbnails for a post
   async function deleteArticleThumbnails(postId: string) {
-    if (!confirm('Alle Artikel-Thumbnails löschen?')) return
+    if (!(await confirmDialog({ title: 'Alle Artikel-Thumbnails löschen?', confirmLabel: 'Löschen', destructive: true }))) return
     try {
       const res = await fetch(`/api/generate-article-thumbnails?postId=${postId}`, {
         method: 'DELETE',
@@ -651,7 +651,7 @@ export default function AdminPage() {
       fetchPosts()
     } catch (error) {
       console.error('Error changing status:', error)
-      alert(error instanceof Error ? error.message : 'Fehler beim Statuswechsel')
+      toast.error(error instanceof Error ? error.message : 'Fehler beim Statuswechsel')
     } finally {
       setChangingStatus(null)
     }
@@ -709,7 +709,7 @@ export default function AdminPage() {
       fetchPosts()
     } catch (error) {
       console.error('Error saving post:', error)
-      alert(error instanceof Error ? error.message : 'Fehler beim Speichern')
+      toast.error(error instanceof Error ? error.message : 'Fehler beim Speichern')
     } finally {
       setSaving(false)
     }
@@ -743,7 +743,7 @@ export default function AdminPage() {
       fetchPosts()
     } catch (error) {
       console.error('Error deleting post:', error)
-      alert(error instanceof Error ? error.message : 'Fehler beim Löschen')
+      toast.error(error instanceof Error ? error.message : 'Fehler beim Löschen')
     } finally {
       setIsDeleting(false)
     }
@@ -811,7 +811,7 @@ export default function AdminPage() {
         }
       })
       if (result.failed.length > 0) {
-        alert(`${result.failed.length} von ${targets.length} Statuswechseln fehlgeschlagen: ${result.failed[0].error}`)
+        toast.error(`${result.failed.length} von ${targets.length} Statuswechseln fehlgeschlagen: ${result.failed[0].error}`)
       }
       if (result.succeeded > 0) {
         selection.clear()
@@ -825,7 +825,11 @@ export default function AdminPage() {
   async function bulkDeletePosts() {
     const targets = selectedPosts
     if (targets.length === 0) return
-    if (!confirm(`${targets.length} Post${targets.length === 1 ? '' : 's'} wirklich endgültig löschen?`)) return
+    if (!(await confirmDialog({
+      title: `${targets.length} Post${targets.length === 1 ? '' : 's'} wirklich endgültig löschen?`,
+      confirmLabel: 'Löschen',
+      destructive: true,
+    }))) return
     setBulkBusy('delete')
     try {
       const result = await runBatched(targets, async (post) => {
@@ -840,7 +844,7 @@ export default function AdminPage() {
         }
       })
       if (result.failed.length > 0) {
-        alert(`${result.failed.length} von ${targets.length} Löschungen fehlgeschlagen: ${result.failed[0].error}`)
+        toast.error(`${result.failed.length} von ${targets.length} Löschungen fehlgeschlagen: ${result.failed[0].error}`)
       }
       if (result.succeeded > 0) {
         selection.clear()
@@ -852,15 +856,12 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-full overflow-x-hidden">
-      <GmailCountdown />
-      <FetchStatusBanner />
-      <HealthStatusBanner />
-      <RecentCommentsBanner />
-      <div className="mb-8 flex items-center justify-between">
+    <div className="p-4 md:p-6 lg:p-8 mx-auto max-w-6xl overflow-x-hidden">
+      <AdminStatusStrip />
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tighter flex items-center gap-3">
-            <FileText className="h-8 w-8" />
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
+            <FileText className="h-6 w-6" />
             Blog Posts
           </h1>
           <div className="mt-1 flex items-center gap-3">
@@ -1679,7 +1680,7 @@ function GenerateImagesButton({ postId, currentImageModel }: { postId: string; c
       const post = postRes.ok ? await postRes.json() : null
 
       if (!post?.content) {
-        alert('Kein Post-Inhalt gefunden.')
+        toast.error('Kein Post-Inhalt gefunden.')
         return
       }
 
@@ -1722,7 +1723,7 @@ function GenerateImagesButton({ postId, currentImageModel }: { postId: string; c
           extractedSections.push({ title: currentHeading, content: currentContent.trim() })
         }
       } catch {
-        alert('Fehler beim Parsen des Inhalts.')
+        toast.error('Fehler beim Parsen des Inhalts.')
         return
       }
 
@@ -1746,7 +1747,7 @@ function GenerateImagesButton({ postId, currentImageModel }: { postId: string; c
       }
 
       if (sectionsToProcess.length === 0) {
-        alert('Keine ausreichenden Textabschnitte für Bildgenerierung gefunden.')
+        toast.warning('Keine ausreichenden Textabschnitte für Bildgenerierung gefunden.')
         return
       }
 
@@ -1810,7 +1811,7 @@ function GenerateImagesButton({ postId, currentImageModel }: { postId: string; c
       }
     } catch (error) {
       console.error('Error generating images:', error)
-      alert('Fehler: ' + (error instanceof Error ? error.message : 'Unbekannter Fehler'))
+      toast.error('Fehler: ' + (error instanceof Error ? error.message : 'Unbekannter Fehler'))
     } finally {
       setGenerating(false)
     }

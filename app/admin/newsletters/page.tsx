@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import { Mail, Plus, Trash2, ToggleLeft, ToggleRight, Loader2, Search, CheckCircle2, Circle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -51,6 +53,7 @@ interface ScannedSender {
 }
 
 export default function NewslettersPage() {
+  const confirmDialog = useConfirm()
   const [sources, setSources] = useState<NewsletterSource[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -116,7 +119,7 @@ export default function NewslettersPage() {
     if (!res.ok) {
       const data = await res.json()
       console.error('Error adding source:', data.error)
-      alert('Fehler: ' + (data.error || 'Quelle konnte nicht hinzugefügt werden'))
+      toast.error('Fehler: ' + (data.error || 'Quelle konnte nicht hinzugefügt werden'))
     } else {
       setNewEmail('')
       setNewName('')
@@ -144,7 +147,7 @@ export default function NewslettersPage() {
   }
 
   async function deleteSource(id: string) {
-    if (!confirm('Diese Newsletter-Quelle wirklich löschen?')) return
+    if (!(await confirmDialog({ title: 'Diese Newsletter-Quelle wirklich löschen?', confirmLabel: 'Löschen', destructive: true }))) return
 
     const res = await fetch(`/api/admin/newsletter-sources?id=${id}`, { method: 'DELETE' })
 
@@ -173,7 +176,7 @@ export default function NewslettersPage() {
         }
       })
       if (result.failed.length > 0) {
-        alert(`${result.failed.length} von ${targets.length} Aktionen fehlgeschlagen`)
+        toast.error(`${result.failed.length} von ${targets.length} Aktionen fehlgeschlagen`)
       }
       if (result.succeeded > 0) {
         selection.clear()
@@ -187,7 +190,7 @@ export default function NewslettersPage() {
   async function bulkDeleteSources() {
     const ids = selection.visibleSelectedIds
     if (ids.length === 0) return
-    if (!confirm(`${ids.length} Newsletter-Quelle${ids.length === 1 ? '' : 'n'} wirklich löschen?`)) return
+    if (!(await confirmDialog({ title: `${ids.length} Newsletter-Quelle${ids.length === 1 ? '' : 'n'} wirklich löschen?`, confirmLabel: 'Löschen', destructive: true }))) return
     setBulkBusy('delete')
     try {
       const result = await runBatched(ids, async (id) => {
@@ -200,7 +203,7 @@ export default function NewslettersPage() {
         }
       })
       if (result.failed.length > 0) {
-        alert(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen`)
+        toast.error(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen`)
       }
       if (result.succeeded > 0) {
         selection.clear()
@@ -295,18 +298,18 @@ export default function NewslettersPage() {
       fetchSources()
     } catch (error) {
       console.error('Error importing senders:', error)
-      alert('Fehler beim Importieren: ' + (error instanceof Error ? error.message : 'Unbekannter Fehler'))
+      toast.error('Fehler beim Importieren: ' + (error instanceof Error ? error.message : 'Unbekannter Fehler'))
     } finally {
       setImporting(false)
     }
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="p-4 md:p-6 lg:p-8 mx-auto max-w-6xl">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tighter">Newsletter-Quellen</h1>
-          <p className="mt-1 text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight">Newsletter-Quellen</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             E-Mail-Adressen von Newslettern, die gesammelt werden sollen
           </p>
         </div>

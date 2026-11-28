@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import { upload } from '@vercel/blob/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +14,7 @@ import { AdPromoView } from '@/components/ad-promo'
 import type { AdPromo, AdPromoConfig, AdPromoLayout } from '@/lib/ad-promos/types'
 
 export default function AdPromosAdminPage() {
+  const confirmDialog = useConfirm()
   const [promos, setPromos] = useState<AdPromo[]>([])
   const [config, setConfig] = useState<AdPromoConfig>({ mode: 'rotate', constantId: null })
   const [loading, setLoading] = useState(true)
@@ -57,7 +59,7 @@ export default function AdPromosAdminPage() {
   }
 
   const deletePromo = async (id: string) => {
-    if (!confirm('Promo wirklich löschen?')) return
+    if (!(await confirmDialog({ title: 'Promo wirklich löschen?', confirmLabel: 'Löschen', destructive: true }))) return
     await fetch(`/api/admin/ad-promos/${id}`, { method: 'DELETE' })
     setPromos(prev => prev.filter(p => p.id !== id))
   }
@@ -106,10 +108,10 @@ export default function AdPromosAdminPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 p-6">
-      <div>
-        <h1 className="font-mono text-2xl font-bold">Ad Promos</h1>
-        <p className="text-sm text-muted-foreground">Promotionsblöcke für Posts, Homepage und Why-Seite verwalten.</p>
+    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6 lg:p-8">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight">Ad Promos</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Promotionsblöcke für Posts, Homepage und Why-Seite verwalten.</p>
       </div>
 
       {/* Display Mode */}
@@ -142,7 +144,7 @@ export default function AdPromosAdminPage() {
           </label>
           {config.mode === 'constant' && (
             <select
-              className="ml-2 rounded-md border border-border bg-background px-2 py-1 text-sm"
+              className="ml-2 h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               value={config.constantId ?? ''}
               onChange={e => saveConfig({ mode: 'constant', constantId: e.target.value || null })}
             >
@@ -259,7 +261,7 @@ function PromoEditor({
       <div className="flex items-center gap-3">
         <Label className="text-xs">Layout:</Label>
         <select
-          className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+          className="h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           value={draft.layout}
           onChange={e => update({ layout: e.target.value as AdPromoLayout })}
         >

@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { toast } from 'sonner'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import { BookOpen, Plus, Trash2, Edit2, Loader2, Tag, CheckCircle, XCircle, Upload, FileText, Sparkles, Check } from 'lucide-react'
 import { applyMultiSelect } from '@/lib/news-queue/multi-select'
 import {
@@ -92,34 +94,35 @@ const categories = [
 
 const categoryColors: Record<string, string> = {
   // Core categories
-  general: 'bg-gray-100 text-gray-800',
-  tech: 'bg-blue-100 text-blue-800',
-  business: 'bg-green-100 text-green-800',
-  brand: 'bg-purple-100 text-purple-800',
-  style: 'bg-orange-100 text-orange-800',
+  general: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200',
+  tech: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-200',
+  business: 'bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-200',
+  brand: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-200',
+  style: 'bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-200',
   // Extended stylistic categories
-  fachbegriff: 'bg-indigo-100 text-indigo-800',
-  eigener_fachbegriff: 'bg-violet-100 text-violet-800',
-  anglizismus: 'bg-cyan-100 text-cyan-800',
-  metapher: 'bg-amber-100 text-amber-800',
-  neologismus: 'bg-lime-100 text-lime-800',
-  business_jargon: 'bg-emerald-100 text-emerald-800',
-  startup_jargon: 'bg-teal-100 text-teal-800',
-  akronym: 'bg-sky-100 text-sky-800',
-  bildliche_sprache: 'bg-rose-100 text-rose-800',
-  phrase: 'bg-fuchsia-100 text-fuchsia-800',
-  satzkonstruktion: 'bg-pink-100 text-pink-800',
-  redewendung: 'bg-red-100 text-red-800',
-  umgangssprache: 'bg-yellow-100 text-yellow-800',
-  fremdwort: 'bg-stone-100 text-stone-800',
-  mantra: 'bg-zinc-100 text-zinc-800',
-  zitat: 'bg-slate-100 text-slate-800',
-  lieblingswort: 'bg-orange-200 text-orange-900',
-  wortbildung: 'bg-green-200 text-green-900',
-  praefixbildung: 'bg-blue-200 text-blue-900',
+  fachbegriff: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-200',
+  eigener_fachbegriff: 'bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200',
+  anglizismus: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-200',
+  metapher: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200',
+  neologismus: 'bg-lime-100 text-lime-800 dark:bg-lime-950/60 dark:text-lime-200',
+  business_jargon: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200',
+  startup_jargon: 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-200',
+  akronym: 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-200',
+  bildliche_sprache: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-200',
+  phrase: 'bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-950/60 dark:text-fuchsia-200',
+  satzkonstruktion: 'bg-pink-100 text-pink-800 dark:bg-pink-950/60 dark:text-pink-200',
+  redewendung: 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-200',
+  umgangssprache: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/60 dark:text-yellow-200',
+  fremdwort: 'bg-stone-100 text-stone-800 dark:bg-stone-800 dark:text-stone-200',
+  mantra: 'bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200',
+  zitat: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200',
+  lieblingswort: 'bg-orange-200 text-orange-900 dark:bg-orange-900/60 dark:text-orange-100',
+  wortbildung: 'bg-green-200 text-green-900 dark:bg-green-900/60 dark:text-green-100',
+  praefixbildung: 'bg-blue-200 text-blue-900 dark:bg-blue-900/60 dark:text-blue-100',
 }
 
 export default function VocabularyPage() {
+  const confirmDialog = useConfirm()
   const [entries, setEntries] = useState<VocabularyEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -218,11 +221,11 @@ export default function VocabularyPage() {
         fetchEntries()
       } else {
         const error = await res.json()
-        alert(error.error || 'Fehler beim Speichern')
+        toast.error(error.error || 'Fehler beim Speichern')
       }
     } catch (error) {
       console.error('Error saving entry:', error)
-      alert('Fehler beim Speichern')
+      toast.error('Fehler beim Speichern')
     } finally {
       setSaving(false)
     }
@@ -243,11 +246,11 @@ export default function VocabularyPage() {
         fetchEntries()
       } else {
         const error = await res.json()
-        alert(error.error || 'Fehler beim Löschen')
+        toast.error(error.error || 'Fehler beim Löschen')
       }
     } catch (error) {
       console.error('Error deleting entry:', error)
-      alert('Fehler beim Löschen')
+      toast.error('Fehler beim Löschen')
     }
   }
 
@@ -302,7 +305,7 @@ export default function VocabularyPage() {
       const data = await res.json()
 
       if (!res.ok || !data.ok) {
-        alert(data.error || 'Fehler bei der Analyse')
+        toast.error(data.error || 'Fehler bei der Analyse')
         return
       }
 
@@ -312,7 +315,7 @@ export default function VocabularyPage() {
       setSelectedExtracted(new Set(data.vocabulary?.map((_: ExtractedVocabulary, i: number) => i) || []))
     } catch (error) {
       console.error('Error extracting vocabulary:', error)
-      alert('Fehler bei der Analyse')
+      toast.error('Fehler bei der Analyse')
     } finally {
       setExtracting(false)
     }
@@ -376,10 +379,10 @@ export default function VocabularyPage() {
       setStyleSummary(null)
       setSelectedExtracted(new Set())
 
-      alert(`${itemsToAdd.length} Einträge hinzugefügt!`)
+      toast.success(`${itemsToAdd.length} Einträge hinzugefügt!`)
     } catch (error) {
       console.error('Error adding vocabulary:', error)
-      alert('Fehler beim Hinzufügen')
+      toast.error('Fehler beim Hinzufügen')
     } finally {
       setAddingExtracted(false)
     }
@@ -441,7 +444,7 @@ export default function VocabularyPage() {
         }
       })
       if (result.failed.length > 0) {
-        alert(`${result.failed.length} von ${selectedEntries.length} Updates fehlgeschlagen`)
+        toast.error(`${result.failed.length} von ${selectedEntries.length} Updates fehlgeschlagen`)
       }
       if (result.succeeded > 0) {
         selection.clear()
@@ -455,7 +458,11 @@ export default function VocabularyPage() {
   async function bulkDeleteEntries() {
     const ids = selection.visibleSelectedIds
     if (ids.length === 0) return
-    if (!confirm(`${ids.length} Vokabular-Einträge wirklich löschen?`)) return
+    if (!(await confirmDialog({
+      title: `${ids.length} Vokabular-Einträge wirklich löschen?`,
+      confirmLabel: 'Löschen',
+      destructive: true,
+    }))) return
     setBulkBusy('delete')
     try {
       const result = await runBatched(ids, async (id) => {
@@ -469,7 +476,7 @@ export default function VocabularyPage() {
         }
       })
       if (result.failed.length > 0) {
-        alert(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen`)
+        toast.error(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen`)
       }
       if (result.succeeded > 0) {
         selection.clear()
@@ -481,11 +488,11 @@ export default function VocabularyPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="p-4 md:p-6 lg:p-8 mx-auto max-w-6xl">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tighter">Vokabular</h1>
-          <p className="mt-1 text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight">Vokabular</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Definiere bevorzugte Begriffe und Formulierungen für den Ghostwriter
           </p>
         </div>

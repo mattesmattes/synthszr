@@ -3,272 +3,18 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import {
-  FileText,
-  Mail,
-  Key,
-  MessageSquare,
-  Database,
-  Sparkles,
-  Settings,
-  PenTool,
-  BookOpen,
-  Wand2,
-  ImageIcon,
-  Lightbulb,
-  Users,
-  Send,
-  HelpCircle,
-  FileCode,
-  Coins,
-  TrendingUp,
-  ListTodo,
-  Globe,
-  Headphones,
-  Megaphone,
-  ClipboardEdit,
-  Wallet,
-  Library, CalendarRange, ClipboardList, Bot, Trophy } from 'lucide-react'
-import { LucideIcon } from 'lucide-react'
+import { ADMIN_NAV_GROUPS, type AdminNavItem } from '@/lib/admin/nav-config'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
-interface NavItem {
-  label: string
-  href: string
-  icon: LucideIcon
-  exact?: boolean
-  external?: boolean
-  highlight?: boolean
+const OPEN_GROUPS_STORAGE_KEY = 'admin-nav-open-groups'
+
+function isItemActive(pathname: string, item: AdminNavItem): boolean {
+  if (item.external) return false
+  if (item.exact) return pathname === item.href
+  return pathname.startsWith(item.href)
 }
-
-interface NavGroup {
-  label: string
-  items: NavItem[]
-}
-
-const navGroups: NavGroup[] = [
-  {
-    label: 'Content',
-    items: [
-      {
-        label: 'Blog Posts',
-        href: '/admin',
-        icon: FileText,
-        exact: true
-      },
-      {
-        label: 'Neuer Post',
-        href: '/admin/new',
-        icon: FileText
-      },
-      {
-        label: 'AI Artikel erstellen',
-        href: '/admin/create-article',
-        icon: Wand2,
-        highlight: true
-      },
-      {
-        // highlight bleibt beim Tagesartikel: der ist die taegliche Handlung,
-        // das Wrap-up die woechentliche.
-        label: 'AI-Week Wrap-up',
-        href: '/admin/week-wrapup',
-        icon: CalendarRange
-      },
-      {
-        label: 'Ghostwriter-Prompts',
-        href: '/admin/ghostwriter',
-        icon: PenTool
-      },
-      {
-        label: 'Enrich-Prompts',
-        href: '/admin/enrich-prompts',
-        icon: ClipboardEdit
-      },
-      {
-        label: 'Bild-Prompts',
-        href: '/admin/image-prompts',
-        icon: ImageIcon
-      },
-      {
-        label: 'Vokabular',
-        href: '/admin/vocabulary',
-        icon: BookOpen
-      },
-      {
-        label: 'Lexikon',
-        href: '/admin/glossary',
-        icon: Library
-      },
-      {
-        label: 'Eure Takes',
-        href: '/admin/comments',
-        icon: MessageSquare
-      },
-      {
-        label: 'Agenten-Takes',
-        href: '/admin/agents',
-        icon: Bot
-      },
-      {
-        label: 'Why',
-        href: '/admin/why',
-        icon: HelpCircle
-      },
-      {
-        label: 'Sprachen',
-        href: '/admin/languages',
-        icon: Globe
-      },
-      {
-        label: 'Übersetzungen',
-        href: '/admin/translations',
-        icon: Globe,
-        highlight: true
-      },
-      {
-        label: 'Podcast Studio',
-        href: '/admin/audio',
-        icon: Headphones,
-        highlight: true
-      },
-      {
-        label: 'Ad Promos',
-        href: '/admin/ad-promos',
-        icon: Megaphone
-      },
-      {
-        label: 'Tip Promos',
-        href: '/admin/tip-promos',
-        icon: Lightbulb
-      },
-      {
-        label: 'Mattes-Korpus',
-        href: '/admin/mattes',
-        icon: BookOpen
-      }
-    ]
-  },
-  {
-    label: 'News & Synthese',
-    items: [
-      {
-        label: 'News',
-        href: '/admin/digests',
-        icon: Sparkles,
-        highlight: true
-      },
-      {
-        label: 'Morgenkonferenz',
-        href: '/admin/curation',
-        icon: ClipboardList
-      },
-      {
-        label: 'News Queue',
-        href: '/admin/news-queue',
-        icon: ListTodo,
-        highlight: true
-      },
-      {
-        label: 'Top sources',
-        href: '/admin/top-sources',
-        icon: Trophy
-      },
-      {
-        label: 'Analyse-Prompts',
-        href: '/admin/prompts',
-        icon: MessageSquare
-      },
-      {
-        label: 'Produkt-Rankings',
-        href: '/admin/rankings',
-        icon: TrendingUp
-      }
-    ]
-  },
-  {
-    label: 'Premarket',
-    items: [
-      {
-        label: 'AI Synthesen',
-        href: '/admin/premarket',
-        icon: TrendingUp
-      }
-    ]
-  },
-  {
-    label: 'Repo',
-    items: [
-      {
-        label: 'Daily Repo',
-        href: '/admin/daily-repo',
-        icon: Database,
-        highlight: true
-      },
-      {
-        label: 'Newsletter-Quellen',
-        href: '/admin/newsletters',
-        icon: Mail
-      },
-      {
-        label: 'Abo-Kosten',
-        href: '/admin/subscriptions',
-        icon: Wallet
-      },
-      {
-        label: 'Paywall-Credentials',
-        href: '/admin/credentials',
-        icon: Key
-      }
-    ]
-  },
-  {
-    label: 'Newsletter',
-    items: [
-      {
-        label: 'Subscriber',
-        href: '/admin/subscribers',
-        icon: Users
-      },
-      {
-        label: 'Versenden',
-        href: '/admin/newsletter-send',
-        icon: Send,
-        highlight: true
-      }
-    ]
-  },
-  {
-    label: 'Analytics',
-    items: [
-      {
-        label: 'Statistics',
-        href: '/admin/statistics',
-        icon: TrendingUp
-      }
-    ]
-  },
-  {
-    label: 'Einstellungen',
-    items: [
-      {
-        label: 'Einstellungen',
-        href: '/admin/settings',
-        icon: Settings
-      },
-      {
-        label: 'Architecture',
-        href: '/docs/architecture',
-        icon: FileCode,
-        external: true
-      },
-      {
-        label: 'KI-Kosten',
-        href: '/admin/llm-costs',
-        icon: Coins
-      }
-    ]
-  }
-]
 
 interface AdminNavProps {
   onNavigate?: () => void
@@ -278,6 +24,58 @@ interface AdminNavProps {
 
 export function AdminNav({ onNavigate, collapsed = false }: AdminNavProps) {
   const pathname = usePathname()
+
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {}
+    for (const group of ADMIN_NAV_GROUPS) {
+      if (group.collapsible) {
+        initial[group.id] = group.defaultOpen ?? false
+      }
+    }
+    return initial
+  })
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(OPEN_GROUPS_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') {
+        setOpenGroups((prev) => ({ ...prev, ...parsed }))
+      }
+    } catch {
+      // ignore invalid storage
+    }
+  }, [])
+
+  // Auto-open collapsible group if current route lives inside it.
+  useEffect(() => {
+    setOpenGroups((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const group of ADMIN_NAV_GROUPS) {
+        if (group.collapsible && group.items.some((item) => isItemActive(pathname, item))) {
+          if (!next[group.id]) {
+            next[group.id] = true
+            changed = true
+          }
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [pathname])
+
+  const toggleGroup = (id: string) => {
+    setOpenGroups((prev) => {
+      const next = { ...prev, [id]: !prev[id] }
+      try {
+        window.localStorage.setItem(OPEN_GROUPS_STORAGE_KEY, JSON.stringify(next))
+      } catch {
+        // ignore storage failure
+      }
+      return next
+    })
+  }
 
   // Zahl der Kommentare in der Freigabe-Queue → rot blinkendes „Eure Takes"-Icon.
   // Poll alle 60s; bei jedem Navigieren (pathname-Wechsel) frisch, damit die Zahl
@@ -297,70 +95,104 @@ export function AdminNav({ onNavigate, collapsed = false }: AdminNavProps) {
   }, [pathname])
 
   return (
-    <div className={collapsed ? 'space-y-2' : 'space-y-6'}>
-      {navGroups.map((group, groupIndex) => (
-        <div key={group.label}>
-          {collapsed ? (
-            groupIndex > 0 && <div className="mx-1 mb-2 border-t border-border" aria-hidden="true" />
-          ) : (
-            <h3 className="mb-2 px-2 font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {group.label}
-            </h3>
-          )}
-          <ul className="space-y-1">
-            {group.items.map((item) => {
-              const isExternal = item.external === true
-              const isActive = isExternal
-                ? false
-                : item.exact === true
-                  ? pathname === item.href
-                  : pathname.startsWith(item.href)
+    <TooltipProvider delayDuration={150}>
+      <div className={collapsed ? 'space-y-2' : 'space-y-4'}>
+        {ADMIN_NAV_GROUPS.map((group, groupIndex) => {
+          const hasActiveItem = group.items.some((item) => isItemActive(pathname, item))
+          const isOpen = collapsed || !group.collapsible || Boolean(openGroups[group.id]) || hasActiveItem
 
-              // „Eure Takes": rot pulsierendes Icon + Zähler, solange Kommentare
-              // auf Freigabe warten.
-              const alertsPending = item.href === '/admin/comments' && pendingComments > 0
+          return (
+            <div key={group.id}>
+              {collapsed ? (
+                groupIndex > 0 && <div className="mx-1 mb-2 border-t border-border" aria-hidden="true" />
+              ) : group.collapsible ? (
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.id)}
+                  aria-expanded={isOpen}
+                  className="mb-1.5 flex w-full items-center justify-between rounded-md px-2 py-1 text-left font-mono text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors"
+                >
+                  <span>{group.label}</span>
+                  {isOpen ? (
+                    <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5 opacity-70" />
+                  )}
+                </button>
+              ) : (
+                <h3 className="mb-1.5 px-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {group.label}
+                </h3>
+              )}
 
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    target={isExternal ? '_blank' : undefined}
-                    rel={isExternal ? 'noopener noreferrer' : undefined}
-                    onClick={onNavigate}
-                    title={collapsed ? item.label : undefined}
-                    className={cn(
-                      'flex items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors',
-                      collapsed && 'justify-center px-0',
-                      isActive
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        'flex h-6 w-6 shrink-0 items-center justify-center rounded',
-                        item.highlight && 'bg-[#CCFF00] text-black',
-                        alertsPending && 'animate-pulse bg-red-600 text-white'
-                      )}
-                    >
-                      <item.icon className="h-4 w-4" />
-                    </span>
-                    {!collapsed && item.label}
-                    {alertsPending && !collapsed && (
-                      <span className="ml-auto animate-pulse rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
-                        {pendingComments}
-                      </span>
-                    )}
-                    {isExternal && !collapsed && (
-                      <span className="ml-auto text-xs text-muted-foreground">↗</span>
-                    )}
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
-        </div>
-      ))}
-    </div>
+              {isOpen && (
+                <ul className="space-y-0.5">
+                  {group.items.map((item) => {
+                    const isExternal = item.external === true
+                    const isActive = isItemActive(pathname, item)
+                    const alertsPending = item.href === '/admin/comments' && pendingComments > 0
+
+                    const linkEl = (
+                      <Link
+                        href={item.href}
+                        target={isExternal ? '_blank' : undefined}
+                        rel={isExternal ? 'noopener noreferrer' : undefined}
+                        onClick={onNavigate}
+                        className={cn(
+                          'flex items-center gap-3 rounded-md px-2 py-1.5 text-sm transition-colors',
+                          collapsed && 'justify-center px-0 py-2',
+                          isActive
+                            ? 'bg-primary/10 font-medium text-primary'
+                            : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'relative flex h-6 w-6 shrink-0 items-center justify-center rounded',
+                            item.highlight && 'bg-[#CCFF00] text-black',
+                            alertsPending && 'animate-pulse bg-red-600 text-white',
+                          )}
+                        >
+                          <item.icon className="h-4 w-4" />
+                          {alertsPending && collapsed && (
+                            <span className="absolute -top-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red-600 px-0.5 text-[9px] font-bold leading-none text-white ring-1 ring-card">
+                              {pendingComments > 9 ? '9+' : pendingComments}
+                            </span>
+                          )}
+                        </span>
+                        {!collapsed && <span className="truncate">{item.label}</span>}
+                        {alertsPending && !collapsed && (
+                          <span className="ml-auto animate-pulse rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+                            {pendingComments}
+                          </span>
+                        )}
+                        {isExternal && !collapsed && (
+                          <span className="ml-auto text-xs text-muted-foreground">↗</span>
+                        )}
+                      </Link>
+                    )
+
+                    if (collapsed) {
+                      return (
+                        <li key={item.href}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>{linkEl}</TooltipTrigger>
+                            <TooltipContent side="right">
+                              {alertsPending ? `${item.label} (${pendingComments})` : item.label}
+                            </TooltipContent>
+                          </Tooltip>
+                        </li>
+                      )
+                    }
+
+                    return <li key={item.href}>{linkEl}</li>
+                  })}
+                </ul>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </TooltipProvider>
   )
 }

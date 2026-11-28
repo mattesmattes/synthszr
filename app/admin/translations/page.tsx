@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import {
   useMultiSelect,
   MultiSelectBar,
@@ -79,6 +80,7 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 }
 
 export default function TranslationsPage() {
+  const confirmDialog = useConfirm()
   const [data, setData] = useState<TranslationsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState(false)
@@ -340,7 +342,12 @@ export default function TranslationsPage() {
   }
 
   async function deleteItem(id: string) {
-    if (!confirm('Übersetzung wirklich löschen? Dies löscht auch die zugehörige Übersetzung.')) {
+    if (!(await confirmDialog({
+      title: 'Übersetzung wirklich löschen?',
+      description: 'Dies löscht auch die zugehörige Übersetzung.',
+      confirmLabel: 'Löschen',
+      destructive: true,
+    }))) {
       return
     }
     try {
@@ -438,7 +445,12 @@ export default function TranslationsPage() {
     if (ids.length === 0) return
     if (
       action === 'delete-items' &&
-      !confirm(`${ids.length} Übersetzung${ids.length === 1 ? '' : 'en'} wirklich löschen? Dies löscht auch die zugehörigen Übersetzungen.`)
+      !(await confirmDialog({
+        title: `${ids.length} Übersetzung${ids.length === 1 ? '' : 'en'} wirklich löschen?`,
+        description: 'Dies löscht auch die zugehörigen Übersetzungen.',
+        confirmLabel: 'Löschen',
+        destructive: true,
+      }))
     ) {
       return
     }
@@ -484,14 +496,14 @@ export default function TranslationsPage() {
   const languages = Object.keys(stats?.byLanguage || {})
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="p-4 md:p-6 lg:p-8 mx-auto max-w-6xl">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tighter flex items-center gap-3">
-            <Languages className="h-8 w-8" />
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
+            <Languages className="h-6 w-6" />
             Übersetzungen
           </h1>
-          <p className="mt-1 text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
             Verwalte die Übersetzungs-Queue und sehe den Fortschritt
           </p>
         </div>
@@ -787,7 +799,7 @@ export default function TranslationsPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        className="text-red-600 dark:text-red-400 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40"
                         onClick={() => deleteItem(item.id)}
                       >
                         <Trash2 className="h-3 w-3 mr-1" />

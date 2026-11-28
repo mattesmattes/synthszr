@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { Globe, CheckCircle, Loader2, Play } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -80,13 +81,13 @@ export default function LanguagesPage() {
       const data = await res.json()
 
       if (res.ok) {
-        alert(`Backfill gestartet: ${data.queued} Artikel zur Übersetzung in Queue${data.skipped ? ` (${data.skipped} übersprungen)` : ''}`)
+        toast.success(`Backfill gestartet: ${data.queued} Artikel zur Übersetzung in Queue${data.skipped ? ` (${data.skipped} übersprungen)` : ''}`)
       } else {
-        alert(`Fehler: ${data.error}`)
+        toast.error(`Fehler: ${data.error}`)
       }
     } catch (error) {
       console.error('Error triggering backfill:', error)
-      alert('Fehler beim Starten des Backfills')
+      toast.error('Fehler beim Starten des Backfills')
     } finally {
       setBackfilling(null)
     }
@@ -104,13 +105,13 @@ export default function LanguagesPage() {
   const otherLanguages = languages.filter(l => !l.is_default)
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tighter flex items-center gap-3">
-          <Globe className="h-8 w-8" />
+    <div className="p-4 md:p-6 lg:p-8 mx-auto max-w-6xl">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
+          <Globe className="h-6 w-6" />
           Sprachen
         </h1>
-        <p className="mt-1 text-muted-foreground">
+        <p className="mt-1 text-sm text-muted-foreground">
           Verwalte die verfügbaren Sprachen und Übersetzungseinstellungen
         </p>
       </div>

@@ -288,11 +288,11 @@ export default function StatisticsPage() {
   const youtubeViewsTotal = youtube?.totals.views ?? 0
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-4 md:p-6 lg:p-8 max-w-full overflow-x-hidden space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold font-mono">Statistics</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Statistics</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {new Date().toLocaleDateString('de-DE', {
               weekday: 'long',

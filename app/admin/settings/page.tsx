@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { utcOffsetLabel } from '@/lib/scheduler/clock'
 import { Mail, Clock, Bell, CheckCircle, XCircle, Loader2, Save, Sparkles, Play, RefreshCw, Settings2, AlertTriangle, ExternalLink, Cpu, Download, Palette, Upload, ThumbsUp } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -405,10 +406,10 @@ export default function SettingsPage() {
   // --- Render ---
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tighter">Einstellungen</h1>
-        <p className="mt-1 text-muted-foreground">
+    <div className="p-4 md:p-6 lg:p-8 mx-auto max-w-6xl">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight">Einstellungen</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Allgemeine Konfiguration der Newsletter-Aggregation
         </p>
       </div>
@@ -954,7 +955,7 @@ function ExportSubscribers() {
       a.click()
       URL.revokeObjectURL(url)
     } catch {
-      alert('Export fehlgeschlagen')
+      toast.error('Export fehlgeschlagen')
     } finally {
       setExporting(false)
     }
@@ -1220,7 +1221,7 @@ function CoverAnimationSettings() {
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch {
-      alert('Speichern fehlgeschlagen')
+      toast.error('Speichern fehlgeschlagen')
     } finally {
       setSaving(false)
     }
@@ -1237,7 +1238,7 @@ function CoverAnimationSettings() {
       })
       updateCalligram({ shapeImageUrl: blob.url })
     } catch {
-      alert('Upload fehlgeschlagen')
+      toast.error('Upload fehlgeschlagen')
     } finally {
       setUploading(false)
     }

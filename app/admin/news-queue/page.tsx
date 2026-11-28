@@ -1,6 +1,7 @@
 'use client'
 
 import { Fragment, useEffect, useState, useCallback, useRef } from 'react'
+import { toast } from 'sonner'
 import {
   ListTodo,
   Loader2,
@@ -518,7 +519,7 @@ export default function NewsQueuePage() {
       })
       if (res.ok) {
         const data = await res.json()
-        alert(`${data.added} Items hinzugefügt, ${data.skipped} übersprungen`)
+        toast.success(`${data.added} Items hinzugefügt, ${data.skipped} übersprungen`)
         setShowImportDialog(false)
         setSelectedCandidates(new Set())
         fetchData()
@@ -623,7 +624,7 @@ export default function NewsQueuePage() {
       })
       if (res.ok) {
         const data = await res.json()
-        alert(`${data.reset} Items zurück auf pending gesetzt`)
+        toast.success(`${data.reset} Items zurück auf pending gesetzt`)
         fetchData()
       }
     } catch (error) {
@@ -642,7 +643,7 @@ export default function NewsQueuePage() {
       })
       if (res.ok) {
         const data = await res.json()
-        alert(`${data.expired} Items abgelaufen`)
+        toast.info(`${data.expired} Items abgelaufen`)
         fetchData()
       }
     } catch (error) {
@@ -694,7 +695,7 @@ export default function NewsQueuePage() {
       if (res.ok) {
         const data = await res.json()
         if (data.error) {
-          alert(`Fehler: ${data.error}`)
+          toast.error(`Fehler: ${data.error}`)
         } else {
           clearSelection()
           fetchData()
@@ -723,7 +724,7 @@ export default function NewsQueuePage() {
         })
         const selectData = await selectRes.json().catch(() => ({}))
         if (!selectRes.ok || selectData.error) {
-          alert(`Fehler beim Auswählen: ${selectData.error || `HTTP ${selectRes.status}`}`)
+          toast.error(`Fehler beim Auswählen: ${selectData.error || `HTTP ${selectRes.status}`}`)
           setActionLoading(null)
           return
         }
@@ -735,7 +736,7 @@ export default function NewsQueuePage() {
         })
         const labelData = await labelRes.json().catch(() => ({}))
         if (!labelRes.ok || !labelData.ok) {
-          alert(`Fehler beim Setzen des Labels: ${labelData.error || `HTTP ${labelRes.status}`}`)
+          toast.error(`Fehler beim Setzen des Labels: ${labelData.error || `HTTP ${labelRes.status}`}`)
         } else {
           setItems(prev => prev.filter(item => !targetSet.has(item.id)))
           clearSelection()
@@ -770,13 +771,13 @@ export default function NewsQueuePage() {
               : item,
           ),
         )
-        alert(`Fehler: ${data.error || 'Unbekannter Fehler'}`)
+        toast.error(`Fehler: ${data.error || 'Unbekannter Fehler'}`)
       } else {
         clearSelection()
       }
     } catch (error) {
       console.error('Bulk bundle type update failed:', error)
-      alert('Netzwerkfehler beim Setzen des Labels')
+      toast.error('Netzwerkfehler beim Setzen des Labels')
     }
     setActionLoading(null)
   }
@@ -805,11 +806,11 @@ export default function NewsQueuePage() {
         clearSelection()
         await fetchData()
       } else {
-        alert(`Fehler: ${data.error || `HTTP ${res.status}`}`)
+        toast.error(`Fehler: ${data.error || `HTTP ${res.status}`}`)
       }
     } catch (error) {
       console.error('Bulk delete failed:', error)
-      alert('Netzwerkfehler beim Löschen')
+      toast.error('Netzwerkfehler beim Löschen')
     }
     setActionLoading(null)
   }
@@ -839,11 +840,11 @@ export default function NewsQueuePage() {
         await fetchData()
       } else {
         console.error('Unselect failed:', data.error)
-        alert(`Fehler: ${data.error || 'Unbekannter Fehler'}`)
+        toast.error(`Fehler: ${data.error || 'Unbekannter Fehler'}`)
       }
     } catch (error) {
       console.error('Unselect failed:', error)
-      alert('Netzwerkfehler beim Zurücksetzen')
+      toast.error('Netzwerkfehler beim Zurücksetzen')
     }
     setActionLoading(null)
   }
@@ -865,12 +866,12 @@ export default function NewsQueuePage() {
       if (!res.ok || !data.ok) {
         // Revert optimistic update on failure
         setItems(prev => prev.map(item => item.id === itemId ? { ...item, bundle_type: current } : item))
-        alert(`Fehler: ${data.error || 'Unbekannter Fehler'}`)
+        toast.error(`Fehler: ${data.error || 'Unbekannter Fehler'}`)
       }
     } catch (error) {
       console.error('Bundle type update failed:', error)
       setItems(prev => prev.map(item => item.id === itemId ? { ...item, bundle_type: current } : item))
-      alert('Netzwerkfehler beim Setzen des Tags')
+      toast.error('Netzwerkfehler beim Setzen des Tags')
     }
     setActionLoading(null)
   }
@@ -896,11 +897,11 @@ export default function NewsQueuePage() {
           setStats({ ...stats, pending: Math.max(0, stats.pending - 1), selected: stats.selected + 1 })
         }
       } else {
-        alert(`Fehler: ${data.error || 'Unbekannter Fehler'}`)
+        toast.error(`Fehler: ${data.error || 'Unbekannter Fehler'}`)
       }
     } catch (error) {
       console.error('Select failed:', error)
-      alert('Netzwerkfehler beim Auswählen')
+      toast.error('Netzwerkfehler beim Auswählen')
     }
     setActionLoading(null)
   }
@@ -1050,10 +1051,10 @@ export default function NewsQueuePage() {
 
   return (
     <Collapsible open={showSidebar} onOpenChange={setShowSidebar}>
-    <div className="p-4 md:p-6 max-w-full">
+    <div className="p-4 md:p-6 lg:p-8 max-w-full overflow-x-hidden">
       <div className="mb-4">
-        <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
-          <ListTodo className="h-5 w-5" />
+        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
+          <ListTodo className="h-6 w-6" />
           News Queue
         </h1>
         {/* Action Buttons - horizontal row */}
@@ -2099,7 +2100,7 @@ export default function NewsQueuePage() {
                   fetchData()
                 } else {
                   const data = await res.json()
-                  alert(data.error || 'Fehler bei Auswahl')
+                  toast.error(data.error || 'Fehler bei Auswahl')
                 }
               }}
             >

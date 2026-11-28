@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState, useRef } from 'react'
+import { toast } from 'sonner'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import {
   FileText,
   Loader2,
@@ -143,6 +145,7 @@ function generateSlug(title: string): string {
 }
 
 export default function GeneratedArticlesPage() {
+  const confirmDialog = useConfirm()
   const [posts, setPosts] = useState<GeneratedPost[]>([])
   const [loading, setLoading] = useState(true)
   const [viewingPost, setViewingPost] = useState<GeneratedPost | null>(null)
@@ -489,7 +492,7 @@ export default function GeneratedArticlesPage() {
           queueWithRetry().then(async (result) => {
             if (result.error) {
               console.error('[i18n] Translation queue failed:', result.error)
-              alert(`⚠️ Post veröffentlicht, aber Übersetzungen fehlgeschlagen: ${result.error}\n\nBitte manuell in /admin/translations starten.`)
+              toast.warning(`Post veröffentlicht, aber Übersetzungen fehlgeschlagen: ${result.error} — bitte manuell in /admin/translations starten.`)
               return
             }
             if (result.queued > 0) {
@@ -507,11 +510,11 @@ export default function GeneratedArticlesPage() {
         fetchPosts()
       } else {
         const error = await res.json()
-        alert(error.error || 'Fehler beim Statuswechsel')
+        toast.error(error.error || 'Fehler beim Statuswechsel')
       }
     } catch (error) {
       console.error('Error changing status:', error)
-      alert('Fehler beim Statuswechsel')
+      toast.error('Fehler beim Statuswechsel')
     } finally {
       setChangingStatus(null)
     }
@@ -582,11 +585,11 @@ export default function GeneratedArticlesPage() {
         fetchPosts()
       } else {
         const error = await res.json()
-        alert(error.error || 'Fehler beim Speichern')
+        toast.error(error.error || 'Fehler beim Speichern')
       }
     } catch (error) {
       console.error('Error saving post:', error)
-      alert('Fehler beim Speichern')
+      toast.error('Fehler beim Speichern')
     } finally {
       setSaving(false)
     }
@@ -606,11 +609,11 @@ export default function GeneratedArticlesPage() {
         fetchPosts()
       } else {
         const error = await res.json()
-        alert(error.error || 'Fehler beim Löschen')
+        toast.error(error.error || 'Fehler beim Löschen')
       }
     } catch (error) {
       console.error('Error deleting post:', error)
-      alert('Fehler beim Löschen')
+      toast.error('Fehler beim Löschen')
     }
   }
 
@@ -650,7 +653,7 @@ export default function GeneratedArticlesPage() {
         }).catch(() => {})
       }
       if (result.failed.length > 0) {
-        alert(`${result.failed.length} von ${targets.length} Statuswechseln fehlgeschlagen: ${result.failed[0].error}`)
+        toast.error(`${result.failed.length} von ${targets.length} Statuswechseln fehlgeschlagen: ${result.failed[0].error}`)
       }
       if (result.succeeded > 0) {
         selection.clear()
@@ -691,7 +694,7 @@ export default function GeneratedArticlesPage() {
         selection.clear()
       }
       if (result.failed.length > 0) {
-        alert(`${result.failed.length} von ${targets.length} Übersetzungs-Triggern fehlgeschlagen`)
+        toast.error(`${result.failed.length} von ${targets.length} Übersetzungs-Triggern fehlgeschlagen`)
       }
     } finally {
       setBulkBusy(null)
@@ -701,7 +704,11 @@ export default function GeneratedArticlesPage() {
   async function bulkDeletePosts() {
     const targets = selectedPosts
     if (targets.length === 0) return
-    if (!confirm(`${targets.length} Artikel wirklich endgültig löschen?`)) return
+    if (!(await confirmDialog({
+      title: `${targets.length} Artikel wirklich endgültig löschen?`,
+      confirmLabel: 'Löschen',
+      destructive: true,
+    }))) return
     setBulkBusy('delete')
     try {
       const result = await runBatched(targets, async (post) => {
@@ -715,7 +722,7 @@ export default function GeneratedArticlesPage() {
         }
       })
       if (result.failed.length > 0) {
-        alert(`${result.failed.length} von ${targets.length} Löschungen fehlgeschlagen: ${result.failed[0].error}`)
+        toast.error(`${result.failed.length} von ${targets.length} Löschungen fehlgeschlagen: ${result.failed[0].error}`)
       }
       if (result.succeeded > 0) {
         selection.clear()
@@ -739,13 +746,13 @@ export default function GeneratedArticlesPage() {
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-full overflow-x-hidden">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tighter flex items-center gap-3">
-          <FileText className="h-8 w-8" />
+    <div className="p-4 md:p-6 lg:p-8 mx-auto max-w-6xl overflow-x-hidden">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
+          <FileText className="h-6 w-6" />
           Generierte AI-Artikel
         </h1>
-        <p className="mt-1 text-muted-foreground">
+        <p className="mt-1 text-sm text-muted-foreground">
           Übersicht aller mit dem Ghostwriter erstellten Blogartikel
         </p>
       </div>

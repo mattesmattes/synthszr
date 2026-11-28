@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -76,11 +77,11 @@ export function UnfetchedEmailsDialog({
         onOpenChange(false)
         setSourcesSet(new Set())
       } else {
-        alert('Fehler: ' + (result.error || 'Unbekannter Fehler'))
+        toast.error('Fehler: ' + (result.error || 'Unbekannter Fehler'))
       }
     } catch (err) {
       console.error('Error saving decisions:', err)
-      alert('Fehler beim Speichern')
+      toast.error('Fehler beim Speichern')
     } finally {
       setSaving(false)
     }

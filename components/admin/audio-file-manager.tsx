@@ -1,6 +1,8 @@
 'use client'
 
 import { useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import { upload } from '@vercel/blob/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -51,6 +53,7 @@ function formatGermanDate(dateStr: string): string {
 }
 
 export function AudioFileManager({ type, files, onRefresh }: AudioFileManagerProps) {
+  const confirmDialog = useConfirm()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
 
@@ -144,7 +147,11 @@ export function AudioFileManager({ type, files, onRefresh }: AudioFileManagerPro
   const handleBulkDelete = async () => {
     const ids = selection.visibleSelectedIds
     if (ids.length === 0) return
-    if (!confirm(`${ids.length} ${TYPE_LABEL[type]}-Datei${ids.length === 1 ? '' : 'en'} wirklich löschen?`)) return
+    if (!(await confirmDialog({
+      title: `${ids.length} ${TYPE_LABEL[type]}-Datei${ids.length === 1 ? '' : 'en'} wirklich löschen?`,
+      confirmLabel: 'Löschen',
+      destructive: true,
+    }))) return
     setBulkDeleting(true)
     try {
       const result = await runBatched(ids, async (id) => {
@@ -156,7 +163,7 @@ export function AudioFileManager({ type, files, onRefresh }: AudioFileManagerPro
         }
       })
       if (result.failed.length > 0) {
-        alert(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen`)
+        toast.error(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen`)
       }
       if (result.succeeded > 0) {
         selection.clear()

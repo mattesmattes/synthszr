@@ -14,8 +14,8 @@ export default async function EditPostPage({ params }: { params: Promise<{ id: s
 
   return (
     <div className="min-h-screen bg-background">
-      <main className="mx-auto max-w-4xl px-4 py-8">
-        <h1 className="mb-8 text-3xl font-bold tracking-tighter">Edit Post</h1>
+      <main className="mx-auto max-w-4xl p-4 md:p-6 lg:p-8">
+        <h1 className="mb-6 text-2xl font-bold tracking-tight">Edit Post</h1>
         <PostForm post={post} />
       </main>
     </div>

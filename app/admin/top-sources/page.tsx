@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ExternalLink, Loader2, Trophy } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { AdminPage, AdminPageHeader } from '@/components/admin/admin-page'
 
 /**
  * Top sources (Betreiber 2026-11-12): welche Quellen am Ende tatsächlich als
@@ -48,30 +49,22 @@ export default function TopSourcesPage() {
 
   const r = report
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tighter flex items-center gap-3">
-            <Trophy className="h-8 w-8" />
-            Top sources
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            Die 50 Quellen, auf die die veröffentlichten Posts am häufigsten verlinken, gezählt je Domain
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {RANGES.map((d) => (
-            <Button key={d} variant={d === days ? 'default' : 'outline'} size="sm" onClick={() => setDays(d)} disabled={loading}>
-              {d === 0 ? 'Gesamt' : `${d} Tage`}
-            </Button>
-          ))}
-        </div>
-      </div>
+    <AdminPage>
+      <AdminPageHeader
+        icon={<Trophy className="h-6 w-6" />}
+        title="Top sources"
+        description="Die 50 Quellen, auf die die veröffentlichten Posts am häufigsten verlinken, gezählt je Domain"
+        actions={RANGES.map((d) => (
+          <Button key={d} variant={d === days ? 'default' : 'outline'} size="sm" onClick={() => setDays(d)} disabled={loading}>
+            {d === 0 ? 'Gesamt' : `${d} Tage`}
+          </Button>
+        ))}
+      />
 
       {loading && <div className="mb-4 flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Lädt…</div>}
       {error && (
-        <Card className="mb-4 border-red-300">
-          <CardContent className="pt-6 text-sm text-red-700">Fehler: {error}</CardContent>
+        <Card className="mb-4 border-red-300 dark:border-red-500/40">
+          <CardContent className="pt-6 text-sm text-red-700 dark:text-red-300">Fehler: {error}</CardContent>
         </Card>
       )}
 
@@ -109,7 +102,7 @@ export default function TopSourcesPage() {
                     </thead>
                     <tbody>
                       {r.sources.map((s, i) => (
-                        <tr key={s.host} className="border-b last:border-0">
+                        <tr key={s.host} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                           <td className="py-2 pr-3 tabular-nums text-muted-foreground">{i + 1}</td>
                           <td className="py-2">
                             <a href={`https://${s.host}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:underline">
@@ -132,7 +125,7 @@ export default function TopSourcesPage() {
           </Card>
         </>
       )}
-    </div>
+    </AdminPage>
   )
 }
 

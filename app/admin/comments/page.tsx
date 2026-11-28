@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Loader2, MessageSquare, Eye, EyeOff, Pencil, Trash2, Search, Check, X, Bot } from 'lucide-react'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import {
   useMultiSelect,
   MultiSelectBar,
@@ -64,6 +65,7 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
 }
 
 export default function AdminCommentsPage() {
+  const confirmDialog = useConfirm()
   const [tab, setTab] = useState<string>('pending')
   const [query, setQuery] = useState('')
   const [comments, setComments] = useState<AdminComment[]>([])
@@ -148,7 +150,11 @@ export default function AdminCommentsPage() {
     if (ids.length === 0) return
     if (
       action === 'delete' &&
-      !confirm(`${ids.length} Kommentar${ids.length === 1 ? '' : 'e'} endgültig löschen?`)
+      !(await confirmDialog({
+        title: `${ids.length} Kommentar${ids.length === 1 ? '' : 'e'} endgültig löschen?`,
+        confirmLabel: 'Löschen',
+        destructive: true,
+      }))
     ) {
       return
     }
@@ -187,9 +193,9 @@ export default function AdminCommentsPage() {
   }, [tab, query])
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
+    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6 lg:p-8">
       <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
+        <h1 className="flex items-center gap-2.5 text-2xl font-bold tracking-tight">
           <MessageSquare className="h-6 w-6" />
           Eure Takes — Moderation
         </h1>
@@ -214,7 +220,7 @@ export default function AdminCommentsPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Takes durchsuchen (Text oder Name)…"
-          className="w-full rounded-md border border-border bg-background py-2 pl-9 pr-3 text-sm"
+          className="h-9 w-full rounded-md border border-input bg-background py-2 pl-9 pr-3 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       </div>
 

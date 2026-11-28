@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import { Key, Plus, Shield, Trash2, Edit2, Loader2, Globe, User, Lock, FileText } from 'lucide-react'
 import {
   useMultiSelect,
@@ -44,6 +46,7 @@ interface Credential {
 }
 
 export default function CredentialsPage() {
+  const confirmDialog = useConfirm()
   const [credentials, setCredentials] = useState<Credential[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -128,11 +131,11 @@ export default function CredentialsPage() {
         fetchCredentials()
       } else {
         const error = await res.json()
-        alert(error.error || 'Fehler beim Speichern')
+        toast.error(error.error || 'Fehler beim Speichern')
       }
     } catch (error) {
       console.error('Error saving credential:', error)
-      alert('Fehler beim Speichern')
+      toast.error('Fehler beim Speichern')
     } finally {
       setSaving(false)
     }
@@ -153,18 +156,22 @@ export default function CredentialsPage() {
         fetchCredentials()
       } else {
         const error = await res.json()
-        alert(error.error || 'Fehler beim Löschen')
+        toast.error(error.error || 'Fehler beim Löschen')
       }
     } catch (error) {
       console.error('Error deleting credential:', error)
-      alert('Fehler beim Löschen')
+      toast.error('Fehler beim Löschen')
     }
   }
 
   async function bulkDeleteCredentials() {
     const ids = selection.visibleSelectedIds
     if (ids.length === 0) return
-    if (!confirm(`${ids.length} Credential${ids.length === 1 ? '' : 's'} wirklich löschen?`)) return
+    if (!(await confirmDialog({
+      title: `${ids.length} Credential${ids.length === 1 ? '' : 's'} wirklich löschen?`,
+      confirmLabel: 'Löschen',
+      destructive: true,
+    }))) return
     setBulkDeleting(true)
     try {
       const result = await runBatched(ids, async (id) => {
@@ -178,7 +185,7 @@ export default function CredentialsPage() {
         }
       })
       if (result.failed.length > 0) {
-        alert(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen`)
+        toast.error(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen`)
       }
       if (result.succeeded > 0) {
         selection.clear()
@@ -190,11 +197,11 @@ export default function CredentialsPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="p-4 md:p-6 lg:p-8 mx-auto max-w-6xl">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tighter">Paywall-Credentials</h1>
-          <p className="mt-1 text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight">Paywall-Credentials</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Zugangsdaten für Paywall-geschützte Inhalte
           </p>
         </div>

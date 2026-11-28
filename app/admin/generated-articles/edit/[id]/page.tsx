@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Loader2, ImageIcon, Newspaper, X, ChevronDown, Settings2, Sparkles, CheckCircle2, AlertCircle, Languages, ListPlus, ClipboardEdit } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -470,12 +471,12 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
       const data = await res.json()
       if (!res.ok || !data.ok) {
         setQueueItems(prev => prev.map(item => item.id === itemId ? { ...item, bundle_type: current } : item))
-        alert(`Fehler: ${data.error || 'Unbekannter Fehler'}`)
+        toast.error(`Fehler: ${data.error || 'Unbekannter Fehler'}`)
       }
     } catch (error) {
       console.error('Bundle type update failed:', error)
       setQueueItems(prev => prev.map(item => item.id === itemId ? { ...item, bundle_type: current } : item))
-      alert('Netzwerkfehler beim Setzen des Tags')
+      toast.error('Netzwerkfehler beim Setzen des Tags')
     }
     setBundleLoadingId(null)
   }
@@ -684,7 +685,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
 
     if (!updateRes.ok) {
       const errBody = await updateRes.json().catch(() => ({}))
-      alert(`Fehler beim Speichern: ${errBody.error || 'Unbekannter Fehler'}`)
+      toast.error(`Fehler beim Speichern: ${errBody.error || 'Unbekannter Fehler'}`)
       setSaving(false)
       return
     }
@@ -767,7 +768,7 @@ export default function EditGeneratedArticlePage({ params }: { params: Promise<{
           console.error('[i18n] Translation queue failed:', queueResult.error)
           setTranslationStatus('error')
           setTranslationMessage(`Übersetzungen fehlgeschlagen: ${queueResult.error}`)
-          alert(`⚠️ Übersetzungen konnten nicht eingereiht werden: ${queueResult.error}\n\nBitte manuell in /admin/translations starten.`)
+          toast.warning(`Übersetzungen konnten nicht eingereiht werden: ${queueResult.error} — bitte manuell in /admin/translations starten.`)
           return
         }
 

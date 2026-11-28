@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Coins, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { AdminPage, AdminPageHeader } from '@/components/admin/admin-page'
 import { formatModelLabel } from '@/lib/ai/model-pricing'
 
 /**
@@ -58,30 +59,22 @@ export default function LlmCostsPage() {
   const perDay = report && report.byDay.length > 0 ? report.totalCostUsd / report.byDay.length : 0
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tighter flex items-center gap-3">
-            <Coins className="h-8 w-8" />
-            KI-Kosten
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            Token und Kosten je Modellaufruf, protokolliert seit dem 20.09.2026
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {RANGES.map((r) => (
-            <Button key={r} variant={r === days ? 'default' : 'outline'} size="sm" onClick={() => setDays(r)}>
-              {r === 1 ? 'Heute' : `${r} Tage`}
-            </Button>
-          ))}
-        </div>
-      </div>
+    <AdminPage>
+      <AdminPageHeader
+        icon={<Coins className="h-6 w-6" />}
+        title="KI-Kosten"
+        description="Token und Kosten je Modellaufruf, protokolliert seit dem 20.09.2026"
+        actions={RANGES.map((r) => (
+          <Button key={r} variant={r === days ? 'default' : 'outline'} size="sm" onClick={() => setDays(r)}>
+            {r === 1 ? 'Heute' : `${r} Tage`}
+          </Button>
+        ))}
+      />
 
       {loading && <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Lädt…</div>}
       {error && (
-        <Card className="border-red-300">
-          <CardContent className="pt-6 text-sm text-red-700">
+        <Card className="border-red-300 dark:border-red-500/40">
+          <CardContent className="pt-6 text-sm text-red-700 dark:text-red-300">
             {error.includes('llm_usage') || error.includes('schema cache')
               ? 'Die Tabelle llm_usage fehlt noch — Migration supabase/migrations/20260920090000_llm_usage.sql einspielen.'
               : error}
@@ -115,7 +108,7 @@ export default function LlmCostsPage() {
               <Table
                 head={['Job', 'Kosten', 'Anteil', 'Aufrufe', 'Input', 'Output', 'Cache gelesen']}
                 rows={report.byUseCase.map((u) => [
-                  <span key="n" className="font-medium">{u.useCase}{u.unpricedCalls > 0 && <span className="ml-2 text-[10px] text-orange-600">{u.unpricedCalls} ohne Preis</span>}</span>,
+                  <span key="n" className="font-medium">{u.useCase}{u.unpricedCalls > 0 && <span className="ml-2 text-[10px] text-orange-600 dark:text-orange-400">{u.unpricedCalls} ohne Preis</span>}</span>,
                   usd(u.costUsd),
                   report.totalCostUsd > 0 ? `${Math.round((u.costUsd / report.totalCostUsd) * 100)} %` : '—',
                   num(u.calls), num(u.inputTokens), num(u.outputTokens), num(u.cacheReadTokens),
@@ -146,7 +139,7 @@ export default function LlmCostsPage() {
           </div>
         </div>
       )}
-    </div>
+    </AdminPage>
   )
 }
 

@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
+import { toast } from 'sonner'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import { Play, Calendar, Loader2, Copy, Check, Save, PenTool, FileText, Gauge, Mail, Link2, Hash, ChevronDown, BookOpen, ExternalLink, Trash2, Clock, AlertCircle, ImageIcon, Lightbulb } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
@@ -73,6 +75,7 @@ interface SynthesisProgress {
 }
 
 export default function DigestsPage() {
+  const confirmDialog = useConfirm()
   const [digests, setDigests] = useState<Digest[]>([])
   const [loading, setLoading] = useState(true)
   const [analyzing, setAnalyzing] = useState(false)
@@ -271,7 +274,7 @@ export default function DigestsPage() {
       }
     } catch (error) {
       console.error('Save error:', error)
-      alert('Fehler beim Speichern')
+      toast.error('Fehler beim Speichern')
       setSaving(false)
     }
   }
@@ -398,7 +401,7 @@ export default function DigestsPage() {
   }
 
   async function deleteDigest(digestId: string) {
-    if (!confirm('Digest wirklich löschen?')) return
+    if (!(await confirmDialog({ title: 'Digest wirklich löschen?', confirmLabel: 'Löschen', destructive: true }))) return
     setDeletingDigestId(digestId)
     try {
       const res = await fetch('/api/admin/daily-digests', {
@@ -410,7 +413,7 @@ export default function DigestsPage() {
       await fetchDigests()
     } catch (error) {
       console.error('Delete error:', error)
-      alert('Fehler beim Löschen')
+      toast.error('Fehler beim Löschen')
     } finally {
       setDeletingDigestId(null)
     }
@@ -419,7 +422,7 @@ export default function DigestsPage() {
   async function bulkDeleteDigests() {
     const ids = selection.visibleSelectedIds
     if (ids.length === 0) return
-    if (!confirm(`${ids.length} Digest${ids.length === 1 ? '' : 's'} wirklich löschen?`)) return
+    if (!(await confirmDialog({ title: `${ids.length} Digest${ids.length === 1 ? '' : 's'} wirklich löschen?`, confirmLabel: 'Löschen', destructive: true }))) return
     setBulkDeleting(true)
     try {
       const result = await runBatched(ids, async (id) => {
@@ -434,7 +437,7 @@ export default function DigestsPage() {
         }
       })
       if (result.failed.length > 0) {
-        alert(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen: ${result.failed[0].error}`)
+        toast.error(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen: ${result.failed[0].error}`)
       }
       if (result.succeeded > 0) {
         selection.clear()
@@ -522,13 +525,13 @@ export default function DigestsPage() {
       }
 
       if (showAlert) {
-        alert('Artikel als Entwurf gespeichert! Bilder werden im Hintergrund generiert.')
+        toast.success('Artikel als Entwurf gespeichert! Bilder werden im Hintergrund generiert.')
       }
       return true
     } catch (error) {
       console.error('Save error:', error)
       if (showAlert) {
-        alert('Fehler beim Speichern')
+        toast.error('Fehler beim Speichern')
       }
       return false
     }
@@ -625,10 +628,10 @@ export default function DigestsPage() {
   }, [ghostwriterDigest, vocabularyIntensity, savePostAsDraft])
 
   return (
-    <div className="p-4 md:p-6 max-w-full">
-      <div className="mb-4">
-        <h1 className="text-xl font-bold tracking-tight">News und Synthese</h1>
-        <p className="text-xs text-muted-foreground">AI-generierte Analysen aus dem Daily Repo</p>
+    <div className="p-4 md:p-6 lg:p-8 max-w-full overflow-x-hidden">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight">News und Synthese</h1>
+        <p className="mt-1 text-sm text-muted-foreground">AI-generierte Analysen aus dem Daily Repo</p>
       </div>
 
       {/* Analysis Section */}
@@ -640,7 +643,7 @@ export default function DigestsPage() {
               <select
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="rounded border px-2 py-0.5 text-xs h-7 bg-background"
+                className="h-8 rounded-md border border-input bg-background px-2.5 py-1 text-xs text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {repoDates.map((rd) => (
                   <option key={rd.date} value={rd.date}>
@@ -680,7 +683,7 @@ export default function DigestsPage() {
 
           {/* No Repo Warning */}
           {!hasRepoForSelectedDate && !sourceSummary.loading && (
-            <div className="flex items-center gap-2 p-2 rounded bg-amber-50 border border-amber-200 text-amber-800 text-xs">
+            <div className="flex items-center gap-2 p-2 rounded border border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-200 text-xs">
               <AlertCircle className="h-3.5 w-3.5 shrink-0" />
               <span>Kein Repo für dieses Datum. Erstelle zuerst ein Repo unter &quot;Daily Repo&quot;.</span>
             </div>

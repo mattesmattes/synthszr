@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AdminPage, AdminPageHeader } from '@/components/admin/admin-page'
+import { Button } from '@/components/ui/button'
 
 interface ExtractStatus {
   job: {
@@ -83,24 +85,27 @@ export default function RankingsAdminPage() {
   const pct = s && s.windowTotal > 0 ? Math.round((s.windowDone / s.windowTotal) * 100) : 0
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Synthszr Rankings — Extraktion</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Manueller Lauf zur Beobachtung. Vorfilter überspringt Nicht-AI-News ohne LLM-Call.
-          Fenster: letzte {s?.windowDays ?? 1} Tag(e).
-        </p>
-      </div>
+    <AdminPage className="space-y-6">
+      <AdminPageHeader
+        title="Synthszr Rankings — Extraktion"
+        description={
+          <>
+            Manueller Lauf zur Beobachtung. Vorfilter überspringt Nicht-AI-News ohne LLM-Call.
+            Fenster: letzte {s?.windowDays ?? 1} Tag(e).
+          </>
+        }
+        className="mb-0"
+      />
 
       {/* Token-Anzeige (prominent) */}
-      <div className={`rounded-xl border-2 p-6 ${budgetExhausted ? 'border-red-500 bg-red-50' : 'border-black bg-[#CCFF00]/20'}`}>
-        <div className="text-sm font-semibold uppercase tracking-wide text-gray-700">Verbrauchte Token (aktueller Job)</div>
-        <div className="text-4xl font-bold mt-1">{fmt(tokens)} <span className="text-xl font-normal text-gray-500">/ {fmt(budget)}</span></div>
-        <div className="text-sm text-gray-600 mt-1">≈ ${estCost(tokens).toFixed(2)} (grobe Schätzung, Haiku) · Budget zu {tokenPct}% genutzt</div>
-        <div className="h-2 bg-gray-200 rounded-full overflow-hidden mt-2">
-          <div className={`h-full ${budgetExhausted ? 'bg-red-500' : 'bg-black'}`} style={{ width: `${tokenPct}%` }} />
+      <div className={`rounded-xl border-2 p-6 ${budgetExhausted ? 'border-red-500 bg-red-50 dark:bg-red-950/30' : 'border-foreground bg-[#CCFF00]/20 dark:bg-[#CCFF00]/10'}`}>
+        <div className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Verbrauchte Token (aktueller Job)</div>
+        <div className="text-4xl font-bold mt-1">{fmt(tokens)} <span className="text-xl font-normal text-muted-foreground">/ {fmt(budget)}</span></div>
+        <div className="text-sm text-muted-foreground mt-1">≈ ${estCost(tokens).toFixed(2)} (grobe Schätzung, Haiku) · Budget zu {tokenPct}% genutzt</div>
+        <div className="h-2 bg-muted rounded-full overflow-hidden mt-2">
+          <div className={`h-full ${budgetExhausted ? 'bg-red-500' : 'bg-foreground'}`} style={{ width: `${tokenPct}%` }} />
         </div>
-        {budgetExhausted && <div className="text-sm text-red-600 font-semibold mt-2">Token-Budget erschöpft — Lauf gestoppt. Budget erhöhen (ranking_jobs.budget_extract) oder morgen fortsetzen.</div>}
+        {budgetExhausted && <div className="text-sm text-red-600 dark:text-red-400 font-semibold mt-2">Token-Budget erschöpft — Lauf gestoppt. Budget erhöhen (ranking_jobs.budget_extract) oder morgen fortsetzen.</div>}
       </div>
 
       {/* Stats */}
@@ -117,28 +122,28 @@ export default function RankingsAdminPage() {
           <span>Fenster-Fortschritt</span>
           <span>{fmt(s?.windowDone ?? 0)} / {fmt(s?.windowTotal ?? 0)} ({pct}%)</span>
         </div>
-        <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
-          <div className="h-full bg-black" style={{ width: `${pct}%` }} />
+        <div className="h-3 bg-muted rounded-full overflow-hidden">
+          <div className="h-full bg-foreground" style={{ width: `${pct}%` }} />
         </div>
       </div>
 
       {/* Job-Status */}
-      <div className="text-sm text-gray-700 space-y-1">
-        <div>Job: <b>{s?.job?.mode ?? '—'}</b> · <b>{s?.job?.status ?? '—'}</b> · Phase {s?.job?.phase ?? '—'} · {s?.job?.run_date ?? '—'}</div>
+      <div className="text-sm text-muted-foreground space-y-1">
+        <div>Job: <b className="text-foreground">{s?.job?.mode ?? '—'}</b> · <b className="text-foreground">{s?.job?.status ?? '—'}</b> · Phase {s?.job?.phase ?? '—'} · {s?.job?.run_date ?? '—'}</div>
         {lastResult && <div>Letzter Schritt: <code>{lastResult}</code></div>}
-        {notice && <div className="text-gray-900">{notice}</div>}
-        {s?.job?.error_message && <div className="text-red-600">Fehler: {s.job.error_message}</div>}
-        {error && <div className="text-red-600">Fehler: {error}</div>}
+        {notice && <div className="text-foreground">{notice}</div>}
+        {s?.job?.error_message && <div className="text-red-600 dark:text-red-400">Fehler: {s.job.error_message}</div>}
+        {error && <div className="text-red-600 dark:text-red-400">Fehler: {error}</div>}
       </div>
 
       {qa && (
         <section className="mt-8">
           <h2 className="text-sm font-semibold mb-2">Attribution-QS</h2>
-          <p className="text-xs text-gray-500 mb-2">Gemergt {qa.counts.merged ?? 0} · Geflaggt {qa.counts.flagged ?? 0} · Behalten {qa.counts.kept ?? 0}</p>
+          <p className="text-xs text-muted-foreground mb-2">Gemergt {qa.counts.merged ?? 0} · Geflaggt {qa.counts.flagged ?? 0} · Behalten {qa.counts.kept ?? 0}</p>
           <ul className="text-xs space-y-1">
             {qa.recent.filter((r) => r.action === 'flagged').map((r, i) => (
-              <li key={i} className="text-gray-700">
-                <span className="font-mono">{r.slug}</span> ({r.current_vendor}) → Vorschlag: <strong>{r.suggested_company}</strong> · {r.reasoning}
+              <li key={i} className="text-muted-foreground">
+                <span className="font-mono text-foreground">{r.slug}</span> ({r.current_vendor}) → Vorschlag: <strong className="text-foreground">{r.suggested_company}</strong> · {r.reasoning}
               </li>
             ))}
           </ul>
@@ -148,27 +153,27 @@ export default function RankingsAdminPage() {
       {/* Aktionen */}
       <div className="flex gap-3">
         {!running ? (
-          <button onClick={runOnce} className="px-4 py-2 rounded-lg bg-black text-white font-semibold hover:bg-gray-800">
+          <Button onClick={runOnce}>
             Lauf starten
-          </button>
+          </Button>
         ) : (
-          <button onClick={stop} className="px-4 py-2 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700">
+          <Button variant="destructive" onClick={stop}>
             Stoppen
-          </button>
+          </Button>
         )}
-        <button onClick={loadStatus} disabled={running} className="px-4 py-2 rounded-lg border border-gray-300 font-semibold hover:bg-gray-50 disabled:opacity-50">
+        <Button variant="outline" onClick={loadStatus} disabled={running}>
           Aktualisieren
-        </button>
-        {running && <span className="self-center text-sm text-gray-600">Läuft… (Batch für Batch)</span>}
+        </Button>
+        {running && <span className="self-center text-sm text-muted-foreground">Läuft… (Batch für Batch)</span>}
       </div>
-    </div>
+    </AdminPage>
   )
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 p-4">
-      <div className="text-xs uppercase tracking-wide text-gray-500">{label}</div>
+    <div className="rounded-lg border bg-card p-4">
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="text-2xl font-bold mt-1">{value}</div>
     </div>
   )

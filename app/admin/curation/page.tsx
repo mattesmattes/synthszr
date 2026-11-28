@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { AdminPage, AdminPageHeader } from '@/components/admin/admin-page'
 import type {
   ArchiveMeta,
   CurationTier,
@@ -119,22 +120,18 @@ export default function CurationAdminPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tighter flex items-center gap-3">
-            <ClipboardList className="h-8 w-8" />
-            Morgenkonferenz
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            Schatten-Läufe der Kurations-Engine — nur lesend, Phase 1
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={refresh}>
-          <RefreshCw className="h-4 w-4" />
-          Aktualisieren
-        </Button>
-      </div>
+    <AdminPage>
+      <AdminPageHeader
+        icon={<ClipboardList className="h-6 w-6" />}
+        title="Morgenkonferenz"
+        description="Schatten-Läufe der Kurations-Engine — nur lesend, Phase 1"
+        actions={
+          <Button variant="outline" size="sm" onClick={refresh}>
+            <RefreshCw className="h-4 w-4" />
+            Aktualisieren
+          </Button>
+        }
+      />
 
       {loadingRuns && (
         <div className="flex items-center gap-2 text-muted-foreground">
@@ -142,8 +139,8 @@ export default function CurationAdminPage() {
         </div>
       )}
       {errorRuns && (
-        <Card className="border-red-300">
-          <CardContent className="pt-6 text-sm text-red-700">{errorRuns}</CardContent>
+        <Card className="border-red-300 dark:border-red-500/40">
+          <CardContent className="pt-6 text-sm text-red-700 dark:text-red-300">{errorRuns}</CardContent>
         </Card>
       )}
 
@@ -157,14 +154,14 @@ export default function CurationAdminPage() {
             </div>
           )}
           {errorDetail && (
-            <Card className="border-red-300">
-              <CardContent className="pt-6 text-sm text-red-700">{errorDetail}</CardContent>
+            <Card className="border-red-300 dark:border-red-500/40">
+              <CardContent className="pt-6 text-sm text-red-700 dark:text-red-300">{errorDetail}</CardContent>
             </Card>
           )}
           {detail && !loadingDetail && !errorDetail && <RunDetail detail={detail} />}
         </div>
       )}
-    </div>
+    </AdminPage>
   )
 }
 
@@ -214,7 +211,7 @@ function RunsTable({
                       {run.degraded.length === 0
                         ? <span className="text-muted-foreground">–</span>
                         : run.degraded.map((d) => (
-                          <Badge key={d} variant="outline" className="border-orange-300 bg-orange-50 text-orange-800">{d}</Badge>
+                          <Badge key={d} variant="outline" className="border-orange-300 bg-orange-50 text-orange-800 dark:border-orange-700/50 dark:bg-orange-950/40 dark:text-orange-200">{d}</Badge>
                         ))}
                     </div>
                   </TableCell>
@@ -265,8 +262,8 @@ function RunDetail({ detail }: { detail: Detail }) {
   return (
     <div className="space-y-6">
       {run.status === 'error' && run.error_message?.startsWith('pool_small') && (
-        <Card className="border-amber-300">
-          <CardContent className="pt-6 text-sm text-amber-800">
+        <Card className="border-amber-300 dark:border-amber-700/50">
+          <CardContent className="pt-6 text-sm text-amber-800 dark:text-amber-200">
             Konferenz ausgefallen — zu wenige Items im Tages-Pool ({run.error_message}).
           </CardContent>
         </Card>
@@ -316,7 +313,7 @@ function RunDetail({ detail }: { detail: Detail }) {
           <CardHeader><CardTitle className="text-base">Degradiert</CardTitle></CardHeader>
           <CardContent className="flex flex-wrap gap-1">
             {run.degraded.map((d) => (
-              <Badge key={d} variant="outline" className="border-orange-300 bg-orange-50 text-orange-800">{d}</Badge>
+              <Badge key={d} variant="outline" className="border-orange-300 bg-orange-50 text-orange-800 dark:border-orange-700/50 dark:bg-orange-950/40 dark:text-orange-200">{d}</Badge>
             ))}
           </CardContent>
         </Card>
@@ -345,7 +342,7 @@ function UnitGroup({ label, units, titles }: { label: string; units: UnitRow[]; 
                   <span className="font-mono text-xs text-muted-foreground">#{unit.rank ?? '–'}</span>
                   <Badge variant="outline">{unit.role ?? 'ohne Label'}</Badge>
                   {unit.is_hand && (
-                    <Badge variant="outline" className="border-sky-300 bg-sky-50 text-sky-800">Hand</Badge>
+                    <Badge variant="outline" className="border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-700/50 dark:bg-sky-950/40 dark:text-sky-200">Hand</Badge>
                   )}
                   {unit.outcome && (
                     <Badge variant="outline" className={OUTCOME_CLASS[unit.outcome]}>{OUTCOME_LABEL[unit.outcome]}</Badge>
@@ -399,10 +396,10 @@ function CritiqueCard({ critique }: { critique: Critique | null }) {
     <Card>
       <CardHeader><CardTitle className="text-base">Kritik</CardTitle></CardHeader>
       <CardContent className="space-y-3">
-        <CritiqueList label="Hart (deterministisch)" items={critique.hard} tone="text-red-700" />
-        <CritiqueList label="Weich (deterministisch)" items={critique.soft} tone="text-yellow-700" />
-        <CritiqueList label="Hart (Modell)" items={critique.model_hard} tone="text-red-700" />
-        <CritiqueList label="Weich (Modell)" items={critique.model_soft} tone="text-yellow-700" />
+        <CritiqueList label="Hart (deterministisch)" items={critique.hard} tone="text-red-700 dark:text-red-400" />
+        <CritiqueList label="Weich (deterministisch)" items={critique.soft} tone="text-yellow-700 dark:text-yellow-400" />
+        <CritiqueList label="Hart (Modell)" items={critique.model_hard} tone="text-red-700 dark:text-red-400" />
+        <CritiqueList label="Weich (Modell)" items={critique.model_soft} tone="text-yellow-700 dark:text-yellow-400" />
       </CardContent>
     </Card>
   )
@@ -428,7 +425,7 @@ function LogCard({ log }: { log: RunLogEntry[] }) {
       <CardContent>
         <ul className="space-y-1 font-mono text-xs">
           {log.map((entry, i) => (
-            <li key={i} className={entry.ok ? '' : 'text-red-700'}>{entry.at} — {entry.text}</li>
+            <li key={i} className={entry.ok ? '' : 'text-red-700 dark:text-red-400'}>{entry.at} — {entry.text}</li>
           ))}
         </ul>
       </CardContent>

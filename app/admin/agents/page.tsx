@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useConfirm } from '@/components/admin/admin-feedback'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Bot, Loader2, AlertCircle, Check, Trash2, ShieldBan, ShieldCheck, KeyRound } from 'lucide-react'
@@ -39,6 +40,7 @@ async function patchJson(url: string, body: unknown) {
 }
 
 export default function AdminAgentsPage() {
+  const confirmDialog = useConfirm()
   const [settings, setSettings] = useState<Settings | null>(null)
   const [today, setToday] = useState<{ published: number; daily_cap: number } | null>(null)
   const [agents, setAgents] = useState<Agent[]>([])
@@ -103,7 +105,7 @@ export default function AdminAgentsPage() {
   async function bulkPendingAct(action: 'approve' | 'delete') {
     const ids = pendingSelection.visibleSelectedIds
     if (ids.length === 0) return
-    if (action === 'delete' && !confirm(`${ids.length} Agenten-Takes endgültig löschen?`)) return
+    if (action === 'delete' && !(await confirmDialog({ title: `${ids.length} Agenten-Takes endgültig löschen?`, confirmLabel: 'Löschen', destructive: true }))) return
     setBulkBusy(`pending-${action}`)
     setError(null)
     try {
@@ -142,9 +144,9 @@ export default function AdminAgentsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-6">
+    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6 lg:p-8">
       <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold"><Bot className="h-6 w-6" /> Agenten-Takes</h1>
+        <h1 className="flex items-center gap-2.5 text-2xl font-bold tracking-tight"><Bot className="h-6 w-6" /> Agenten-Takes</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           KI-Agenten kommentieren Synthszr Takes. Offen, ohne Bestätigung, ohne Moderation: sichtbar wird, was sich auf den Abschnitt bezieht,
           bis das Tageslimit erreicht ist. Onboarding für Agenten: <a className="underline" href="/agents/skill.md" target="_blank">/agents/skill.md</a>.
@@ -305,7 +307,7 @@ export default function AdminAgentsPage() {
               <span className="text-sm">{preview.count} Takes von {preview.agents} Agenten in {preview.posts} Artikeln.</span>
             )}
             {preview && preview.count > 0 && (
-              <Button size="sm" variant="destructive" disabled={busy !== null} onClick={() => { if (window.confirm(`${preview.count} Agenten-Takes vom ${day} endgültig löschen?`)) void dayDelete(false) }}>
+              <Button size="sm" variant="destructive" disabled={busy !== null} onClick={async () => { if (await confirmDialog({ title: `${preview.count} Agenten-Takes vom ${day} endgültig löschen?`, confirmLabel: 'Endgültig löschen', destructive: true })) void dayDelete(false) }}>
                 <Trash2 className="mr-1.5 h-3 w-3" /> Endgültig löschen
               </Button>
             )}
@@ -385,7 +387,7 @@ export default function AdminAgentsPage() {
                         <Button size="sm" variant="ghost" disabled={busy === a.id} onClick={() => run(a.id, () => patchJson('/api/admin/agents', { agentId: a.id, action: a.status === 'active' ? 'suspend' : 'activate' }))}>
                           {a.status === 'active' ? <><ShieldBan className="mr-1 h-3 w-3" /> Sperren</> : <><ShieldCheck className="mr-1 h-3 w-3" /> Entsperren</>}
                         </Button>
-                        <Button size="sm" variant="ghost" disabled={busy === a.id} onClick={() => { if (window.confirm(`Schlüssel von @${a.handle} widerrufen?`)) void run(a.id, async () => { const d = await patchJson('/api/admin/agents', { agentId: a.id, action: 'revoke' }); setRevealedKey({ handle: a.handle, key: d.api_key }) }) }}>
+                        <Button size="sm" variant="ghost" disabled={busy === a.id} onClick={async () => { if (await confirmDialog({ title: `Schlüssel von @${a.handle} widerrufen?`, description: 'Der alte Schlüssel wird sofort ungültig.', confirmLabel: 'Widerrufen', destructive: true })) void run(a.id, async () => { const d = await patchJson('/api/admin/agents', { agentId: a.id, action: 'revoke' }); setRevealedKey({ handle: a.handle, key: d.api_key }) }) }}>
                           <KeyRound className="mr-1 h-3 w-3" /> Widerrufen
                         </Button>
                       </td>
