@@ -12,6 +12,12 @@ import {
 } from '@/components/ui/dialog'
 import { FetchProgress } from '@/components/admin/fetch-progress'
 import { SystemAlertBanner } from '@/components/admin/system-alert-banner'
+import {
+  useMultiSelect,
+  MultiSelectBar,
+  MultiSelectCheckbox,
+  MULTI_SELECT_ROW_CLASS,
+} from '@/components/admin/multi-select'
 
 interface DailyRepoItem {
   id: string
@@ -65,6 +71,13 @@ export default function DailyRepoPage() {
 
   // Dates that have repos
   const repoDates = useMemo(() => new Set(repoSummaries.map(r => r.date)), [repoSummaries])
+  const [bulkBusy, setBulkBusy] = useState<'queue' | 'delete' | null>(null)
+
+  const visibleIds = useMemo(() => items.map((item) => item.id), [items])
+  const selection = useMultiSelect(visibleIds, {
+    resetKey: selectedDate,
+    disableEscape: Boolean(viewingItem) || showFetchDialog || showManualDialog || showWebCrawlDialog,
+  })
 
   useEffect(() => {
     fetchRepoSummaries()
@@ -147,6 +160,55 @@ export default function DailyRepoPage() {
       alert('Fehler beim Löschen')
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  async function bulkQueueSelected() {
+    const ids = selection.visibleSelectedIds
+    if (ids.length === 0) return
+    setBulkBusy('queue')
+    try {
+      const res = await fetch('/api/admin/news-queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'add-from-repo', itemIds: ids }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        alert(`Fehler: ${data.error || `HTTP ${res.status}`}`)
+        return
+      }
+      selection.clear()
+      alert(`${data.added ?? 0} zur News Queue hinzugefügt (${data.skipped ?? 0} übersprungen).`)
+    } catch {
+      alert('Netzwerkfehler beim Hinzufügen zur News Queue')
+    } finally {
+      setBulkBusy(null)
+    }
+  }
+
+  async function bulkDeleteSelected() {
+    const ids = selection.visibleSelectedIds
+    if (ids.length === 0) return
+    if (!confirm(`${ids.length} Artikel aus dem Daily Repo wirklich löschen?`)) return
+    setBulkBusy('delete')
+    try {
+      const res = await fetch('/api/admin/daily-repo', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        alert(`Fehler: ${data.error || `HTTP ${res.status}`}`)
+        return
+      }
+      selection.clear()
+      await Promise.all([fetchItemsForDate(selectedDate), fetchRepoSummaries()])
+    } catch {
+      alert('Netzwerkfehler beim Löschen')
+    } finally {
+      setBulkBusy(null)
     }
   }
 
@@ -619,16 +681,60 @@ export default function DailyRepoPage() {
               </Button>
             </div>
           ) : (
-            <div className="rounded-lg border overflow-hidden">
-              <div className="max-h-[calc(100vh-280px)] overflow-y-auto divide-y">
-                {items.map((item) => {
-                  const faviconUrl = getFaviconUrl(item.source_url)
-                  return (
-                    <div
-                      key={item.id}
-                      className="group flex items-center gap-3 px-3 py-2.5 hover:bg-muted/30 transition-colors"
-                    >
-                      {/* Source icon */}
+            <div className="space-y-2">
+              <MultiSelectBar
+                selection={selection}
+                totalVisible={items.length}
+                busy={bulkBusy !== null}
+              >
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => void bulkQueueSelected()}
+                  disabled={bulkBusy !== null}
+                >
+                  {bulkBusy === 'queue' ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <ListTodo className="h-3 w-3" />
+                  )}
+                  Zur News Queue ({selection.visibleSelectedIds.length})
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => void bulkDeleteSelected()}
+                  disabled={bulkBusy !== null}
+                >
+                  {bulkBusy === 'delete' ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                  Löschen ({selection.visibleSelectedIds.length})
+                </Button>
+              </MultiSelectBar>
+              <div className="rounded-lg border overflow-hidden">
+                <div className="max-h-[calc(100vh-280px)] overflow-y-auto divide-y">
+                  {items.map((item) => {
+                    const faviconUrl = getFaviconUrl(item.source_url)
+                    const isSelected = selection.isSelected(item.id)
+                    return (
+                      <div
+                        key={item.id}
+                        {...selection.rowSelectionProps(item.id)}
+                        className={`group flex items-center gap-3 px-3 py-2.5 transition-colors ${
+                          isSelected ? MULTI_SELECT_ROW_CLASS : 'hover:bg-muted/30'
+                        }`}
+                      >
+                        <MultiSelectCheckbox
+                          checked={isSelected}
+                          onToggle={(shiftKey) => selection.toggle(item.id, shiftKey)}
+                          ariaLabel={`Artikel auswählen: ${item.title}`}
+                        />
+                        {/* Source icon */}
                       <div className="shrink-0 flex items-center justify-center w-7 h-7 rounded-md bg-muted/50">
                         {faviconUrl ? (
                           <img
@@ -739,6 +845,7 @@ export default function DailyRepoPage() {
                   )
                 })}
               </div>
+            </div>
             </div>
           )}
         </div>

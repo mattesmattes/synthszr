@@ -9,7 +9,7 @@
  * - ohne ?date: Summary über alle Einträge (newsletter_date, source_type, content)
  *   für die Datums-Übersicht in der Sidebar
  * - mit ?date=YYYY-MM-DD: Alle Items für dieses Datum (select *)
- * DELETE: Alle Items eines Datums löschen ({ date })
+ * DELETE: Entweder alle Items eines Datums ({ date }) oder einzelne Items ({ ids }) löschen
  * POST: Manuellen Artikel einfügen ({ sourceUrl, title, content, newsletterDate })
  */
 
@@ -50,11 +50,28 @@ export async function DELETE(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
 
-  const { date } = await request.json()
-  if (!date) return NextResponse.json({ error: 'date erforderlich' }, { status: 400 })
-
+  const body = await request.json() as { date?: string; ids?: unknown }
   const supabase = createAdminClient()
-  const { error } = await supabase.from('daily_repo').delete().eq('newsletter_date', date)
+
+  if (Array.isArray(body.ids)) {
+    const ids = [...new Set(body.ids.filter((id): id is string => typeof id === 'string' && id.trim().length > 0))]
+    if (ids.length === 0) {
+      return NextResponse.json({ error: 'Keine gültigen ids angegeben' }, { status: 400 })
+    }
+    const IN_CHUNK = 200
+    let deleted = 0
+    for (let i = 0; i < ids.length; i += IN_CHUNK) {
+      const chunk = ids.slice(i, i + IN_CHUNK)
+      const { error } = await supabase.from('daily_repo').delete().in('id', chunk)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      deleted += chunk.length
+    }
+    return NextResponse.json({ ok: true, deleted })
+  }
+
+  if (!body.date) return NextResponse.json({ error: 'date oder ids erforderlich' }, { status: 400 })
+
+  const { error } = await supabase.from('daily_repo').delete().eq('newsletter_date', body.date)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

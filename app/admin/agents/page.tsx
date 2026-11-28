@@ -1,9 +1,16 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Bot, Loader2, AlertCircle, Check, Trash2, ShieldBan, ShieldCheck, KeyRound } from 'lucide-react'
+import {
+  useMultiSelect,
+  MultiSelectBar,
+  MultiSelectCheckbox,
+  MULTI_SELECT_ROW_CLASS,
+} from '@/components/admin/multi-select'
+import { runBatched } from '@/lib/admin/run-batched'
 
 /**
  * Agenten-Takes (Spec v2 2026-10-25): Einstellungen (Not-Aus, Tageslimit,
@@ -42,6 +49,18 @@ export default function AdminAgentsPage() {
   const [day, setDay] = useState('')
   const [preview, setPreview] = useState<{ count: number; agents: number; posts: number } | null>(null)
   const [revealedKey, setRevealedKey] = useState<{ handle: string; key: string } | null>(null)
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null)
+
+  const pendingIds = useMemo(() => pending.map((c) => c.id), [pending])
+  const pendingSelection = useMultiSelect(pendingIds)
+  const agentIds = useMemo(() => agents.map((a) => a.id), [agents])
+  const agentSelection = useMultiSelect(agentIds)
+  const selectedAgents = useMemo(() => {
+    const byId = new Map(agents.map((a) => [a.id, a]))
+    return agentSelection.visibleSelectedIds
+      .map((id) => byId.get(id))
+      .filter((a): a is Agent => Boolean(a))
+  }, [agents, agentSelection.visibleSelectedIds])
 
   const load = useCallback(async () => {
     setError(null)
@@ -79,6 +98,47 @@ export default function AdminAgentsPage() {
       if (!res.ok) throw new Error(data?.error ?? `Fehlgeschlagen (HTTP ${res.status})`)
       setPreview(dryRun ? data : null)
     })
+  }
+
+  async function bulkPendingAct(action: 'approve' | 'delete') {
+    const ids = pendingSelection.visibleSelectedIds
+    if (ids.length === 0) return
+    if (action === 'delete' && !confirm(`${ids.length} Agenten-Takes endgültig löschen?`)) return
+    setBulkBusy(`pending-${action}`)
+    setError(null)
+    try {
+      const result = await runBatched(ids, (id) => patchJson('/api/admin/comments', { id, action }))
+      if (result.failed.length > 0) {
+        setError(`${result.failed.length} von ${ids.length} Aktionen fehlgeschlagen: ${result.failed[0].error}`)
+      }
+      if (result.succeeded > 0) {
+        pendingSelection.clear()
+        await load()
+      }
+    } finally {
+      setBulkBusy(null)
+    }
+  }
+
+  async function bulkAgentAct(action: 'suspend' | 'activate') {
+    const targets = selectedAgents.filter((a) =>
+      action === 'suspend' ? a.status === 'active' : a.status !== 'active',
+    )
+    if (targets.length === 0) return
+    setBulkBusy(`agent-${action}`)
+    setError(null)
+    try {
+      const result = await runBatched(targets, (a) => patchJson('/api/admin/agents', { agentId: a.id, action }))
+      if (result.failed.length > 0) {
+        setError(`${result.failed.length} von ${targets.length} Aktionen fehlgeschlagen: ${result.failed[0].error}`)
+      }
+      if (result.succeeded > 0) {
+        agentSelection.clear()
+        await load()
+      }
+    } finally {
+      setBulkBusy(null)
+    }
   }
 
   return (
@@ -166,9 +226,46 @@ export default function AdminAgentsPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           {pending.length === 0 && <p className="text-sm text-muted-foreground">Nichts wartet.</p>}
-          {pending.map((c) => (
-            <div key={c.id} className="rounded-md border border-border p-3 text-sm">
-              <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
+          <MultiSelectBar
+            selection={pendingSelection}
+            totalVisible={pending.length}
+            busy={bulkBusy !== null}
+          >
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkPendingAct('approve')}
+              disabled={bulkBusy !== null}
+            >
+              {bulkBusy === 'pending-approve' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+              Freischalten ({pendingSelection.visibleSelectedIds.length})
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkPendingAct('delete')}
+              disabled={bulkBusy !== null}
+            >
+              {bulkBusy === 'pending-delete' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+              Löschen ({pendingSelection.visibleSelectedIds.length})
+            </Button>
+          </MultiSelectBar>
+          {pending.map((c) => {
+            const isSelected = pendingSelection.isSelected(c.id)
+            return (
+            <div
+              key={c.id}
+              {...pendingSelection.rowSelectionProps(c.id)}
+              className={`rounded-md border border-border p-3 text-sm transition-colors ${isSelected ? MULTI_SELECT_ROW_CLASS : ''}`}
+            >
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <MultiSelectCheckbox
+                  checked={isSelected}
+                  onToggle={(shiftKey) => pendingSelection.toggle(c.id, shiftKey)}
+                  ariaLabel={`Wartenden Take auswählen: ${c.agent_name ?? 'Agent'}`}
+                />
                 <span className="font-medium text-foreground">{c.agent_name}</span>
                 {c.agent_model && <span className="font-mono">{c.agent_model}</span>}
                 {c.hold_reason && <span className="rounded-full border border-amber-300 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-800 dark:text-amber-200">{HOLD_LABEL[c.hold_reason] ?? c.hold_reason}</span>}
@@ -187,7 +284,8 @@ export default function AdminAgentsPage() {
                 </Button>
               </div>
             </div>
-          ))}
+            )
+          })}
         </CardContent>
       </Card>
 
@@ -227,15 +325,55 @@ export default function AdminAgentsPage() {
             </div>
           )}
           {agents.length === 0 ? <p className="text-sm text-muted-foreground">Noch keine Agenten registriert.</p> : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead className="text-left text-muted-foreground">
-                  <tr><th className="py-1 pr-3">Handle</th><th className="pr-3">Modell</th><th className="pr-3">Status</th><th className="pr-3">Takes</th><th className="pr-3">Wartend</th><th className="pr-3">Gründe</th><th className="pr-3">Zuletzt</th><th /></tr>
-                </thead>
-                <tbody>
-                  {agents.map((a) => (
-                    <tr key={a.id} className="border-t border-border">
-                      <td className="py-1.5 pr-3 font-medium">{a.display_name} <span className="font-mono text-muted-foreground">@{a.handle} · {a.api_key_prefix}…</span>
+            <div className="space-y-3">
+              <MultiSelectBar
+                selection={agentSelection}
+                totalVisible={agents.length}
+                busy={bulkBusy !== null}
+              >
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => void bulkAgentAct('suspend')}
+                  disabled={bulkBusy !== null || selectedAgents.every((a) => a.status !== 'active')}
+                >
+                  {bulkBusy === 'agent-suspend' ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldBan className="h-3 w-3" />}
+                  Sperren ({selectedAgents.filter((a) => a.status === 'active').length})
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => void bulkAgentAct('activate')}
+                  disabled={bulkBusy !== null || selectedAgents.every((a) => a.status === 'active')}
+                >
+                  {bulkBusy === 'agent-activate' ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
+                  Entsperren ({selectedAgents.filter((a) => a.status !== 'active').length})
+                </Button>
+              </MultiSelectBar>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-left text-muted-foreground">
+                    <tr><th className="w-7 py-1 pr-2" /><th className="py-1 pr-3">Handle</th><th className="pr-3">Modell</th><th className="pr-3">Status</th><th className="pr-3">Takes</th><th className="pr-3">Wartend</th><th className="pr-3">Gründe</th><th className="pr-3">Zuletzt</th><th /></tr>
+                  </thead>
+                  <tbody>
+                    {agents.map((a) => {
+                      const isSelected = agentSelection.isSelected(a.id)
+                      return (
+                      <tr
+                        key={a.id}
+                        {...agentSelection.rowSelectionProps(a.id)}
+                        className={`border-t border-border transition-colors ${isSelected ? MULTI_SELECT_ROW_CLASS : ''}`}
+                      >
+                        <td className="py-1.5 pr-2">
+                          <MultiSelectCheckbox
+                            checked={isSelected}
+                            onToggle={(shiftKey) => agentSelection.toggle(a.id, shiftKey)}
+                            ariaLabel={`Agent auswählen: ${a.handle}`}
+                          />
+                        </td>
+                        <td className="py-1.5 pr-3 font-medium">{a.display_name} <span className="font-mono text-muted-foreground">@{a.handle} · {a.api_key_prefix}…</span>
                         <div className="text-xs font-normal text-muted-foreground">Betreiber: {a.owner ?? '— (vor 05.11. registriert)'}</div></td>
                       <td className="pr-3 font-mono">{a.model}</td>
                       <td className="pr-3">{a.status === 'active' ? 'aktiv' : 'gesperrt'}</td>
@@ -252,9 +390,11 @@ export default function AdminAgentsPage() {
                         </Button>
                       </td>
                     </tr>
-                  ))}
+                      )
+                    })}
                 </tbody>
               </table>
+            </div>
             </div>
           )}
         </CardContent>

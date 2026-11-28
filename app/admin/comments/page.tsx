@@ -15,6 +15,13 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Loader2, MessageSquare, Eye, EyeOff, Pencil, Trash2, Search, Check, X, Bot } from 'lucide-react'
+import {
+  useMultiSelect,
+  MultiSelectBar,
+  MultiSelectCheckbox,
+  MULTI_SELECT_ROW_CLASS,
+} from '@/components/admin/multi-select'
+import { runBatched } from '@/lib/admin/run-batched'
 
 interface AdminComment {
   id: string
@@ -65,6 +72,28 @@ export default function AdminCommentsPage() {
   const [error, setError] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editBody, setEditBody] = useState('')
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null)
+
+  const visibleIds = useMemo(() => comments.map((c) => c.id), [comments])
+  const selection = useMultiSelect(visibleIds, {
+    resetKey: `${tab}|${query}`,
+    disableEscape: editingId !== null,
+  })
+  const selectedComments = useMemo(() => {
+    const byId = new Map(comments.map((c) => [c.id, c]))
+    return selection.visibleSelectedIds
+      .map((id) => byId.get(id))
+      .filter((c): c is AdminComment => Boolean(c))
+  }, [comments, selection.visibleSelectedIds])
+  const approveIds = useMemo(
+    () => selectedComments.filter((c) => c.status !== 'published').map((c) => c.id),
+    [selectedComments],
+  )
+  const hideIds = useMemo(
+    () => selectedComments.filter((c) => c.status === 'published').map((c) => c.id),
+    [selectedComments],
+  )
+  const allSelectedIds = selection.visibleSelectedIds
 
   const load = useCallback(async (status: string, q: string) => {
     setLoading(true)
@@ -112,6 +141,41 @@ export default function AdminCommentsPage() {
       setError(err instanceof Error ? err.message : 'Aktion fehlgeschlagen')
     } finally {
       setBusyId(null)
+    }
+  }
+
+  async function bulkAct(ids: string[], action: 'approve' | 'hide' | 'delete') {
+    if (ids.length === 0) return
+    if (
+      action === 'delete' &&
+      !confirm(`${ids.length} Kommentar${ids.length === 1 ? '' : 'e'} endgültig löschen?`)
+    ) {
+      return
+    }
+    setBulkBusy(action)
+    setError(null)
+    try {
+      const result = await runBatched(ids, async (id) => {
+        const res = await fetch('/api/admin/comments', {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id, action }),
+        })
+        if (!res.ok) {
+          const data = await res.json().catch(() => null)
+          throw new Error(data?.error ?? `HTTP ${res.status}`)
+        }
+      })
+      if (result.failed.length > 0) {
+        setError(`${result.failed.length} von ${ids.length} Aktionen fehlgeschlagen: ${result.failed[0].error}`)
+      }
+      if (result.succeeded > 0) {
+        selection.clear()
+        await load(tab, query)
+      }
+    } finally {
+      setBulkBusy(null)
     }
   }
 
@@ -164,15 +228,61 @@ export default function AdminCommentsPage() {
         <p className="py-8 text-sm text-muted-foreground">{emptyLabel}</p>
       ) : (
         <div className="space-y-4">
+          <MultiSelectBar
+            selection={selection}
+            totalVisible={comments.length}
+            busy={bulkBusy !== null}
+          >
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkAct(approveIds, 'approve')}
+              disabled={bulkBusy !== null || approveIds.length === 0}
+            >
+              {bulkBusy === 'approve' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Eye className="h-3 w-3" />}
+              Sichtbar machen ({approveIds.length})
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkAct(hideIds, 'hide')}
+              disabled={bulkBusy !== null || hideIds.length === 0}
+            >
+              {bulkBusy === 'hide' ? <Loader2 className="h-3 w-3 animate-spin" /> : <EyeOff className="h-3 w-3" />}
+              Unsichtbar machen ({hideIds.length})
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkAct(allSelectedIds, 'delete')}
+              disabled={bulkBusy !== null || allSelectedIds.length === 0}
+            >
+              {bulkBusy === 'delete' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+              Löschen ({allSelectedIds.length})
+            </Button>
+          </MultiSelectBar>
           {comments.map((c) => {
             const badge = STATUS_BADGE[c.status] ?? { label: c.status, cls: 'bg-muted text-muted-foreground' }
             const isPublished = c.status === 'published'
             const isEditing = editingId === c.id
             const isBusy = busyId === c.id
+            const isSelected = selection.isSelected(c.id)
             return (
-              <Card key={c.id}>
+              <Card
+                key={c.id}
+                {...selection.rowSelectionProps(c.id)}
+                className={isSelected ? MULTI_SELECT_ROW_CLASS : undefined}
+              >
                 <CardHeader className="pb-2">
-                  <CardTitle className="flex flex-wrap items-baseline gap-2 text-sm font-medium">
+                  <CardTitle className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                    <MultiSelectCheckbox
+                      checked={isSelected}
+                      onToggle={(shiftKey) => selection.toggle(c.id, shiftKey)}
+                      ariaLabel={`Kommentar auswählen: ${c.agent_name ?? c.display_name}`}
+                    />
                     {c.author_kind === 'agent' ? (
                       <>
                         <Bot className="h-3.5 w-3.5 translate-y-0.5 text-muted-foreground" aria-label="Agent" />

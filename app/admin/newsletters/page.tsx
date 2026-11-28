@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Mail, Plus, Trash2, ToggleLeft, ToggleRight, Loader2, Search, CheckCircle2, Circle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,7 +24,14 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
+import { applyMultiSelect } from '@/lib/news-queue/multi-select'
+import {
+  useMultiSelect,
+  MultiSelectBar,
+  MultiSelectCheckbox,
+  MULTI_SELECT_ROW_CLASS,
+} from '@/components/admin/multi-select'
+import { runBatched } from '@/lib/admin/run-batched'
 
 interface NewsletterSource {
   id: string
@@ -56,8 +63,21 @@ export default function NewslettersPage() {
   const [scanning, setScanning] = useState(false)
   const [scannedSenders, setScannedSenders] = useState<ScannedSender[]>([])
   const [selectedSenders, setSelectedSenders] = useState<Set<string>>(new Set())
+  const senderAnchorRef = useRef<string | null>(null)
   const [importing, setImporting] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null)
+
+  const visibleSourceIds = useMemo(() => sources.map((s) => s.id), [sources])
+  const selection = useMultiSelect(visibleSourceIds, {
+    disableEscape: dialogOpen || scanDialogOpen,
+  })
+  const selectedSources = useMemo(() => {
+    const byId = new Map(sources.map((s) => [s.id, s]))
+    return selection.visibleSelectedIds
+      .map((id) => byId.get(id))
+      .filter((s): s is NewsletterSource => Boolean(s))
+  }, [sources, selection.visibleSelectedIds])
 
   useEffect(() => {
     fetchSources()
@@ -136,6 +156,61 @@ export default function NewslettersPage() {
     }
   }
 
+  async function bulkSetSourcesEnabled(enabled: boolean) {
+    const targets = selectedSources.filter((s) => s.enabled !== enabled)
+    if (targets.length === 0) return
+    setBulkBusy(enabled ? 'enable' : 'disable')
+    try {
+      const result = await runBatched(targets, async (s) => {
+        const res = await fetch('/api/admin/newsletter-sources', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: s.id, enabled }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => null)
+          throw new Error(err?.error || `HTTP ${res.status}`)
+        }
+      })
+      if (result.failed.length > 0) {
+        alert(`${result.failed.length} von ${targets.length} Aktionen fehlgeschlagen`)
+      }
+      if (result.succeeded > 0) {
+        selection.clear()
+        await fetchSources()
+      }
+    } finally {
+      setBulkBusy(null)
+    }
+  }
+
+  async function bulkDeleteSources() {
+    const ids = selection.visibleSelectedIds
+    if (ids.length === 0) return
+    if (!confirm(`${ids.length} Newsletter-Quelle${ids.length === 1 ? '' : 'n'} wirklich löschen?`)) return
+    setBulkBusy('delete')
+    try {
+      const result = await runBatched(ids, async (id) => {
+        const res = await fetch(`/api/admin/newsletter-sources?id=${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => null)
+          throw new Error(err?.error || `HTTP ${res.status}`)
+        }
+      })
+      if (result.failed.length > 0) {
+        alert(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen`)
+      }
+      if (result.succeeded > 0) {
+        selection.clear()
+        await fetchSources()
+      }
+    } finally {
+      setBulkBusy(null)
+    }
+  }
+
   async function scanGmailSenders() {
     setScanning(true)
     setScanError(null)
@@ -166,24 +241,28 @@ export default function NewslettersPage() {
     }
   }
 
-  function toggleSenderSelection(email: string) {
+  function toggleSenderSelection(email: string, shiftKey = false) {
     setSelectedSenders(prev => {
-      const next = new Set(prev)
-      if (next.has(email)) {
-        next.delete(email)
-      } else {
-        next.add(email)
-      }
-      return next
+      const result = applyMultiSelect({
+        visibleIds: scannedSenders.map(s => s.email),
+        selected: prev,
+        anchorId: senderAnchorRef.current,
+        clickedId: email,
+        shiftKey,
+      })
+      senderAnchorRef.current = result.anchorId
+      return result.selected
     })
   }
 
   function selectAllSenders() {
     setSelectedSenders(new Set(scannedSenders.map(s => s.email)))
+    senderAnchorRef.current = scannedSenders[0]?.email ?? null
   }
 
   function deselectAllSenders() {
     setSelectedSenders(new Set())
+    senderAnchorRef.current = null
   }
 
   async function importSelectedSenders() {
@@ -296,16 +375,19 @@ export default function NewslettersPage() {
                       {scannedSenders.map((sender) => (
                         <div
                           key={sender.email}
+                          onMouseDown={(e) => {
+                            if (e.shiftKey) e.preventDefault()
+                          }}
                           className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50 ${
                             selectedSenders.has(sender.email) ? 'border-primary bg-primary/5' : ''
                           }`}
-                          onClick={() => toggleSenderSelection(sender.email)}
+                          onClick={(e) => toggleSenderSelection(sender.email, e.shiftKey)}
                         >
-                          <Checkbox
+                          <MultiSelectCheckbox
                             checked={selectedSenders.has(sender.email)}
-                            onCheckedChange={() => toggleSenderSelection(sender.email)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="mt-0.5 flex-shrink-0"
+                            onToggle={(shiftKey) => toggleSenderSelection(sender.email, shiftKey)}
+                            ariaLabel={`Absender auswählen: ${sender.email}`}
+                            className="mt-0.5"
                           />
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-1.5">
@@ -440,61 +522,114 @@ export default function NewslettersPage() {
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>E-Mail</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Hinzugefügt</TableHead>
-                  <TableHead className="text-right">Aktionen</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sources.map((source) => (
-                  <TableRow key={source.id}>
-                    <TableCell className="font-mono text-sm">
-                      {source.email}
-                    </TableCell>
-                    <TableCell>
-                      {source.name || <span className="text-muted-foreground">—</span>}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={source.enabled ? 'default' : 'secondary'}>
-                        {source.enabled ? 'Aktiv' : 'Pausiert'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {new Date(source.created_at).toLocaleDateString('de-DE')}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => toggleSource(source.id, source.enabled)}
-                          title={source.enabled ? 'Pausieren' : 'Aktivieren'}
-                        >
-                          {source.enabled ? (
-                            <ToggleRight className="h-4 w-4 text-green-600" />
-                          ) : (
-                            <ToggleLeft className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => deleteSource(source.id)}
-                          title="Löschen"
-                        >
-                          <Trash2 className="h-4 w-4 text-red-600" />
-                        </Button>
-                      </div>
-                    </TableCell>
+            <div className="space-y-3">
+              <MultiSelectBar
+                selection={selection}
+                totalVisible={sources.length}
+                busy={bulkBusy !== null}
+              >
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => void bulkSetSourcesEnabled(true)}
+                  disabled={bulkBusy !== null || selectedSources.every((s) => s.enabled)}
+                >
+                  {bulkBusy === 'enable' ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3 text-green-600" />}
+                  Aktivieren ({selectedSources.filter((s) => !s.enabled).length})
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => void bulkSetSourcesEnabled(false)}
+                  disabled={bulkBusy !== null || selectedSources.every((s) => !s.enabled)}
+                >
+                  {bulkBusy === 'disable' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Circle className="h-3 w-3 text-muted-foreground" />}
+                  Pausieren ({selectedSources.filter((s) => s.enabled).length})
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => void bulkDeleteSources()}
+                  disabled={bulkBusy !== null || selection.visibleSelectedIds.length === 0}
+                >
+                  {bulkBusy === 'delete' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                  Löschen ({selection.visibleSelectedIds.length})
+                </Button>
+              </MultiSelectBar>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8" />
+                    <TableHead>E-Mail</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Hinzugefügt</TableHead>
+                    <TableHead className="text-right">Aktionen</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {sources.map((source) => {
+                    const isSelected = selection.isSelected(source.id)
+                    return (
+                    <TableRow
+                      key={source.id}
+                      {...selection.rowSelectionProps(source.id)}
+                      className={isSelected ? MULTI_SELECT_ROW_CLASS : undefined}
+                    >
+                      <TableCell className="w-8">
+                        <MultiSelectCheckbox
+                          checked={isSelected}
+                          onToggle={(shiftKey) => selection.toggle(source.id, shiftKey)}
+                          ariaLabel={`Quelle auswählen: ${source.email}`}
+                        />
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {source.email}
+                      </TableCell>
+                      <TableCell>
+                        {source.name || <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={source.enabled ? 'default' : 'secondary'}>
+                          {source.enabled ? 'Aktiv' : 'Pausiert'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(source.created_at).toLocaleDateString('de-DE')}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => toggleSource(source.id, source.enabled)}
+                            title={source.enabled ? 'Pausieren' : 'Aktivieren'}
+                          >
+                            {source.enabled ? (
+                              <ToggleRight className="h-4 w-4 text-green-600" />
+                            ) : (
+                              <ToggleLeft className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => deleteSource(source.id)}
+                            title="Löschen"
+                          >
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Wallet, Loader2, RefreshCw, EyeOff, Ban, ExternalLink } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Wallet, Loader2, RefreshCw, EyeOff, Ban, ExternalLink, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -10,6 +10,13 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import {
+  useMultiSelect,
+  MultiSelectBar,
+  MultiSelectCheckbox,
+  MULTI_SELECT_ROW_CLASS,
+} from '@/components/admin/multi-select'
+import { runBatched } from '@/lib/admin/run-batched'
 
 interface Subscription {
   id: string
@@ -74,6 +81,71 @@ export default function SubscriptionsPage() {
 
   const [cancelTarget, setCancelTarget] = useState<Subscription | null>(null)
   const [cancelling, setCancelling] = useState(false)
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null)
+
+  const visibleIds = useMemo(() => subs.map((s) => s.id), [subs])
+  const selection = useMultiSelect(visibleIds, {
+    disableEscape: Boolean(cancelTarget),
+  })
+  const selectedSubs = useMemo(() => {
+    const byId = new Map(subs.map((s) => [s.id, s]))
+    return selection.visibleSelectedIds
+      .map((id) => byId.get(id))
+      .filter((s): s is Subscription => Boolean(s))
+  }, [subs, selection.visibleSelectedIds])
+  const activeSelectedIds = useMemo(
+    () => selectedSubs.filter((s) => s.status === 'active').map((s) => s.id),
+    [selectedSubs],
+  )
+
+  async function bulkMarkCancelled() {
+    if (activeSelectedIds.length === 0) return
+    setBulkBusy('cancel')
+    try {
+      const result = await runBatched(activeSelectedIds, async (id) => {
+        const res = await fetch('/api/admin/subscriptions/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, manual: true }),
+        })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      })
+      if (result.failed.length > 0) {
+        alert(`${result.failed.length} von ${activeSelectedIds.length} Updates fehlgeschlagen`)
+      }
+      if (result.succeeded > 0) {
+        selection.clear()
+        await fetchSubs()
+      }
+    } finally {
+      setBulkBusy(null)
+    }
+  }
+
+  async function bulkIgnore() {
+    const ids = selection.visibleSelectedIds
+    if (ids.length === 0) return
+    setBulkBusy('ignore')
+    try {
+      const result = await runBatched(ids, async (id) => {
+        const res = await fetch('/api/admin/subscriptions', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, status: 'ignored' }),
+        })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      })
+      if (result.failed.length > 0) {
+        alert(`${result.failed.length} von ${ids.length} Updates fehlgeschlagen`)
+      }
+      if (result.succeeded > 0) {
+        selection.clear()
+        await fetchSubs()
+      }
+    } finally {
+      setBulkBusy(null)
+    }
+  }
 
   const isAutoCancellable = (s: Subscription) => s.unsubscribe_type === 'oneclick' || s.unsubscribe_type === 'http'
 
@@ -162,22 +234,63 @@ export default function SubscriptionsPage() {
               <p className="mt-4 text-sm text-muted-foreground">Noch keine Abos erkannt. Klicke „Neu scannen".</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Anbieter</TableHead>
-                  <TableHead>Monatlich</TableHead>
-                  <TableHead>Intervall</TableHead>
-                  <TableHead>Letzte Zahlung</TableHead>
-                  <TableHead>Belege</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Aktionen</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {subs.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="font-medium">
+            <div className="space-y-3">
+              <MultiSelectBar
+                selection={selection}
+                totalVisible={subs.length}
+                busy={bulkBusy !== null}
+              >
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => void bulkMarkCancelled()}
+                  disabled={bulkBusy !== null || activeSelectedIds.length === 0}
+                >
+                  {bulkBusy === 'cancel' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                  Als gekündigt markieren ({activeSelectedIds.length})
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => void bulkIgnore()}
+                  disabled={bulkBusy !== null || selection.visibleSelectedIds.length === 0}
+                >
+                  {bulkBusy === 'ignore' ? <Loader2 className="h-3 w-3 animate-spin" /> : <EyeOff className="h-3 w-3" />}
+                  Ausblenden ({selection.visibleSelectedIds.length})
+                </Button>
+              </MultiSelectBar>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8" />
+                    <TableHead>Anbieter</TableHead>
+                    <TableHead>Monatlich</TableHead>
+                    <TableHead>Intervall</TableHead>
+                    <TableHead>Letzte Zahlung</TableHead>
+                    <TableHead>Belege</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Aktionen</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {subs.map((s) => {
+                    const isSelected = selection.isSelected(s.id)
+                    return (
+                    <TableRow
+                      key={s.id}
+                      {...selection.rowSelectionProps(s.id)}
+                      className={isSelected ? MULTI_SELECT_ROW_CLASS : undefined}
+                    >
+                      <TableCell className="w-8">
+                        <MultiSelectCheckbox
+                          checked={isSelected}
+                          onToggle={(shiftKey) => selection.toggle(s.id, shiftKey)}
+                          ariaLabel={`Abo auswählen: ${s.provider_name}`}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">
                       {s.provider_name}
                       {s.is_content_source && <Badge variant="secondary" className="ml-2 text-xs">Content-Quelle</Badge>}
                     </TableCell>
@@ -225,9 +338,11 @@ export default function SubscriptionsPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                    )
+                  })}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>

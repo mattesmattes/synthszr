@@ -1,12 +1,18 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef, startTransition } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo, startTransition } from 'react'
 import { Languages, Loader2, RefreshCw, Play, RotateCcw, X, CheckCircle, Clock, AlertCircle, PenLine, Square, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
+import {
+  useMultiSelect,
+  MultiSelectBar,
+  MultiSelectCheckbox,
+  MULTI_SELECT_ROW_CLASS,
+} from '@/components/admin/multi-select'
 
 interface QueueItem {
   id: string
@@ -83,6 +89,39 @@ export default function TranslationsPage() {
   const [progress, setProgress] = useState({ current: 0, total: 0 })
   const abortRef = useRef(false)
   const processingRef = useRef(false)
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null)
+
+  const queueItems = useMemo(() => data?.queueItems ?? [], [data?.queueItems])
+  const visibleIds = useMemo(() => queueItems.map((item) => item.id), [queueItems])
+  const selection = useMultiSelect(visibleIds, {
+    resetKey: `${statusFilter}|${languageFilter}`,
+  })
+  const selectedItemMap = useMemo(
+    () => new Map(queueItems.map((item) => [item.id, item])),
+    [queueItems],
+  )
+  const selectedItems = useMemo(
+    () =>
+      selection.visibleSelectedIds
+        .map((id) => selectedItemMap.get(id))
+        .filter((item): item is QueueItem => Boolean(item)),
+    [selection.visibleSelectedIds, selectedItemMap],
+  )
+  const retryableIds = useMemo(
+    () => selectedItems.filter((i) => i.status === 'failed' || i.status === 'cancelled').map((i) => i.id),
+    [selectedItems],
+  )
+  const cancellableIds = useMemo(
+    () => selectedItems.filter((i) => i.status === 'pending' || i.status === 'processing').map((i) => i.id),
+    [selectedItems],
+  )
+  const deletableIds = useMemo(
+    () =>
+      selectedItems
+        .filter((i) => i.status === 'completed' || i.status === 'failed' || i.status === 'cancelled')
+        .map((i) => i.id),
+    [selectedItems],
+  )
 
   const fetchData = useCallback(async () => {
     try {
@@ -395,6 +434,44 @@ export default function TranslationsPage() {
     }
   }
 
+  async function handleBulkAction(action: 'retry-items' | 'cancel-items' | 'delete-items', ids: string[]) {
+    if (ids.length === 0) return
+    if (
+      action === 'delete-items' &&
+      !confirm(`${ids.length} Übersetzung${ids.length === 1 ? '' : 'en'} wirklich löschen? Dies löscht auch die zugehörigen Übersetzungen.`)
+    ) {
+      return
+    }
+    setBulkBusy(action)
+    try {
+      const res = await fetch('/api/admin/translations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, ids }),
+      })
+      const result = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setProcessLog(prev => [...prev, `❌ Batch-Aktion fehlgeschlagen: ${result.error || `HTTP ${res.status}`}`])
+        return
+      }
+      const count = result.count ?? ids.length
+      if (action === 'retry-items') {
+        setProcessLog(prev => [...prev, `✅ ${count} Items zurück in Queue gestellt`])
+      } else if (action === 'cancel-items') {
+        setProcessLog(prev => [...prev, `⏹️ ${count} Items abgebrochen`])
+      } else {
+        setProcessLog(prev => [...prev, `🗑️ ${count} Übersetzungen gelöscht`])
+      }
+      selection.clear()
+      await fetchData()
+    } catch (error) {
+      console.error('Bulk translation action failed:', error)
+      setProcessLog(prev => [...prev, `❌ Netzwerkfehler bei Batch-Aktion`])
+    } finally {
+      setBulkBusy(null)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -591,14 +668,76 @@ export default function TranslationsPage() {
         <CardContent>
           {data?.queueItems && data.queueItems.length > 0 ? (
             <div className="space-y-2">
-              {data.queueItems.map(item => (
+              <MultiSelectBar
+                selection={selection}
+                totalVisible={queueItems.length}
+                busy={bulkBusy !== null}
+                className="mb-3"
+              >
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => handleBulkAction('retry-items', retryableIds)}
+                  disabled={bulkBusy !== null || retryableIds.length === 0}
+                >
+                  {bulkBusy === 'retry-items' ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-3 w-3" />
+                  )}
+                  Retry ({retryableIds.length})
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => handleBulkAction('cancel-items', cancellableIds)}
+                  disabled={bulkBusy !== null || cancellableIds.length === 0}
+                >
+                  {bulkBusy === 'cancel-items' ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <X className="h-3 w-3" />
+                  )}
+                  Abbrechen ({cancellableIds.length})
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => handleBulkAction('delete-items', deletableIds)}
+                  disabled={bulkBusy !== null || deletableIds.length === 0}
+                >
+                  {bulkBusy === 'delete-items' ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                  Löschen ({deletableIds.length})
+                </Button>
+              </MultiSelectBar>
+              {data.queueItems.map(item => {
+                const isSelected = selection.isSelected(item.id)
+                const itemTitle = item.generated_posts?.title || item.static_pages?.title || `${item.content_type}: ${item.content_id?.slice(0, 8)}...`
+                return (
                 <div
                   key={item.id}
-                  className={`flex items-center justify-between p-3 border rounded-lg ${
-                    currentItem === item.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-950' : ''
+                  {...selection.rowSelectionProps(item.id)}
+                  className={`flex items-center justify-between gap-3 p-3 border rounded-lg transition-colors ${
+                    isSelected
+                      ? MULTI_SELECT_ROW_CLASS
+                      : currentItem === item.id
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-950'
+                      : 'hover:bg-muted/30'
                   }`}
                 >
-                  <div className="flex-1">
+                  <MultiSelectCheckbox
+                    checked={isSelected}
+                    onToggle={(shiftKey) => selection.toggle(item.id, shiftKey)}
+                    ariaLabel={`Queue-Item auswählen: ${itemTitle}`}
+                  />
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <Badge className={STATUS_COLORS[item.status] || ''}>
                         {STATUS_ICONS[item.status]}
@@ -610,8 +749,8 @@ export default function TranslationsPage() {
                         <Badge variant="secondary">P{item.priority}</Badge>
                       )}
                     </div>
-                    <p className="text-sm font-medium">
-                      {item.generated_posts?.title || item.static_pages?.title || `${item.content_type}: ${item.content_id?.slice(0, 8)}...`}
+                    <p className="text-sm font-medium truncate">
+                      {itemTitle}
                     </p>
                     {item.last_error && (
                       <p className="text-xs text-red-600 mt-1 truncate max-w-md">
@@ -623,7 +762,7 @@ export default function TranslationsPage() {
                       {item.attempts > 0 && ` • ${item.attempts} Versuche`}
                     </p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 shrink-0">
                     {(item.status === 'failed' || item.status === 'cancelled') && (
                       <Button
                         size="sm"
@@ -657,7 +796,8 @@ export default function TranslationsPage() {
                     )}
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground text-center py-8">

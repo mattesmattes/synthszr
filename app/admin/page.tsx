@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import {
   FileText,
@@ -74,6 +74,13 @@ import { verifyContentUrls } from '@/lib/utils/url-verifier'
 import { applySectionResult } from '@/lib/enrich/sections'
 import { parseTiptapContent } from '@/lib/utils/tiptap-to-markdown'
 import { runEnrichOnTiptap } from '@/lib/enrich/run-stream'
+import {
+  useMultiSelect,
+  MultiSelectBar,
+  MultiSelectCheckbox,
+  MULTI_SELECT_ROW_CLASS,
+} from '@/components/admin/multi-select'
+import { runBatched } from '@/lib/admin/run-batched'
 
 interface CombinedPost {
   id: string
@@ -166,6 +173,7 @@ export default function AdminPage() {
   const [generatingExcerpt, setGeneratingExcerpt] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [changingStatus, setChangingStatus] = useState<string | null>(null)
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null)
 
   const [editForm, setEditForm] = useState<{
     title: string
@@ -758,7 +766,90 @@ export default function AdminPage() {
   const totalPages = Math.max(1, Math.ceil(posts.length / POSTS_PER_PAGE))
   const safePage = Math.min(currentPage, totalPages - 1)
   const pageStart = safePage * POSTS_PER_PAGE
-  const paginatedPosts = posts.slice(pageStart, pageStart + POSTS_PER_PAGE)
+  const paginatedPosts = useMemo(
+    () => posts.slice(pageStart, pageStart + POSTS_PER_PAGE),
+    [posts, pageStart],
+  )
+  const visiblePostKeys = useMemo(
+    () => paginatedPosts.map((p) => `${p.source}:${p.id}`),
+    [paginatedPosts],
+  )
+  const selection = useMultiSelect(visiblePostKeys, {
+    resetKey: String(safePage),
+    disableEscape: Boolean(editingPost) || Boolean(viewingPost) || Boolean(deletingPost),
+  })
+  const selectedPosts = useMemo(() => {
+    const byKey = new Map(paginatedPosts.map((p) => [`${p.source}:${p.id}`, p]))
+    return selection.visibleSelectedIds
+      .map((key) => byKey.get(key))
+      .filter((p): p is CombinedPost => Boolean(p))
+  }, [paginatedPosts, selection.visibleSelectedIds])
+
+  async function bulkChangePostStatus(newStatus: 'draft' | 'published' | 'archived') {
+    const targets = selectedPosts.filter((p) => p.status !== newStatus)
+    if (targets.length === 0) return
+    setBulkBusy(newStatus)
+    try {
+      const result = await runBatched(targets, async (post) => {
+        const res =
+          post.source === 'manual'
+            ? await fetch('/api/admin/posts', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: post.id, status: newStatus }),
+                credentials: 'include',
+              })
+            : await fetch('/api/admin/generated-posts', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: post.id, status: newStatus }),
+                credentials: 'include',
+              })
+        if (!res.ok) {
+          const err = await res.json().catch(() => null)
+          throw new Error(err?.error || `HTTP ${res.status}`)
+        }
+      })
+      if (result.failed.length > 0) {
+        alert(`${result.failed.length} von ${targets.length} Statuswechseln fehlgeschlagen: ${result.failed[0].error}`)
+      }
+      if (result.succeeded > 0) {
+        selection.clear()
+        await fetchPosts()
+      }
+    } finally {
+      setBulkBusy(null)
+    }
+  }
+
+  async function bulkDeletePosts() {
+    const targets = selectedPosts
+    if (targets.length === 0) return
+    if (!confirm(`${targets.length} Post${targets.length === 1 ? '' : 's'} wirklich endgültig löschen?`)) return
+    setBulkBusy('delete')
+    try {
+      const result = await runBatched(targets, async (post) => {
+        const url =
+          post.source === 'manual'
+            ? `/api/admin/posts?id=${encodeURIComponent(post.id)}`
+            : `/api/admin/generated-posts?id=${encodeURIComponent(post.id)}`
+        const res = await fetch(url, { method: 'DELETE', credentials: 'include' })
+        if (!res.ok) {
+          const err = await res.json().catch(() => null)
+          throw new Error(err?.error || `HTTP ${res.status}`)
+        }
+      })
+      if (result.failed.length > 0) {
+        alert(`${result.failed.length} von ${targets.length} Löschungen fehlgeschlagen: ${result.failed[0].error}`)
+      }
+      if (result.succeeded > 0) {
+        selection.clear()
+        await fetchPosts()
+      }
+    } finally {
+      setBulkBusy(null)
+    }
+  }
 
   return (
     <div className="p-4 md:p-8 max-w-full overflow-x-hidden">
@@ -820,10 +911,69 @@ export default function AdminPage() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {paginatedPosts.map((post) => (
-            <Card key={`${post.source}-${post.id}`}>
+          <MultiSelectBar
+            selection={selection}
+            totalVisible={paginatedPosts.length}
+            busy={bulkBusy !== null}
+          >
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkChangePostStatus('published')}
+              disabled={bulkBusy !== null || selectedPosts.every((p) => p.status === 'published')}
+            >
+              {bulkBusy === 'published' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3 text-green-600" />}
+              Veröffentlichen ({selectedPosts.filter((p) => p.status !== 'published').length})
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkChangePostStatus('draft')}
+              disabled={bulkBusy !== null || selectedPosts.every((p) => p.status === 'draft')}
+            >
+              {bulkBusy === 'draft' ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileEdit className="h-3 w-3 text-yellow-600" />}
+              Als Entwurf ({selectedPosts.filter((p) => p.status !== 'draft').length})
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkChangePostStatus('archived')}
+              disabled={bulkBusy !== null || selectedPosts.every((p) => p.status === 'archived')}
+            >
+              {bulkBusy === 'archived' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Archive className="h-3 w-3" />}
+              Archivieren ({selectedPosts.filter((p) => p.status !== 'archived').length})
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkDeletePosts()}
+              disabled={bulkBusy !== null || selectedPosts.length === 0}
+            >
+              {bulkBusy === 'delete' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+              Löschen ({selectedPosts.length})
+            </Button>
+          </MultiSelectBar>
+          {paginatedPosts.map((post) => {
+            const key = `${post.source}:${post.id}`
+            const isSelected = selection.isSelected(key)
+            return (
+            <Card
+              key={`${post.source}-${post.id}`}
+              {...selection.rowSelectionProps(key)}
+              className={isSelected ? MULTI_SELECT_ROW_CLASS : undefined}
+            >
               <CardContent className="py-4">
                 <div className="flex items-start justify-between gap-4">
+                  <MultiSelectCheckbox
+                    checked={isSelected}
+                    onToggle={(shiftKey) => selection.toggle(key, shiftKey)}
+                    ariaLabel={`Post auswählen: ${post.title}`}
+                    className="mt-1"
+                  />
                   <div className="flex-1 min-w-0 overflow-hidden">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       <h3 className="font-medium">{post.title}</h3>
@@ -969,7 +1119,8 @@ export default function AdminPage() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            )
+          })}
         </div>
       )}
 

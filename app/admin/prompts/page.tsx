@@ -1,7 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { MessageSquare, Plus, Trash2, Edit2, Loader2, Check, Star } from 'lucide-react'
+import {
+  useMultiSelect,
+  MultiSelectBar,
+  MultiSelectCheckbox,
+  MULTI_SELECT_ROW_CLASS,
+} from '@/components/admin/multi-select'
+import { runBatched } from '@/lib/admin/run-batched'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -45,6 +52,12 @@ export default function PromptsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [editingPrompt, setEditingPrompt] = useState<AnalysisPrompt | null>(null)
   const [deletingPrompt, setDeletingPrompt] = useState<AnalysisPrompt | null>(null)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+
+  const visibleIds = useMemo(() => prompts.map((p) => p.id), [prompts])
+  const selection = useMultiSelect(visibleIds, {
+    disableEscape: dialogOpen || deleteDialogOpen,
+  })
 
   const [formData, setFormData] = useState({
     name: '',
@@ -169,6 +182,34 @@ export default function PromptsPage() {
     }
   }
 
+  async function bulkDeletePrompts() {
+    const ids = selection.visibleSelectedIds
+    if (ids.length === 0) return
+    if (!confirm(`${ids.length} Analyse-Prompt${ids.length === 1 ? '' : 's'} wirklich löschen?`)) return
+    setBulkDeleting(true)
+    try {
+      const result = await runBatched(ids, async (id) => {
+        const res = await fetch(`/api/admin/analysis-prompts?id=${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => null)
+          throw new Error(err?.error || `HTTP ${res.status}`)
+        }
+      })
+      if (result.failed.length > 0) {
+        alert(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen`)
+      }
+      if (result.succeeded > 0) {
+        selection.clear()
+        await fetchPrompts()
+      }
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
   return (
     <div className="p-8">
       <div className="mb-8 flex items-center justify-between">
@@ -202,10 +243,44 @@ export default function PromptsPage() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {prompts.map((prompt) => (
-            <Card key={prompt.id} className={prompt.is_active ? 'border-primary' : ''}>
+          <MultiSelectBar
+            selection={selection}
+            totalVisible={prompts.length}
+            busy={bulkDeleting}
+          >
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkDeletePrompts()}
+              disabled={bulkDeleting}
+            >
+              {bulkDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+              Löschen ({selection.visibleSelectedIds.length})
+            </Button>
+          </MultiSelectBar>
+          {prompts.map((prompt) => {
+            const isSelected = selection.isSelected(prompt.id)
+            return (
+            <Card
+              key={prompt.id}
+              {...selection.rowSelectionProps(prompt.id)}
+              className={
+                isSelected
+                  ? MULTI_SELECT_ROW_CLASS
+                  : prompt.is_active
+                  ? 'border-primary'
+                  : undefined
+              }
+            >
               <CardContent className="py-4">
                 <div className="flex items-start justify-between gap-4">
+                  <MultiSelectCheckbox
+                    checked={isSelected}
+                    onToggle={(shiftKey) => selection.toggle(prompt.id, shiftKey)}
+                    ariaLabel={`Prompt auswählen: ${prompt.name}`}
+                    className="mt-1"
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className="font-medium">{prompt.name}</h3>
@@ -247,7 +322,8 @@ export default function PromptsPage() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            )
+          })}
         </div>
       )}
 

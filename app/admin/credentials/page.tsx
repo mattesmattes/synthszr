@@ -1,7 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Key, Plus, Shield, Trash2, Edit2, Loader2, Globe, User, Lock, FileText } from 'lucide-react'
+import {
+  useMultiSelect,
+  MultiSelectBar,
+  MultiSelectCheckbox,
+  MULTI_SELECT_ROW_CLASS,
+} from '@/components/admin/multi-select'
+import { runBatched } from '@/lib/admin/run-batched'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -44,6 +51,12 @@ export default function CredentialsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [editingCredential, setEditingCredential] = useState<Credential | null>(null)
   const [deletingCredential, setDeletingCredential] = useState<Credential | null>(null)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+
+  const visibleIds = useMemo(() => credentials.map((c) => c.id), [credentials])
+  const selection = useMultiSelect(visibleIds, {
+    disableEscape: dialogOpen || deleteDialogOpen,
+  })
 
   const [formData, setFormData] = useState({
     domain: '',
@@ -148,6 +161,34 @@ export default function CredentialsPage() {
     }
   }
 
+  async function bulkDeleteCredentials() {
+    const ids = selection.visibleSelectedIds
+    if (ids.length === 0) return
+    if (!confirm(`${ids.length} Credential${ids.length === 1 ? '' : 's'} wirklich löschen?`)) return
+    setBulkDeleting(true)
+    try {
+      const result = await runBatched(ids, async (id) => {
+        const res = await fetch(`/api/admin/credentials?id=${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => null)
+          throw new Error(err?.error || `HTTP ${res.status}`)
+        }
+      })
+      if (result.failed.length > 0) {
+        alert(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen`)
+      }
+      if (result.succeeded > 0) {
+        selection.clear()
+        await fetchCredentials()
+      }
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
   return (
     <div className="p-8">
       <div className="mb-8 flex items-center justify-between">
@@ -200,10 +241,37 @@ export default function CredentialsPage() {
         </Card>
       ) : (
         <div className="grid gap-4">
-          {credentials.map((cred) => (
-            <Card key={cred.id}>
+          <MultiSelectBar
+            selection={selection}
+            totalVisible={credentials.length}
+            busy={bulkDeleting}
+          >
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkDeleteCredentials()}
+              disabled={bulkDeleting}
+            >
+              {bulkDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+              Löschen ({selection.visibleSelectedIds.length})
+            </Button>
+          </MultiSelectBar>
+          {credentials.map((cred) => {
+            const isSelected = selection.isSelected(cred.id)
+            return (
+            <Card
+              key={cred.id}
+              {...selection.rowSelectionProps(cred.id)}
+              className={isSelected ? MULTI_SELECT_ROW_CLASS : undefined}
+            >
               <CardContent className="flex items-center justify-between py-4">
                 <div className="flex items-center gap-4">
+                  <MultiSelectCheckbox
+                    checked={isSelected}
+                    onToggle={(shiftKey) => selection.toggle(cred.id, shiftKey)}
+                    ariaLabel={`Credential auswählen: ${cred.domain}`}
+                  />
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
                     <Globe className="h-5 w-5 text-muted-foreground" />
                   </div>
@@ -238,7 +306,8 @@ export default function CredentialsPage() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            )
+          })}
         </div>
       )}
 

@@ -1,7 +1,15 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { BookOpen, Plus, Trash2, Edit2, Loader2, Tag, CheckCircle, XCircle, Upload, FileText, Sparkles, Check } from 'lucide-react'
+import { applyMultiSelect } from '@/lib/news-queue/multi-select'
+import {
+  useMultiSelect,
+  MultiSelectBar,
+  MultiSelectCheckbox,
+  MULTI_SELECT_ROW_CLASS,
+} from '@/components/admin/multi-select'
+import { runBatched } from '@/lib/admin/run-batched'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -127,7 +135,10 @@ export default function VocabularyPage() {
   const [extractedVocabulary, setExtractedVocabulary] = useState<ExtractedVocabulary[]>([])
   const [styleSummary, setStyleSummary] = useState<string | null>(null)
   const [selectedExtracted, setSelectedExtracted] = useState<Set<number>>(new Set())
+  const extractedAnchorRef = useRef<string | null>(null)
   const [addingExtracted, setAddingExtracted] = useState(false)
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null)
+  const [bulkCategory, setBulkCategory] = useState<string>('general')
 
   const [formData, setFormData] = useState({
     term: '',
@@ -307,24 +318,30 @@ export default function VocabularyPage() {
     }
   }
 
-  function toggleExtractedSelection(index: number) {
+  function toggleExtractedSelection(index: number, shiftKey = false) {
+    const visibleExtractedIds = extractedVocabulary.map((_, i) => String(i))
     setSelectedExtracted(prev => {
-      const next = new Set(prev)
-      if (next.has(index)) {
-        next.delete(index)
-      } else {
-        next.add(index)
-      }
-      return next
+      const prevStrings = new Set(Array.from(prev, (n) => String(n)))
+      const result = applyMultiSelect({
+        visibleIds: visibleExtractedIds,
+        selected: prevStrings,
+        anchorId: extractedAnchorRef.current,
+        clickedId: String(index),
+        shiftKey,
+      })
+      extractedAnchorRef.current = result.anchorId
+      return new Set(Array.from(result.selected, (s) => Number(s)))
     })
   }
 
   function selectAllExtracted() {
     setSelectedExtracted(new Set(extractedVocabulary.map((_, i) => i)))
+    extractedAnchorRef.current = extractedVocabulary.length > 0 ? '0' : null
   }
 
   function deselectAllExtracted() {
     setSelectedExtracted(new Set())
+    extractedAnchorRef.current = null
   }
 
   async function addSelectedVocabulary() {
@@ -368,16 +385,100 @@ export default function VocabularyPage() {
     }
   }
 
-  const filteredEntries = filterCategory === 'all'
-    ? entries
-    : entries.filter(e => e.category === filterCategory)
+  const filteredEntries = useMemo(
+    () => (filterCategory === 'all' ? entries : entries.filter(e => e.category === filterCategory)),
+    [entries, filterCategory],
+  )
 
-  const groupedEntries = filteredEntries.reduce((acc, entry) => {
-    const cat = entry.category || 'general'
-    if (!acc[cat]) acc[cat] = []
-    acc[cat].push(entry)
-    return acc
-  }, {} as Record<string, VocabularyEntry[]>)
+  const groupedEntries = useMemo(
+    () =>
+      filteredEntries.reduce((acc, entry) => {
+        const cat = entry.category || 'general'
+        if (!acc[cat]) acc[cat] = []
+        acc[cat].push(entry)
+        return acc
+      }, {} as Record<string, VocabularyEntry[]>),
+    [filteredEntries],
+  )
+
+  // Match visual group-by-group render order so Shift+Click range selection follows screen order.
+  const visibleEntryIds = useMemo(
+    () => Object.values(groupedEntries).flatMap((group) => group.map((entry) => entry.id)),
+    [groupedEntries],
+  )
+  const selection = useMultiSelect(visibleEntryIds, {
+    resetKey: filterCategory,
+    disableEscape: dialogOpen || deleteDialogOpen,
+  })
+  const selectedEntries = useMemo(() => {
+    const byId = new Map(filteredEntries.map((e) => [e.id, e]))
+    return selection.visibleSelectedIds
+      .map((id) => byId.get(id))
+      .filter((e): e is VocabularyEntry => Boolean(e))
+  }, [filteredEntries, selection.visibleSelectedIds])
+
+  async function bulkChangeCategory() {
+    if (selectedEntries.length === 0) return
+    setBulkBusy('category')
+    try {
+      const result = await runBatched(selectedEntries, async (entry) => {
+        const res = await fetch('/api/admin/vocabulary', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: entry.id,
+            term: entry.term,
+            preferred_usage: entry.preferred_usage || '',
+            avoid_alternatives: entry.avoid_alternatives || '',
+            context: entry.context || '',
+            category: bulkCategory,
+          }),
+          credentials: 'include',
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => null)
+          throw new Error(err?.error || `HTTP ${res.status}`)
+        }
+      })
+      if (result.failed.length > 0) {
+        alert(`${result.failed.length} von ${selectedEntries.length} Updates fehlgeschlagen`)
+      }
+      if (result.succeeded > 0) {
+        selection.clear()
+        await fetchEntries()
+      }
+    } finally {
+      setBulkBusy(null)
+    }
+  }
+
+  async function bulkDeleteEntries() {
+    const ids = selection.visibleSelectedIds
+    if (ids.length === 0) return
+    if (!confirm(`${ids.length} Vokabular-Einträge wirklich löschen?`)) return
+    setBulkBusy('delete')
+    try {
+      const result = await runBatched(ids, async (id) => {
+        const res = await fetch(`/api/admin/vocabulary?id=${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => null)
+          throw new Error(err?.error || `HTTP ${res.status}`)
+        }
+      })
+      if (result.failed.length > 0) {
+        alert(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen`)
+      }
+      if (result.succeeded > 0) {
+        selection.clear()
+        await fetchEntries()
+      }
+    } finally {
+      setBulkBusy(null)
+    }
+  }
 
   return (
     <div className="p-8">
@@ -483,7 +584,10 @@ export default function VocabularyPage() {
               {extractedVocabulary.map((item, index) => (
                 <div
                   key={index}
-                  onClick={() => toggleExtractedSelection(index)}
+                  onMouseDown={(e) => {
+                    if (e.shiftKey) e.preventDefault()
+                  }}
+                  onClick={(e) => toggleExtractedSelection(index, e.shiftKey)}
                   className={`cursor-pointer rounded px-2 py-1.5 transition-colors flex items-center gap-2 ${
                     selectedExtracted.has(index)
                       ? 'bg-primary/10'
@@ -572,6 +676,44 @@ export default function VocabularyPage() {
         </Card>
       ) : (
         <div className="space-y-6">
+          <MultiSelectBar
+            selection={selection}
+            totalVisible={filteredEntries.length}
+            busy={bulkBusy !== null}
+          >
+            <div className="flex items-center gap-1.5">
+              <Select value={bulkCategory} onValueChange={setBulkCategory}>
+                <SelectTrigger className="h-7 w-[160px] text-xs bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map(cat => (
+                    <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1"
+                onClick={() => void bulkChangeCategory()}
+                disabled={bulkBusy !== null || selectedEntries.length === 0}
+              >
+                {bulkBusy === 'category' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Tag className="h-3 w-3" />}
+                Kategorie setzen
+              </Button>
+            </div>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkDeleteEntries()}
+              disabled={bulkBusy !== null || selection.visibleSelectedIds.length === 0}
+            >
+              {bulkBusy === 'delete' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+              Löschen ({selection.visibleSelectedIds.length})
+            </Button>
+          </MultiSelectBar>
           {Object.entries(groupedEntries).map(([category, categoryEntries]) => (
             <div key={category}>
               <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
@@ -580,10 +722,22 @@ export default function VocabularyPage() {
                 <Badge variant="secondary" className="ml-2">{categoryEntries.length}</Badge>
               </h2>
               <div className="grid gap-3">
-                {categoryEntries.map((entry) => (
-                  <Card key={entry.id}>
+                {categoryEntries.map((entry) => {
+                  const isSelected = selection.isSelected(entry.id)
+                  return (
+                  <Card
+                    key={entry.id}
+                    {...selection.rowSelectionProps(entry.id)}
+                    className={isSelected ? MULTI_SELECT_ROW_CLASS : undefined}
+                  >
                     <CardContent className="py-4">
                       <div className="flex items-start justify-between gap-4">
+                        <MultiSelectCheckbox
+                          checked={isSelected}
+                          onToggle={(shiftKey) => selection.toggle(entry.id, shiftKey)}
+                          ariaLabel={`Vokabel auswählen: ${entry.term}`}
+                          className="mt-1.5"
+                        />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2">
                             <span className="font-mono font-bold text-lg">{entry.term}</span>
@@ -620,7 +774,8 @@ export default function VocabularyPage() {
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                  )
+                })}
               </div>
             </div>
           ))}

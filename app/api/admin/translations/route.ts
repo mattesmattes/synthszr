@@ -386,6 +386,97 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Item deleted' })
     }
 
+    if (action === 'retry-items' || action === 'cancel-items' || action === 'delete-items') {
+      const rawIds: unknown = body.ids
+      const ids = Array.isArray(rawIds)
+        ? [...new Set(rawIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0))]
+        : []
+      if (ids.length === 0) {
+        return NextResponse.json({ error: 'Keine gültigen IDs angegeben' }, { status: 400 })
+      }
+      const IN_CHUNK = 200
+
+      if (action === 'retry-items') {
+        let count = 0
+        for (let i = 0; i < ids.length; i += IN_CHUNK) {
+          const chunk = ids.slice(i, i + IN_CHUNK)
+          const { data, error } = await supabase
+            .from('translation_queue')
+            .update({
+              status: 'pending',
+              attempts: 0,
+              last_error: null,
+              started_at: null,
+              completed_at: null,
+            })
+            .in('id', chunk)
+            .in('status', ['failed', 'cancelled'])
+            .select('id')
+          if (error) {
+            return NextResponse.json({ error: 'Failed to retry items', details: error.message }, { status: 500 })
+          }
+          count += data?.length || 0
+        }
+        return NextResponse.json({ message: `${count} items queued for retry`, count })
+      }
+
+      if (action === 'cancel-items') {
+        let count = 0
+        for (let i = 0; i < ids.length; i += IN_CHUNK) {
+          const chunk = ids.slice(i, i + IN_CHUNK)
+          const { data, error } = await supabase
+            .from('translation_queue')
+            .update({ status: 'cancelled' })
+            .in('id', chunk)
+            .in('status', ['pending', 'processing'])
+            .select('id')
+          if (error) {
+            return NextResponse.json({ error: 'Failed to cancel items', details: error.message }, { status: 500 })
+          }
+          count += data?.length || 0
+        }
+        return NextResponse.json({ message: `${count} items cancelled`, count })
+      }
+
+      // action === 'delete-items'
+      const deletedIds: string[] = []
+      for (let i = 0; i < ids.length; i += IN_CHUNK) {
+        const chunk = ids.slice(i, i + IN_CHUNK)
+        const { data: queueItems, error: fetchError } = await supabase
+          .from('translation_queue')
+          .select('id, content_id, content_type, target_language')
+          .in('id', chunk)
+          .in('status', ['completed', 'failed', 'cancelled'])
+        if (fetchError) {
+          return NextResponse.json({ error: 'Failed to fetch items', details: fetchError.message }, { status: 500 })
+        }
+        for (const q of queueItems || []) {
+          if (q.content_id) {
+            await supabase
+              .from('content_translations')
+              .delete()
+              .eq('content_id', q.content_id)
+              .eq('content_type', q.content_type)
+              .eq('language', q.target_language)
+          }
+          deletedIds.push(q.id)
+        }
+      }
+
+      for (let i = 0; i < deletedIds.length; i += IN_CHUNK) {
+        const chunk = deletedIds.slice(i, i + IN_CHUNK)
+        const { error: delError } = await supabase
+          .from('translation_queue')
+          .delete()
+          .in('id', chunk)
+        if (delError) {
+          return NextResponse.json({ error: 'Failed to delete items', details: delError.message }, { status: 500 })
+        }
+      }
+
+      return NextResponse.json({ message: `${deletedIds.length} items deleted`, count: deletedIds.length })
+    }
+
     if (action === 'toggle_manual' && translation_id) {
       // Toggle is_manually_edited flag
       const { data: current } = await supabase

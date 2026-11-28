@@ -1,12 +1,19 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Users, Mail, CheckCircle, XCircle, Clock, Trash2, Loader2, Download, Search, UserCheck, Pencil, Check, X, TrendingUp, TrendingDown, Languages } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  useMultiSelect,
+  MultiSelectBar,
+  MultiSelectCheckbox,
+  MULTI_SELECT_ROW_CLASS,
+} from '@/components/admin/multi-select'
+import { runBatched } from '@/lib/admin/run-batched'
 
 interface Subscriber {
   id: string
@@ -68,6 +75,27 @@ export default function SubscribersPage() {
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('search') ?? '')
   const [langChanges, setLangChanges] = useState<LanguageChange[]>([])
   const [langChangesLoading, setLangChangesLoading] = useState(false)
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null)
+
+  const subscribers = useMemo(() => data?.subscribers ?? [], [data?.subscribers])
+  const visibleIds = useMemo(
+    () => (statusFilter === 'lang-changes' ? [] : subscribers.map((s) => s.id)),
+    [statusFilter, subscribers],
+  )
+  const selection = useMultiSelect(visibleIds, {
+    resetKey: `${statusFilter}|${searchQuery}`,
+    disableEscape: editingId !== null,
+  })
+  const selectedSubscribers = useMemo(() => {
+    const byId = new Map(subscribers.map((s) => [s.id, s]))
+    return selection.visibleSelectedIds
+      .map((id) => byId.get(id))
+      .filter((s): s is Subscriber => Boolean(s))
+  }, [subscribers, selection.visibleSelectedIds])
+  const pendingSelectedIds = useMemo(
+    () => selectedSubscribers.filter((s) => s.status === 'pending').map((s) => s.id),
+    [selectedSubscribers],
+  )
 
   // Sync state when URL search param changes (e.g. from another tab's chart click)
   useEffect(() => {
@@ -178,11 +206,11 @@ export default function SubscribersPage() {
     }
   }
 
-  function exportCSV() {
-    if (!data?.subscribers) return
+  function exportCSV(list: Subscriber[] | undefined = data?.subscribers) {
+    if (!list || list.length === 0) return
 
     const headers = ['Email', 'Name', 'Status', 'Angemeldet', 'Bestätigt']
-    const rows = data.subscribers.map(s => [
+    const rows = list.map(s => [
       s.email,
       s.name || '',
       s.status,
@@ -198,6 +226,59 @@ export default function SubscribersPage() {
     a.download = `subscribers-${new Date().toISOString().split('T')[0]}.csv`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  async function bulkActivateSubscribers(ids: string[]) {
+    if (ids.length === 0) return
+    setBulkBusy('activate')
+    try {
+      const result = await runBatched(ids, async (id) => {
+        const res = await fetch('/api/admin/subscribers', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, status: 'active' }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => null)
+          throw new Error(err?.error || `HTTP ${res.status}`)
+        }
+      })
+      if (result.failed.length > 0) {
+        alert(`${result.failed.length} von ${ids.length} Aktivierungen fehlgeschlagen: ${result.failed[0].error}`)
+      }
+      if (result.succeeded > 0) {
+        selection.clear()
+        await fetchSubscribers()
+      }
+    } finally {
+      setBulkBusy(null)
+    }
+  }
+
+  async function bulkDeleteSubscribers(ids: string[]) {
+    if (ids.length === 0) return
+    if (!confirm(`${ids.length} Subscriber wirklich löschen?`)) return
+    setBulkBusy('delete')
+    try {
+      const result = await runBatched(ids, async (id) => {
+        const res = await fetch(`/api/admin/subscribers?id=${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => null)
+          throw new Error(err?.error || `HTTP ${res.status}`)
+        }
+      })
+      if (result.failed.length > 0) {
+        alert(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen: ${result.failed[0].error}`)
+      }
+      if (result.succeeded > 0) {
+        selection.clear()
+        await fetchSubscribers()
+      }
+    } finally {
+      setBulkBusy(null)
+    }
   }
 
   const statusIcon = (status: Subscriber['status']) => {
@@ -242,7 +323,7 @@ export default function SubscribersPage() {
             {data?.counts.active || 0} aktive Subscriber
           </p>
         </div>
-        <Button size="sm" variant="outline" onClick={exportCSV} className="gap-1.5 text-xs h-7">
+        <Button size="sm" variant="outline" onClick={() => exportCSV()} className="gap-1.5 text-xs h-7">
           <Download className="h-3 w-3" />
           Export CSV
         </Button>
@@ -402,17 +483,72 @@ export default function SubscribersPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <CardContent className="p-0">
-            <div className="divide-y max-h-[60vh] overflow-y-auto">
-              {data.subscribers.map((subscriber) => (
-                <div
-                  key={subscriber.id}
-                  className="group flex items-center gap-3 px-3 py-2 hover:bg-muted/50 transition-colors"
-                >
-                  <div className="shrink-0">
-                    {statusIcon(subscriber.status)}
-                  </div>
+        <div className="space-y-3">
+          <MultiSelectBar
+            selection={selection}
+            totalVisible={data.subscribers.length}
+            busy={bulkBusy !== null}
+          >
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkActivateSubscribers(pendingSelectedIds)}
+              disabled={bulkBusy !== null || pendingSelectedIds.length === 0}
+            >
+              {bulkBusy === 'activate' ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <UserCheck className="h-3 w-3 text-green-600" />
+              )}
+              Aktivieren ({pendingSelectedIds.length})
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={() => exportCSV(selectedSubscribers)}
+              disabled={bulkBusy !== null || selectedSubscribers.length === 0}
+            >
+              <Download className="h-3 w-3" />
+              CSV ({selectedSubscribers.length})
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkDeleteSubscribers(selection.visibleSelectedIds)}
+              disabled={bulkBusy !== null || selection.visibleSelectedIds.length === 0}
+            >
+              {bulkBusy === 'delete' ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Trash2 className="h-3 w-3" />
+              )}
+              Löschen ({selection.visibleSelectedIds.length})
+            </Button>
+          </MultiSelectBar>
+          <Card>
+            <CardContent className="p-0">
+              <div className="divide-y max-h-[60vh] overflow-y-auto">
+                {data.subscribers.map((subscriber) => {
+                  const isSelected = selection.isSelected(subscriber.id)
+                  return (
+                  <div
+                    key={subscriber.id}
+                    {...selection.rowSelectionProps(subscriber.id)}
+                    className={`group flex items-center gap-3 px-3 py-2 transition-colors ${
+                      isSelected ? MULTI_SELECT_ROW_CLASS : 'hover:bg-muted/50'
+                    }`}
+                  >
+                    <MultiSelectCheckbox
+                      checked={isSelected}
+                      onToggle={(shiftKey) => selection.toggle(subscriber.id, shiftKey)}
+                      ariaLabel={`Subscriber auswählen: ${subscriber.email}`}
+                    />
+                    <div className="shrink-0">
+                      {statusIcon(subscriber.status)}
+                    </div>
                   <div className="min-w-0 flex-1">
                     {editingId === subscriber.id ? (
                       <div className="flex items-center gap-1">
@@ -505,10 +641,12 @@ export default function SubscribersPage() {
                     )}
                   </Button>
                 </div>
-              ))}
+                  )
+                })}
             </div>
           </CardContent>
         </Card>
+        </div>
       ))}
     </div>
   )

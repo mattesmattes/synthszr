@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import {
   FileText,
   Loader2,
@@ -65,6 +65,13 @@ import { runEnrichOnTiptap } from '@/lib/enrich/run-stream'
 import { applySectionResult } from '@/lib/enrich/sections'
 import { PostImageGallery } from '@/components/post-image-gallery'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  useMultiSelect,
+  MultiSelectBar,
+  MultiSelectCheckbox,
+  MULTI_SELECT_ROW_CLASS,
+} from '@/components/admin/multi-select'
+import { runBatched } from '@/lib/admin/run-batched'
 
 interface DigestSource {
   id: string
@@ -173,6 +180,18 @@ export default function GeneratedArticlesPage() {
 
   // Translation trigger state
   const [triggeringTranslations, setTriggeringTranslations] = useState<string | null>(null)
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null)
+
+  const visibleIds = useMemo(() => posts.map((p) => p.id), [posts])
+  const selection = useMultiSelect(visibleIds, {
+    disableEscape: Boolean(editingPost) || Boolean(viewingPost) || Boolean(deletingPost) || Boolean(viewingDigest),
+  })
+  const selectedPosts = useMemo(() => {
+    const byId = new Map(posts.map((p) => [p.id, p]))
+    return selection.visibleSelectedIds
+      .map((id) => byId.get(id))
+      .filter((p): p is GeneratedPost => Boolean(p))
+  }, [posts, selection.visibleSelectedIds])
 
   // Count H2 headings (articles) in TipTap content
   function countArticles(content: Record<string, unknown>): number {
@@ -595,6 +614,118 @@ export default function GeneratedArticlesPage() {
     }
   }
 
+  async function bulkChangeStatus(newStatus: 'draft' | 'published' | 'archived') {
+    const targets = selectedPosts.filter((p) => p.status !== newStatus)
+    if (targets.length === 0) return
+    setBulkBusy(newStatus)
+    try {
+      const result = await runBatched(targets, async (post) => {
+        const res = await fetch('/api/admin/generated-posts', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: post.id, status: newStatus }),
+          credentials: 'include',
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => null)
+          throw new Error(err?.error || `HTTP ${res.status}`)
+        }
+        if (newStatus === 'published') {
+          await fetch('/api/admin/translations/queue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              content_type: 'generated_post',
+              content_id: post.id,
+              priority: 10,
+            }),
+          }).catch(() => {})
+        }
+      })
+      if (newStatus === 'published' && result.succeeded > 0) {
+        fetch('/api/admin/translations/process-queue', {
+          method: 'POST',
+          credentials: 'include',
+        }).catch(() => {})
+      }
+      if (result.failed.length > 0) {
+        alert(`${result.failed.length} von ${targets.length} Statuswechseln fehlgeschlagen: ${result.failed[0].error}`)
+      }
+      if (result.succeeded > 0) {
+        selection.clear()
+        await fetchPosts()
+      }
+    } finally {
+      setBulkBusy(null)
+    }
+  }
+
+  async function bulkTriggerTranslations() {
+    const targets = selectedPosts.filter((p) => p.status === 'published')
+    if (targets.length === 0) return
+    setBulkBusy('translate')
+    try {
+      const result = await runBatched(targets, async (post) => {
+        const res = await fetch('/api/admin/translations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            action: 'trigger',
+            content_type: 'generated_post',
+            content_id: post.id,
+            priority: 10,
+          }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => null)
+          throw new Error(err?.error || `HTTP ${res.status}`)
+        }
+      })
+      if (result.succeeded > 0) {
+        fetch('/api/admin/translations/process-queue', {
+          method: 'POST',
+          credentials: 'include',
+        }).catch(() => {})
+        selection.clear()
+      }
+      if (result.failed.length > 0) {
+        alert(`${result.failed.length} von ${targets.length} Übersetzungs-Triggern fehlgeschlagen`)
+      }
+    } finally {
+      setBulkBusy(null)
+    }
+  }
+
+  async function bulkDeletePosts() {
+    const targets = selectedPosts
+    if (targets.length === 0) return
+    if (!confirm(`${targets.length} Artikel wirklich endgültig löschen?`)) return
+    setBulkBusy('delete')
+    try {
+      const result = await runBatched(targets, async (post) => {
+        const res = await fetch(`/api/admin/generated-posts?id=${encodeURIComponent(post.id)}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => null)
+          throw new Error(err?.error || `HTTP ${res.status}`)
+        }
+      })
+      if (result.failed.length > 0) {
+        alert(`${result.failed.length} von ${targets.length} Löschungen fehlgeschlagen: ${result.failed[0].error}`)
+      }
+      if (result.succeeded > 0) {
+        selection.clear()
+        await fetchPosts()
+      }
+    } finally {
+      setBulkBusy(null)
+    }
+  }
+
   const statusColors: Record<string, string> = {
     draft: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
     published: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
@@ -637,10 +768,78 @@ export default function GeneratedArticlesPage() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {posts.map((post) => (
-            <Card key={post.id}>
+          <MultiSelectBar
+            selection={selection}
+            totalVisible={posts.length}
+            busy={bulkBusy !== null}
+          >
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkChangeStatus('published')}
+              disabled={bulkBusy !== null || selectedPosts.every((p) => p.status === 'published')}
+            >
+              {bulkBusy === 'published' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3 text-green-600" />}
+              Veröffentlichen ({selectedPosts.filter((p) => p.status !== 'published').length})
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkChangeStatus('draft')}
+              disabled={bulkBusy !== null || selectedPosts.every((p) => p.status === 'draft')}
+            >
+              {bulkBusy === 'draft' ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileEdit className="h-3 w-3 text-yellow-600" />}
+              Als Entwurf ({selectedPosts.filter((p) => p.status !== 'draft').length})
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkChangeStatus('archived')}
+              disabled={bulkBusy !== null || selectedPosts.every((p) => p.status === 'archived')}
+            >
+              {bulkBusy === 'archived' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Archive className="h-3 w-3" />}
+              Archivieren ({selectedPosts.filter((p) => p.status !== 'archived').length})
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkTriggerTranslations()}
+              disabled={bulkBusy !== null || selectedPosts.filter((p) => p.status === 'published').length === 0}
+            >
+              {bulkBusy === 'translate' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Languages className="h-3 w-3 text-blue-600" />}
+              Übersetzen ({selectedPosts.filter((p) => p.status === 'published').length})
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkDeletePosts()}
+              disabled={bulkBusy !== null || selectedPosts.length === 0}
+            >
+              {bulkBusy === 'delete' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+              Löschen ({selectedPosts.length})
+            </Button>
+          </MultiSelectBar>
+          {posts.map((post) => {
+            const isSelected = selection.isSelected(post.id)
+            return (
+            <Card
+              key={post.id}
+              {...selection.rowSelectionProps(post.id)}
+              className={isSelected ? MULTI_SELECT_ROW_CLASS : undefined}
+            >
               <CardContent className="py-4">
                 <div className="flex items-start justify-between gap-4">
+                  <MultiSelectCheckbox
+                    checked={isSelected}
+                    onToggle={(shiftKey) => selection.toggle(post.id, shiftKey)}
+                    ariaLabel={`Artikel auswählen: ${post.title}`}
+                    className="mt-1"
+                  />
                   <div className="flex-1 min-w-0 overflow-hidden">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       <h3 className="font-medium">{post.title}</h3>
@@ -759,7 +958,8 @@ export default function GeneratedArticlesPage() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            )
+          })}
         </div>
       )}
 

@@ -23,6 +23,13 @@ import {
 } from '@/components/ui/collapsible'
 import ReactMarkdown from 'react-markdown'
 import { markdownToTiptap } from '@/lib/utils/markdown-to-tiptap'
+import {
+  useMultiSelect,
+  MultiSelectBar,
+  MultiSelectCheckbox,
+  MULTI_SELECT_ROW_CLASS,
+} from '@/components/admin/multi-select'
+import { runBatched } from '@/lib/admin/run-batched'
 
 interface SourceItem {
   id: string
@@ -106,10 +113,16 @@ export default function DigestsPage() {
   const [vocabularyIntensity, setVocabularyIntensity] = useState(10)
   const [savingBlog, setSavingBlog] = useState(false)
   const [deletingDigestId, setDeletingDigestId] = useState<string | null>(null)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   // Set of dates that have repos
   const repoDateSet = useMemo(() => new Set(repoDates.map(r => r.date)), [repoDates])
   const hasRepoForSelectedDate = repoDateSet.has(selectedDate)
+
+  const visibleIds = useMemo(() => digests.map((d) => d.id), [digests])
+  const selection = useMultiSelect(visibleIds, {
+    disableEscape: Boolean(viewingDigest) || ghostwriterOpen || synthesisProgressOpen,
+  })
 
   useEffect(() => {
     fetchDigests()
@@ -400,6 +413,35 @@ export default function DigestsPage() {
       alert('Fehler beim Löschen')
     } finally {
       setDeletingDigestId(null)
+    }
+  }
+
+  async function bulkDeleteDigests() {
+    const ids = selection.visibleSelectedIds
+    if (ids.length === 0) return
+    if (!confirm(`${ids.length} Digest${ids.length === 1 ? '' : 's'} wirklich löschen?`)) return
+    setBulkDeleting(true)
+    try {
+      const result = await runBatched(ids, async (id) => {
+        const res = await fetch('/api/admin/daily-digests', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => null)
+          throw new Error(err?.error || `HTTP ${res.status}`)
+        }
+      })
+      if (result.failed.length > 0) {
+        alert(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen: ${result.failed[0].error}`)
+      }
+      if (result.succeeded > 0) {
+        selection.clear()
+        await fetchDigests()
+      }
+    } finally {
+      setBulkDeleting(false)
     }
   }
 
@@ -745,12 +787,46 @@ export default function DigestsPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <CardContent className="p-0">
-            <div className="divide-y max-h-[50vh] overflow-y-auto">
-              {digests.map((digest) => (
-                <div key={digest.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 transition-colors">
-                  <div className="min-w-[100px]">
+        <div className="space-y-2">
+          <MultiSelectBar
+            selection={selection}
+            totalVisible={digests.length}
+            busy={bulkDeleting}
+          >
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs gap-1"
+              onClick={() => void bulkDeleteDigests()}
+              disabled={bulkDeleting}
+            >
+              {bulkDeleting ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Trash2 className="h-3 w-3" />
+              )}
+              Löschen ({selection.visibleSelectedIds.length})
+            </Button>
+          </MultiSelectBar>
+          <Card>
+            <CardContent className="p-0">
+              <div className="divide-y max-h-[50vh] overflow-y-auto">
+                {digests.map((digest) => {
+                  const isSelected = selection.isSelected(digest.id)
+                  return (
+                  <div
+                    key={digest.id}
+                    {...selection.rowSelectionProps(digest.id)}
+                    className={`flex items-center gap-2 px-3 py-1.5 transition-colors ${
+                      isSelected ? MULTI_SELECT_ROW_CLASS : 'hover:bg-muted/50'
+                    }`}
+                  >
+                    <MultiSelectCheckbox
+                      checked={isSelected}
+                      onToggle={(shiftKey) => selection.toggle(digest.id, shiftKey)}
+                      ariaLabel={`Digest auswählen: ${digest.digest_date}`}
+                    />
+                    <div className="min-w-[100px]">
                     <div className="text-xs font-medium">
                       {new Date(digest.digest_date).toLocaleDateString('de-DE', {
                         weekday: 'short',
@@ -791,10 +867,12 @@ export default function DigestsPage() {
                     </Button>
                   </div>
                 </div>
-              ))}
+                  )
+                })}
             </div>
           </CardContent>
         </Card>
+        </div>
       )}
 
       {/* Ghostwriter Dialog */}

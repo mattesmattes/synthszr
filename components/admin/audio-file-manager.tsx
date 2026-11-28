@@ -1,10 +1,17 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { upload } from '@vercel/blob/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Play, Pause, Star, Pencil, Trash2, Upload, Loader2 } from 'lucide-react'
+import {
+  useMultiSelect,
+  MultiSelectBar,
+  MultiSelectCheckbox,
+  MULTI_SELECT_ROW_CLASS,
+} from '@/components/admin/multi-select'
+import { runBatched } from '@/lib/admin/run-batched'
 
 export type AudioFileType = 'intro' | 'outro' | 'intermezzo'
 
@@ -55,6 +62,15 @@ export function AudioFileManager({ type, files, onRefresh }: AudioFileManagerPro
   const [uploading, setUploading] = useState(false)
   const [mutating, setMutating] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+
+  const deletableIds = useMemo(
+    () => files.filter((f) => !f.is_active).map((f) => f.id),
+    [files],
+  )
+  const selection = useMultiSelect(deletableIds, {
+    disableEscape: renamingId !== null,
+  })
 
   const handlePlay = (file: AudioFile) => {
     if (playingId === file.id) {
@@ -125,6 +141,32 @@ export function AudioFileManager({ type, files, onRefresh }: AudioFileManagerPro
     }
   }
 
+  const handleBulkDelete = async () => {
+    const ids = selection.visibleSelectedIds
+    if (ids.length === 0) return
+    if (!confirm(`${ids.length} ${TYPE_LABEL[type]}-Datei${ids.length === 1 ? '' : 'en'} wirklich löschen?`)) return
+    setBulkDeleting(true)
+    try {
+      const result = await runBatched(ids, async (id) => {
+        const res = await fetch(`/api/admin/audio-files?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        if (playingId === id) {
+          audioRef.current?.pause()
+          setPlayingId(null)
+        }
+      })
+      if (result.failed.length > 0) {
+        alert(`${result.failed.length} von ${ids.length} Löschungen fehlgeschlagen`)
+      }
+      if (result.succeeded > 0) {
+        selection.clear()
+        onRefresh()
+      }
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -187,11 +229,43 @@ export function AudioFileManager({ type, files, onRefresh }: AudioFileManagerPro
     <div className="space-y-2">
       <audio ref={audioRef} onEnded={handleAudioEnded} className="hidden" />
 
-      {files.map((file) => (
+      {deletableIds.length > 0 && (
+        <MultiSelectBar
+          selection={selection}
+          totalVisible={deletableIds.length}
+          busy={bulkDeleting}
+        >
+          <Button
+            size="sm"
+            variant="destructive"
+            className="h-7 text-xs gap-1"
+            onClick={() => void handleBulkDelete()}
+            disabled={bulkDeleting}
+          >
+            {bulkDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+            Löschen ({selection.visibleSelectedIds.length})
+          </Button>
+        </MultiSelectBar>
+      )}
+
+      {files.map((file) => {
+        const isSelected = !file.is_active && selection.isSelected(file.id)
+        const rowProps = file.is_active ? {} : selection.rowSelectionProps(file.id)
+        return (
         <div
           key={file.id}
-          className="flex items-center gap-1.5 text-sm rounded-md px-2 py-1.5 hover:bg-muted/50"
+          {...rowProps}
+          className={`flex items-center gap-1.5 text-sm rounded-md px-2 py-1.5 transition-colors ${
+            isSelected ? MULTI_SELECT_ROW_CLASS : 'hover:bg-muted/50'
+          }`}
         >
+          <MultiSelectCheckbox
+            checked={isSelected}
+            disabled={file.is_active}
+            onToggle={(shiftKey) => selection.toggle(file.id, shiftKey)}
+            ariaLabel={`Audio-Datei auswählen: ${file.name}`}
+            className="mr-0.5"
+          />
           {/* Play/Pause */}
           <Button
             variant="ghost"
@@ -269,7 +343,8 @@ export function AudioFileManager({ type, files, onRefresh }: AudioFileManagerPro
             <Trash2 className={`h-3.5 w-3.5 ${file.is_active ? 'text-muted-foreground/40' : 'text-destructive/70'}`} />
           </Button>
         </div>
-      ))}
+        )
+      })}
 
       {files.length === 0 && (
         <p className="text-sm text-muted-foreground px-2 py-1">

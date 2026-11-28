@@ -1,11 +1,18 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2, CheckCircle2, XCircle, Trash2, RefreshCw, Eye, EyeOff, BookOpen, Languages, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { GlossaryCrawlPanel } from '@/components/admin/glossary-crawl-panel'
+import {
+  useMultiSelect,
+  MultiSelectBar,
+  MultiSelectCheckbox,
+  MULTI_SELECT_ROW_CLASS,
+} from '@/components/admin/multi-select'
+import { runBatched } from '@/lib/admin/run-batched'
 
 // --- Types ---
 
@@ -203,6 +210,7 @@ export default function GlossaryAdminPage() {
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
   const [error, setError] = useState<string | null>(null)
+  const [bulkStatus, setBulkStatus] = useState<{ action: string; done: number; total: number } | null>(null)
 
   // Einzelner Detail-Fetch (body + pending_body + illustration_url) — von
   // fetchTerms (offene Revisionen, vorab) UND von loadPreview (Vorschau auf
@@ -348,13 +356,88 @@ export default function GlossaryAdminPage() {
     return acc
   }, {})
 
-  const sortedTerms = [...terms]
-    .filter((t) => statusFilter === 'all' || t.status === statusFilter)
-    .sort((a, b) => {
-      const orderDiff = REVIEW_ORDER[a.review_state] - REVIEW_ORDER[b.review_state]
-      if (orderDiff !== 0) return orderDiff
-      return a.canonical_name.localeCompare(b.canonical_name)
-    })
+  const sortedTerms = useMemo(
+    () =>
+      [...terms]
+        .filter((t) => statusFilter === 'all' || t.status === statusFilter)
+        .sort((a, b) => {
+          const orderDiff = REVIEW_ORDER[a.review_state] - REVIEW_ORDER[b.review_state]
+          if (orderDiff !== 0) return orderDiff
+          return a.canonical_name.localeCompare(b.canonical_name)
+        }),
+    [terms, statusFilter],
+  )
+
+  const visibleSlugs = useMemo(
+    () => (view === 'terms' ? sortedTerms.map((t) => t.slug) : []),
+    [view, sortedTerms],
+  )
+  const selection = useMultiSelect(visibleSlugs, {
+    resetKey: `${view}|${statusFilter}`,
+  })
+  const selectedTerms = useMemo(() => {
+    const bySlug = new Map(sortedTerms.map((t) => [t.slug, t]))
+    return selection.visibleSelectedIds
+      .map((slug) => bySlug.get(slug))
+      .filter((t): t is GlossaryTermRow => Boolean(t))
+  }, [sortedTerms, selection.visibleSelectedIds])
+  const publishSlugs = useMemo(
+    () => selectedTerms.filter((t) => t.status !== 'published').map((t) => t.slug),
+    [selectedTerms],
+  )
+  const hideSlugs = useMemo(
+    () => selectedTerms.filter((t) => t.status === 'published').map((t) => t.slug),
+    [selectedTerms],
+  )
+
+  async function runBulkGlossary(
+    action: 'publish' | 'hide' | 'translate' | 'delete',
+    slugs: string[],
+  ) {
+    if (slugs.length === 0) return
+    if (
+      action === 'delete' &&
+      !confirm(`${slugs.length} Begriffe wirklich löschen? Übersetzungen, Produkt- und News-Zuordnungen werden mitgelöscht.`)
+    ) {
+      return
+    }
+    const isLlm = action === 'publish' || action === 'translate'
+    setBulkStatus({ action, done: 0, total: slugs.length })
+    try {
+      const result = await runBatched(
+        slugs,
+        async (slug) => {
+          const res = await fetch('/api/admin/glossary', {
+            method: action === 'delete' ? 'DELETE' : 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body:
+              action === 'delete'
+                ? JSON.stringify({ slug })
+                : action === 'translate'
+                ? JSON.stringify({ slug, action: 'translate', targetLang: 'en' })
+                : JSON.stringify({ slug, action }),
+          })
+          if (!res.ok) {
+            const data = await res.json().catch(() => null)
+            throw new Error(data?.error || `HTTP ${res.status}`)
+          }
+        },
+        {
+          concurrency: isLlm ? 1 : 5,
+          onProgress: (done, total) => setBulkStatus({ action, done, total }),
+        },
+      )
+      if (result.failed.length > 0) {
+        alert(`${result.failed.length} von ${slugs.length} Aktionen fehlgeschlagen (${result.failed[0].item}: ${result.failed[0].error})`)
+      }
+      if (result.succeeded > 0) {
+        selection.clear()
+        await fetchTerms()
+      }
+    } finally {
+      setBulkStatus(null)
+    }
+  }
 
   return (
     <div className="p-8">
@@ -441,22 +524,117 @@ export default function GlossaryAdminPage() {
         </p>
       ) : (
         <div className="space-y-4">
+          <MultiSelectBar
+            selection={selection}
+            totalVisible={sortedTerms.length}
+            busy={bulkStatus !== null}
+          >
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={() => void runBulkGlossary('publish', publishSlugs)}
+              disabled={bulkStatus !== null || publishSlugs.length === 0}
+            >
+              {bulkStatus?.action === 'publish' ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  {bulkStatus.done}/{bulkStatus.total}
+                </>
+              ) : (
+                <>
+                  <Eye className="h-3 w-3" />
+                  Veröffentlichen ({publishSlugs.length})
+                </>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={() => void runBulkGlossary('hide', hideSlugs)}
+              disabled={bulkStatus !== null || hideSlugs.length === 0}
+            >
+              {bulkStatus?.action === 'hide' ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  {bulkStatus.done}/{bulkStatus.total}
+                </>
+              ) : (
+                <>
+                  <EyeOff className="h-3 w-3" />
+                  Verbergen ({hideSlugs.length})
+                </>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={() => void runBulkGlossary('translate', selection.visibleSelectedIds)}
+              disabled={bulkStatus !== null || selection.visibleSelectedIds.length === 0}
+            >
+              {bulkStatus?.action === 'translate' ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  {bulkStatus.done}/{bulkStatus.total}
+                </>
+              ) : (
+                <>
+                  <Languages className="h-3 w-3" />
+                  Übersetzen EN ({selection.visibleSelectedIds.length})
+                </>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs gap-1"
+              onClick={() => void runBulkGlossary('delete', selection.visibleSelectedIds)}
+              disabled={bulkStatus !== null || selection.visibleSelectedIds.length === 0}
+            >
+              {bulkStatus?.action === 'delete' ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  {bulkStatus.done}/{bulkStatus.total}
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-3 w-3" />
+                  Löschen ({selection.visibleSelectedIds.length})
+                </>
+              )}
+            </Button>
+          </MultiSelectBar>
           {sortedTerms.map((term) => {
             const isBusy = !!actionLoading[term.slug]
             const detail = details[term.slug]
+            const isSelected = selection.isSelected(term.slug)
             return (
-              <Card key={term.id}>
+              <Card
+                key={term.id}
+                {...selection.rowSelectionProps(term.slug)}
+                className={isSelected ? MULTI_SELECT_ROW_CLASS : undefined}
+              >
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        {term.canonical_name}
-                        <StatusBadge status={term.status} slug={term.slug} />
-                        <ReviewBadge state={term.review_state} />
-                      </CardTitle>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        /{term.slug} · zuletzt geprüft: {formatDate(term.last_reviewed_at)}
-                      </p>
+                    <div className="flex items-start gap-3 min-w-0">
+                      <MultiSelectCheckbox
+                        checked={isSelected}
+                        onToggle={(shiftKey) => selection.toggle(term.slug, shiftKey)}
+                        ariaLabel={`Begriff auswählen: ${term.canonical_name}`}
+                        className="mt-1"
+                      />
+                      <div className="min-w-0">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          {term.canonical_name}
+                          <StatusBadge status={term.status} slug={term.slug} />
+                          <ReviewBadge state={term.review_state} />
+                        </CardTitle>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          /{term.slug} · zuletzt geprüft: {formatDate(term.last_reviewed_at)}
+                        </p>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <Button
