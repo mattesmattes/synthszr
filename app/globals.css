@@ -1022,3 +1022,144 @@
   background-color: var(--neon-cyan);
   color: var(--neon-cyan-fg);
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * ADMIN THEME — Scoped Design System ("Editorial Workbench")
+ * Strictly scoped to .admin-theme so the public synthszr.com frontend
+ * keeps its exact original :root / .dark appearance.
+ * ─────────────────────────────────────────────────────────────────────────── */
+.admin-theme {
+  --background: oklch(0.965 0.002 260);
+  --foreground: oklch(0.145 0.004 260);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0.004 260);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0.004 260);
+  --primary: oklch(0.16 0.005 260);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.935 0.003 260);
+  --secondary-foreground: oklch(0.2 0.005 260);
+  --muted: oklch(0.935 0.003 260);
+  --muted-foreground: oklch(0.46 0.006 260);
+  --accent: oklch(0.935 0.003 260);
+  --accent-foreground: oklch(0.145 0.004 260);
+  --destructive: oklch(0.55 0.21 25);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.895 0.004 260);
+  --input: oklch(0.875 0.004 260);
+  --ring: oklch(0.25 0.005 260);
+  --sidebar: oklch(0.948 0.003 260);
+  --sidebar-foreground: oklch(0.18 0.005 260);
+  --sidebar-border: oklch(0.885 0.004 260);
+  --sidebar-accent: oklch(0.91 0.004 260);
+  --sidebar-accent-foreground: oklch(0.145 0.004 260);
+  --radius: 0.625rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+  --admin-lime: #CCFF00;
+  --admin-lime-fg: #0A0A0A;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.dark .admin-theme,
+.dark.admin-theme {
+  --background: oklch(0.115 0.004 260);
+  --foreground: oklch(0.96 0.002 260);
+  --card: oklch(0.155 0.004 260);
+  --card-foreground: oklch(0.96 0.002 260);
+  --popover: oklch(0.17 0.004 260);
+  --popover-foreground: oklch(0.96 0.002 260);
+  --primary: oklch(0.96 0.002 260);
+  --primary-foreground: oklch(0.12 0.004 260);
+  --secondary: oklch(0.21 0.005 260);
+  --secondary-foreground: oklch(0.94 0.002 260);
+  --muted: oklch(0.2 0.005 260);
+  --muted-foreground: oklch(0.68 0.006 260);
+  --accent: oklch(0.22 0.005 260);
+  --accent-foreground: oklch(0.96 0.002 260);
+  --destructive: oklch(0.56 0.2 25);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.24 0.005 260);
+  --input: oklch(0.26 0.006 260);
+  --ring: oklch(0.75 0.005 260);
+  --sidebar: oklch(0.095 0.004 260);
+  --sidebar-foreground: oklch(0.92 0.003 260);
+  --sidebar-border: oklch(0.21 0.005 260);
+  --sidebar-accent: oklch(0.185 0.005 260);
+  --sidebar-accent-foreground: oklch(0.98 0 0);
+}
+
+.admin-theme [data-slot="card"] {
+  border-color: color-mix(in oklch, var(--border) 82%, transparent);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.dark .admin-theme [data-slot="card"],
+.dark.admin-theme [data-slot="card"] {
+  box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.035) inset;
+}
+
+.admin-theme [data-slot="table-head"] {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-foreground);
+  font-weight: 600;
+}
+
+.admin-theme table td,
+.admin-theme table th {
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-theme [data-slot="input"],
+.admin-theme [data-slot="textarea"] {
+  background-color: var(--card);
+}
+
+.dark .admin-theme [data-slot="input"],
+.dark .admin-theme [data-slot="textarea"],
+.dark.admin-theme [data-slot="input"],
+.dark.admin-theme [data-slot="textarea"] {
+  background-color: color-mix(in oklch, var(--card) 85%, var(--background));
+}
+
+.admin-theme [data-slot="tabs-list"] {
+  background-color: color-mix(in oklch, var(--muted) 80%, transparent);
+  border: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+}
+
+.admin-theme [data-slot="tabs-trigger"][data-state="active"] {
+  background-color: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.admin-theme [data-slot="badge"] {
+  font-variant-numeric: tabular-nums;
+  border-radius: 9999px;
+}
+
+.admin-theme [data-slot="button"] {
+  transition:
+    background-color 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 100ms ease;
+}
+
+.admin-theme [data-slot="button"]:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+
+.admin-theme [data-slot="dialog-content"],
+.admin-theme [data-slot="alert-dialog-content"],
+.admin-theme [data-slot="popover-content"],
+.admin-theme [data-slot="select-content"] {
+  border-color: color-mix(in oklch, var(--border) 90%, transparent);
+  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.16), 0 4px 12px -4px rgba(0, 0, 0, 0.06);
+}

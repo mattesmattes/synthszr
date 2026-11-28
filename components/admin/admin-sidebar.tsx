@@ -28,11 +28,11 @@ export function AdminSidebar({ collapsed = false, onToggle, onOpenCommand }: Adm
     <button
       type="button"
       onClick={onToggle}
-      className="rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+      className="rounded-md p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
       aria-label={isCollapsed ? 'Navigation ausklappen' : 'Navigation einklappen'}
       title={isCollapsed ? 'Navigation ausklappen' : 'Navigation einklappen'}
     >
-      {isCollapsed ? <ChevronsRight className="h-5 w-5" /> : <ChevronsLeft className="h-5 w-5" />}
+      {isCollapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
     </button>
   )
 
@@ -40,13 +40,13 @@ export function AdminSidebar({ collapsed = false, onToggle, onOpenCommand }: Adm
   const sidebarInner = (isCollapsed: boolean, showToggle: boolean) => (
     <div className="flex h-full flex-col">
       {isCollapsed ? (
-        <div className="flex flex-col items-center gap-1 border-b border-border p-2">
+        <div className="flex flex-col items-center gap-1.5 border-b border-sidebar-border p-2.5">
           {toggleButton(true)}
           {onOpenCommand && (
             <button
               type="button"
               onClick={onOpenCommand}
-              className="rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              className="rounded-md p-2 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
               aria-label="Schnellsuche öffnen (⌘K)"
               title="Schnellsuche (⌘K)"
             >
@@ -55,11 +55,11 @@ export function AdminSidebar({ collapsed = false, onToggle, onOpenCommand }: Adm
           )}
         </div>
       ) : (
-        <div className="border-b border-border p-4 space-y-3">
+        <div className="border-b border-sidebar-border px-4 py-3.5 space-y-3">
           <div className="flex items-center justify-between">
-            <Link href="/admin" className="flex items-center gap-2">
-              <span className="font-mono text-lg font-bold">Synthszr</span>
-              <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-xs text-primary">
+            <Link href="/admin" className="flex items-center gap-2 group">
+              <span className="font-mono text-base font-bold tracking-tight text-foreground">Synthszr</span>
+              <span className="rounded-md bg-[#CCFF00] px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-black">
                 Admin
               </span>
             </Link>
@@ -72,25 +72,25 @@ export function AdminSidebar({ collapsed = false, onToggle, onOpenCommand }: Adm
                 setMobileOpen(false)
                 onOpenCommand()
               }}
-              className="flex w-full items-center gap-2 rounded-md border border-border bg-background/60 px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+              className="flex w-full items-center gap-2 rounded-lg border border-border/80 bg-card px-2.5 py-1.5 text-xs text-muted-foreground shadow-xs hover:border-foreground/20 hover:text-foreground transition-all"
             >
-              <Search className="h-3.5 w-3.5 shrink-0" />
+              <Search className="h-3.5 w-3.5 shrink-0 opacity-70" />
               <span className="flex-1 text-left">Schnellsuche…</span>
-              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+              <kbd className="rounded border border-border/80 bg-muted/70 px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">
                 ⌘K
               </kbd>
             </button>
           )}
         </div>
       )}
-      <nav className={cn('flex-1 overflow-y-auto', isCollapsed ? 'p-2' : 'p-4')}>
+      <nav className={cn('flex-1 overflow-y-auto', isCollapsed ? 'p-2' : 'px-3 py-3')}>
         <AdminNav onNavigate={() => setMobileOpen(false)} collapsed={isCollapsed} />
       </nav>
       {isCollapsed ? (
-        <div className="flex flex-col items-center gap-1 border-t border-border p-2">
+        <div className="flex flex-col items-center gap-1 border-t border-sidebar-border p-2">
           <Link
             href="/"
-            className="rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+            className="rounded-md p-2 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
             aria-label="Zur Website"
             title="Zur Website"
           >
@@ -99,9 +99,13 @@ export function AdminSidebar({ collapsed = false, onToggle, onOpenCommand }: Adm
           <LogoutButton />
         </div>
       ) : (
-        <div className="border-t border-border p-4">
+        <div className="border-t border-sidebar-border px-4 py-3">
           <div className="flex items-center justify-between">
-            <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
               Zur Website
             </Link>
             <LogoutButton />
@@ -116,7 +120,7 @@ export function AdminSidebar({ collapsed = false, onToggle, onOpenCommand }: Adm
       {/* Desktop sidebar — always visible on md+, collapsible to an icon rail */}
       <aside
         className={cn(
-          'hidden md:flex md:fixed md:left-0 md:top-0 md:z-40 md:h-screen md:flex-col md:border-r md:border-border md:bg-card transition-[width] duration-300',
+          'hidden md:flex md:fixed md:left-0 md:top-0 md:z-40 md:h-screen md:flex-col md:border-r md:border-sidebar-border md:bg-sidebar md:text-sidebar-foreground transition-[width] duration-300',
           collapsed ? 'md:w-16' : 'md:w-64',
         )}
       >
@@ -124,10 +128,10 @@ export function AdminSidebar({ collapsed = false, onToggle, onOpenCommand }: Adm
       </aside>
 
       {/* Mobile top header */}
-      <header className="md:hidden fixed top-0 left-0 right-0 z-50 flex h-14 items-center justify-between border-b border-border bg-card px-4">
+      <header className="md:hidden fixed top-0 left-0 right-0 z-50 flex h-14 items-center justify-between border-b border-sidebar-border bg-sidebar text-sidebar-foreground px-4">
         <Link href="/admin" className="flex items-center gap-2">
-          <span className="font-mono text-base font-bold">Synthszr</span>
-          <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-xs text-primary">
+          <span className="font-mono text-base font-bold tracking-tight">Synthszr</span>
+          <span className="rounded-md bg-[#CCFF00] px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-black">
             Admin
           </span>
         </Link>
@@ -136,7 +140,7 @@ export function AdminSidebar({ collapsed = false, onToggle, onOpenCommand }: Adm
             <button
               type="button"
               onClick={onOpenCommand}
-              className="rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              className="rounded-md p-2 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
               aria-label="Schnellsuche öffnen"
             >
               <Search className="h-5 w-5" />
@@ -145,7 +149,7 @@ export function AdminSidebar({ collapsed = false, onToggle, onOpenCommand }: Adm
           <button
             type="button"
             onClick={() => setMobileOpen((v) => !v)}
-            className="rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+            className="rounded-md p-2 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
             aria-label={mobileOpen ? 'Menü schließen' : 'Menü öffnen'}
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}

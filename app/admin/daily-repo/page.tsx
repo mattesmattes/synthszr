@@ -521,27 +521,31 @@ export default function DailyRepoPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5">
         {/* Left: Date Navigation */}
         <div>
-          {/* Abrufen + Date Picker */}
-          <div className="flex items-center gap-2 mb-3">
-            <Button size="sm" onClick={() => setShowFetchDialog(true)} className="gap-1.5 text-xs h-8 flex-1">
-              <Mail className="h-3.5 w-3.5" />
-              Newsletter
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setShowWebCrawlDialog(true)} className="gap-1.5 text-xs h-8">
-              <Globe className="h-3.5 w-3.5" />
-              WebCrawl
-            </Button>
-            <Button size="sm" variant="outline" onClick={startTechmeme} disabled={techmemeRunning} className="gap-1.5 text-xs h-8">
-              {techmemeRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Newspaper className="h-3.5 w-3.5" />}
-              Techmeme
-            </Button>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="rounded-md border px-2.5 py-1 text-xs h-8 bg-background"
-              style={{ fontWeight: hasRepoForDate(selectedDate) ? 600 : 400 }}
-            />
+          {/* Abrufen + Date Picker — 2-zeilige Toolbar für die 280px Master-Spalte */}
+          <div className="rounded-xl border border-border/80 bg-card p-2.5 shadow-xs space-y-2 mb-3">
+            <div className="flex items-center gap-1.5">
+              <Button size="sm" onClick={() => setShowFetchDialog(true)} className="gap-1.5 text-xs h-8 flex-1">
+                <Mail className="h-3.5 w-3.5" />
+                Newsletter
+              </Button>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                style={{ fontWeight: hasRepoForDate(selectedDate) ? 600 : 400 }}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <Button size="sm" variant="outline" onClick={() => setShowWebCrawlDialog(true)} className="gap-1.5 text-xs h-8">
+                <Globe className="h-3.5 w-3.5" />
+                WebCrawl
+              </Button>
+              <Button size="sm" variant="outline" onClick={startTechmeme} disabled={techmemeRunning} className="gap-1.5 text-xs h-8">
+                {techmemeRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Newspaper className="h-3.5 w-3.5" />}
+                Techmeme
+              </Button>
+            </div>
           </div>
 
           {/* Date List */}
@@ -550,12 +554,12 @@ export default function DailyRepoPage() {
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : repoSummaries.length === 0 ? (
-            <div className="rounded-lg border border-dashed py-8 text-center text-xs text-muted-foreground">
+            <div className="rounded-xl border border-dashed bg-card py-8 text-center text-xs text-muted-foreground">
               Noch keine Repos
             </div>
           ) : (
-            <div className="rounded-lg border overflow-hidden">
-              <div className="max-h-[calc(100vh-240px)] overflow-y-auto">
+            <div className="rounded-xl border border-border/80 bg-card shadow-xs overflow-hidden">
+              <div className="max-h-[calc(100vh-260px)] overflow-y-auto">
                 {repoSummaries.map((repo) => {
                   const isSelected = selectedDate === repo.date
                   return (
@@ -564,12 +568,12 @@ export default function DailyRepoPage() {
                       onClick={() => setSelectedDate(repo.date)}
                       className={`group w-full text-left px-3 py-2.5 border-b last:border-b-0 transition-colors relative ${
                         isSelected
-                          ? 'bg-primary/5'
+                          ? 'bg-muted/60'
                           : 'hover:bg-muted/40'
                       }`}
                     >
                       {isSelected && (
-                        <div className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-primary" />
+                        <div className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-[#CCFF00]" />
                       )}
                       <div className="flex items-center justify-between">
                         <span className={`text-[13px] ${isSelected ? 'font-semibold' : 'font-medium'}`}>

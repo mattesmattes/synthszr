@@ -697,28 +697,28 @@ export default function DigestsPage() {
             </div>
           ) : sourceSummary.items.length > 0 && (
             <Collapsible open={sourceListOpen} onOpenChange={setSourceListOpen}>
-              <div className="rounded border bg-muted/30 p-3">
-                <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
+                <div className="grid grid-cols-3 gap-3 text-center tabular-nums">
                   <div>
-                    <div className="flex items-center justify-center gap-1 text-base font-bold text-blue-600">
+                    <div className="flex items-center justify-center gap-1 text-base font-semibold text-blue-600 dark:text-blue-400">
                       <Mail className="h-3 w-3" />
                       {sourceSummary.newsletterCount}
                     </div>
-                    <div className="text-[10px] text-muted-foreground">Newsletter</div>
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Newsletter</div>
                   </div>
                   <div>
-                    <div className="flex items-center justify-center gap-1 text-base font-bold text-green-600">
+                    <div className="flex items-center justify-center gap-1 text-base font-semibold text-emerald-600 dark:text-emerald-400">
                       <Link2 className="h-3 w-3" />
                       {sourceSummary.articleCount}
                     </div>
-                    <div className="text-[10px] text-muted-foreground">Artikel</div>
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Artikel</div>
                   </div>
                   <div>
-                    <div className="flex items-center justify-center gap-1 text-base font-bold text-purple-600">
+                    <div className="flex items-center justify-center gap-1 text-base font-semibold text-purple-600 dark:text-purple-400">
                       <Hash className="h-3 w-3" />
                       {(sourceSummary.totalCharacters / 1000).toFixed(0)}k
                     </div>
-                    <div className="text-[10px] text-muted-foreground">Zeichen</div>
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Zeichen</div>
                   </div>
                 </div>
                 <CollapsibleTrigger asChild>

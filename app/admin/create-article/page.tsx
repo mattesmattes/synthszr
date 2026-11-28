@@ -769,63 +769,66 @@ export default function CreateArticlePage() {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Left Column: Settings */}
         <div className="space-y-6">
-          {/* Publish Date */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-muted-foreground">Datum:</label>
-            <input
-              type="date"
-              value={publishDate}
-              onChange={e => setPublishDate(e.target.value)}
-              className="text-sm border rounded px-2 py-1 bg-background"
-            />
-          </div>
-
-          {/* Generate Button */}
-          <Button
-            onClick={generateArticle}
-            disabled={generating || !selectedDigestId || !activePrompt}
-            className="w-full gap-2"
-            size="lg"
-          >
-            {generating ? (
-              <>
-                <Loader2 className="h-5 w-5 animate-spin" />
-                {pipelineStatus ? pipelineStatus.slice(0, 50) : 'Generiere Artikel...'}
-              </>
-            ) : (
-              <>
-                <Wand2 className="h-5 w-5" />
-                Artikel generieren
-              </>
-            )}
-          </Button>
-
-          {generating && (
-            <p className="text-xs text-muted-foreground">
-              Läuft auf dem Server weiter — du kannst den Tab schließen oder das Handy sperren. Der Entwurf erscheint danach unter Blog Posts.
-            </p>
-          )}
-          {!generating && recentDone && (
-            <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => router.push(`/admin/generated-articles/edit/${recentDone.postId}`)}>
-              Letzter Entwurf ist fertig (vor {recentDone.minutesAgo} min) — öffnen
-            </Button>
-          )}
-
-          {/* Pipeline progress bar */}
-          {generating && pipelineProgress && (
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Abschnitt {pipelineProgress.current} von {pipelineProgress.total}</span>
-                <span>{Math.round((pipelineProgress.current / pipelineProgress.total) * 100)}%</span>
-              </div>
-              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                <div
-                  className="h-full bg-primary transition-all duration-500"
-                  style={{ width: `${(pipelineProgress.current / pipelineProgress.total) * 100}%` }}
-                />
-              </div>
+          {/* Control Card: Datum & Artikel generieren */}
+          <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs space-y-3">
+            {/* Publish Date */}
+            <div className="flex items-center gap-2.5">
+              <label className="text-xs font-medium text-muted-foreground shrink-0">Datum</label>
+              <input
+                type="date"
+                value={publishDate}
+                onChange={e => setPublishDate(e.target.value)}
+                className="h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm text-foreground tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
             </div>
-          )}
+
+            {/* Generate Button */}
+            <Button
+              onClick={generateArticle}
+              disabled={generating || !selectedDigestId || !activePrompt}
+              className="w-full gap-2"
+              size="lg"
+            >
+              {generating ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  {pipelineStatus ? pipelineStatus.slice(0, 50) : 'Generiere Artikel...'}
+                </>
+              ) : (
+                <>
+                  <Wand2 className="h-5 w-5" />
+                  Artikel generieren
+                </>
+              )}
+            </Button>
+
+            {generating && (
+              <p className="text-xs text-muted-foreground">
+                Läuft auf dem Server weiter — du kannst den Tab schließen oder das Handy sperren. Der Entwurf erscheint danach unter Blog Posts.
+              </p>
+            )}
+            {!generating && recentDone && (
+              <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => router.push(`/admin/generated-articles/edit/${recentDone.postId}`)}>
+                Letzter Entwurf ist fertig (vor {recentDone.minutesAgo} min) — öffnen
+              </Button>
+            )}
+
+            {/* Pipeline progress bar */}
+            {generating && pipelineProgress && (
+              <div className="space-y-1.5 pt-1">
+                <div className="flex justify-between text-xs text-muted-foreground tabular-nums">
+                  <span>Abschnitt {pipelineProgress.current} von {pipelineProgress.total}</span>
+                  <span>{Math.round((pipelineProgress.current / pipelineProgress.total) * 100)}%</span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-[#CCFF00] transition-all duration-500"
+                    style={{ width: `${(pipelineProgress.current / pipelineProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Queue Status */}
           <Card>
@@ -839,18 +842,18 @@ export default function CreateArticlePage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-3 gap-2 mb-4">
-                <div className="p-2 bg-muted/50 rounded text-center">
-                  <div className="text-lg font-bold text-yellow-600">{queueStats.pending}</div>
-                  <div className="text-[10px] text-muted-foreground">Pending</div>
+              <div className="grid grid-cols-3 gap-2 mb-4 tabular-nums">
+                <div className="rounded-lg border border-border/60 bg-muted/40 p-2.5 text-center">
+                  <div className="text-lg font-semibold text-amber-600 dark:text-amber-400">{queueStats.pending}</div>
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Pending</div>
                 </div>
-                <div className="p-2 bg-muted/50 rounded text-center">
-                  <div className="text-lg font-bold text-blue-600">{queueStats.selected}</div>
-                  <div className="text-[10px] text-muted-foreground">Selected</div>
+                <div className="rounded-lg border border-border/60 bg-muted/40 p-2.5 text-center">
+                  <div className="text-lg font-semibold text-blue-600 dark:text-blue-400">{queueStats.selected}</div>
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Selected</div>
                 </div>
-                <div className="p-2 bg-muted/50 rounded text-center">
-                  <div className="text-lg font-bold text-green-600">{queueStats.used}</div>
-                  <div className="text-[10px] text-muted-foreground">Used</div>
+                <div className="rounded-lg border border-border/60 bg-muted/40 p-2.5 text-center">
+                  <div className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">{queueStats.used}</div>
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Used</div>
                 </div>
               </div>
 

@@ -29,6 +29,14 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // Sync admin-theme onto body so Radix Portals (Dialogs, Popovers, Select, Toaster) inherit admin tokens
+  useEffect(() => {
+    document.body.classList.add('admin-theme')
+    return () => {
+      document.body.classList.remove('admin-theme')
+    }
+  }, [])
+
   const toggle = () => {
     const next = !collapsed
     setCollapsed(next)

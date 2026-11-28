@@ -14,7 +14,7 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-background" style={{ fontFamily: 'var(--font-sf-pro)' }}>
+    <div className="admin-theme flex min-h-screen bg-background text-foreground antialiased" style={{ fontFamily: 'var(--font-sf-pro)' }}>
       {/* Seitenleiste + Inhalt: die Shell hält den Ein-/Ausklappzustand (Client), das Layout bleibt Server für die Auth-Prüfung */}
       <AdminShell>{children}</AdminShell>
     </div>

@@ -858,42 +858,43 @@ export default function AdminPage() {
   return (
     <div className="p-4 md:p-6 lg:p-8 mx-auto max-w-6xl overflow-x-hidden">
       <AdminStatusStrip />
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
-            <FileText className="h-6 w-6" />
+          <h1 className="text-2xl font-semibold tracking-[-0.02em] flex items-center gap-2.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-card text-foreground shadow-xs">
+              <FileText className="h-5 w-5" />
+            </span>
             Blog Posts
           </h1>
-          <div className="mt-1 flex items-center gap-3">
-            <a
-              href="/api/admin/analyze-edits"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Brain className="h-3 w-3" />
-              Analyze Edits
-              <ExternalLink className="h-2.5 w-2.5" />
-            </a>
-            <span className="text-muted-foreground/30">|</span>
-            <a
-              href="/api/cron/extract-patterns"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <FlaskConical className="h-3 w-3" />
-              Extract Patterns
-              <ExternalLink className="h-2.5 w-2.5" />
-            </a>
-          </div>
         </div>
-        <Button asChild>
-          <Link href="/admin/new" className="gap-2">
-            <Plus className="h-4 w-4" />
-            Neuer Post
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href="/api/admin/analyze-edits"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border/80 bg-card px-3 text-xs font-medium text-muted-foreground shadow-xs hover:border-foreground/20 hover:text-foreground transition-colors"
+          >
+            <Brain className="h-3.5 w-3.5" />
+            Analyze Edits
+            <ExternalLink className="h-3 w-3 opacity-60" />
+          </a>
+          <a
+            href="/api/cron/extract-patterns"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border/80 bg-card px-3 text-xs font-medium text-muted-foreground shadow-xs hover:border-foreground/20 hover:text-foreground transition-colors"
+          >
+            <FlaskConical className="h-3.5 w-3.5" />
+            Extract Patterns
+            <ExternalLink className="h-3 w-3 opacity-60" />
+          </a>
+          <Button asChild>
+            <Link href="/admin/new" className="gap-2">
+              <Plus className="h-4 w-4" />
+              Neuer Post
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {loading ? (

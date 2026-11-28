@@ -558,29 +558,29 @@ export default function TranslationsPage() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6 mb-6">
+      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6 mb-6 tabular-nums">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Ausstehend</CardDescription>
-            <CardTitle className="text-2xl text-yellow-600">{stats?.pending || 0}</CardTitle>
+            <CardTitle className="text-2xl text-amber-600 dark:text-amber-400">{stats?.pending || 0}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>In Bearbeitung</CardDescription>
-            <CardTitle className="text-2xl text-blue-600">{stats?.processing || 0}</CardTitle>
+            <CardTitle className="text-2xl text-blue-600 dark:text-blue-400">{stats?.processing || 0}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Abgeschlossen</CardDescription>
-            <CardTitle className="text-2xl text-green-600">{stats?.completed || 0}</CardTitle>
+            <CardTitle className="text-2xl text-emerald-600 dark:text-emerald-400">{stats?.completed || 0}</CardTitle>
           </CardHeader>
         </Card>
-        <Card className="cursor-pointer hover:border-red-300" onClick={() => stats?.failed && retryAllFailed()}>
+        <Card className="cursor-pointer transition-colors hover:border-red-400/60" onClick={() => stats?.failed && retryAllFailed()}>
           <CardHeader className="pb-2">
             <CardDescription>Fehlgeschlagen</CardDescription>
-            <CardTitle className="text-2xl text-red-600 flex items-center gap-2">
+            <CardTitle className="text-2xl text-red-600 dark:text-red-400 flex items-center gap-2">
               {stats?.failed || 0}
               {(stats?.failed || 0) > 0 && (
                 <RotateCcw className="h-4 w-4 opacity-50" />
@@ -588,10 +588,10 @@ export default function TranslationsPage() {
             </CardTitle>
           </CardHeader>
         </Card>
-        <Card className="cursor-pointer hover:border-gray-400" onClick={() => stats?.cancelled && retryAllCancelled()}>
+        <Card className="cursor-pointer transition-colors hover:border-foreground/30" onClick={() => stats?.cancelled && retryAllCancelled()}>
           <CardHeader className="pb-2">
             <CardDescription>Abgebrochen</CardDescription>
-            <CardTitle className="text-2xl text-gray-600 flex items-center gap-2">
+            <CardTitle className="text-2xl text-muted-foreground flex items-center gap-2">
               {stats?.cancelled || 0}
               {(stats?.cancelled || 0) > 0 && (
                 <RotateCcw className="h-4 w-4 opacity-50" />
@@ -603,7 +603,7 @@ export default function TranslationsPage() {
           <CardHeader className="pb-2">
             <CardDescription>Manuell bearbeitet</CardDescription>
             <CardTitle className="text-2xl flex items-center gap-2">
-              <PenLine className="h-5 w-5 text-purple-600" />
+              <PenLine className="h-5 w-5 text-purple-600 dark:text-purple-400" />
               {data?.manuallyEditedCount || 0}
             </CardTitle>
           </CardHeader>

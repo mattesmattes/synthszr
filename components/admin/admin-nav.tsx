@@ -104,13 +104,13 @@ export function AdminNav({ onNavigate, collapsed = false }: AdminNavProps) {
           return (
             <div key={group.id}>
               {collapsed ? (
-                groupIndex > 0 && <div className="mx-1 mb-2 border-t border-border" aria-hidden="true" />
+                groupIndex > 0 && <div className="mx-1 mb-2 border-t border-sidebar-border" aria-hidden="true" />
               ) : group.collapsible ? (
                 <button
                   type="button"
                   onClick={() => toggleGroup(group.id)}
                   aria-expanded={isOpen}
-                  className="mb-1.5 flex w-full items-center justify-between rounded-md px-2 py-1 text-left font-mono text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors"
+                  className="mb-1 flex w-full items-center justify-between rounded-md px-2 py-1 text-left font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/75 hover:bg-sidebar-accent/70 hover:text-foreground transition-colors"
                 >
                   <span>{group.label}</span>
                   {isOpen ? (
@@ -120,7 +120,7 @@ export function AdminNav({ onNavigate, collapsed = false }: AdminNavProps) {
                   )}
                 </button>
               ) : (
-                <h3 className="mb-1.5 px-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <h3 className="mb-1 px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/75">
                   {group.label}
                 </h3>
               )}
@@ -139,17 +139,25 @@ export function AdminNav({ onNavigate, collapsed = false }: AdminNavProps) {
                         rel={isExternal ? 'noopener noreferrer' : undefined}
                         onClick={onNavigate}
                         className={cn(
-                          'flex items-center gap-3 rounded-md px-2 py-1.5 text-sm transition-colors',
+                          'relative flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13px] transition-all',
                           collapsed && 'justify-center px-0 py-2',
                           isActive
-                            ? 'bg-primary/10 font-medium text-primary'
-                            : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+                            ? collapsed
+                              ? 'bg-card font-medium text-foreground shadow-xs ring-1 ring-[#CCFF00]/80 dark:bg-sidebar-accent'
+                              : 'bg-card font-medium text-foreground shadow-xs ring-1 ring-border/70 dark:bg-sidebar-accent dark:ring-border/60'
+                            : 'text-muted-foreground hover:bg-sidebar-accent/70 hover:text-foreground',
                         )}
                       >
+                        {isActive && !collapsed && (
+                          <span
+                            className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-[#CCFF00]"
+                            aria-hidden="true"
+                          />
+                        )}
                         <span
                           className={cn(
-                            'relative flex h-6 w-6 shrink-0 items-center justify-center rounded',
-                            item.highlight && 'bg-[#CCFF00] text-black',
+                            'relative flex h-6 w-6 shrink-0 items-center justify-center rounded-md',
+                            item.highlight && 'bg-[#CCFF00] text-black shadow-xs',
                             alertsPending && 'animate-pulse bg-red-600 text-white',
                           )}
                         >

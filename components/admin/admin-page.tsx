@@ -50,8 +50,12 @@ export function AdminPageHeader({
       )}
     >
       <div className="min-w-0">
-        <h1 className="flex items-center gap-2.5 text-2xl font-bold tracking-tight">
-          {icon}
+        <h1 className="flex items-center gap-2.5 text-2xl font-semibold tracking-[-0.02em]">
+          {icon && (
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-card text-foreground shadow-xs">
+              {icon}
+            </span>
+          )}
           <span>{title}</span>
         </h1>
         {description && (

@@ -1052,124 +1052,121 @@ export default function NewsQueuePage() {
   return (
     <Collapsible open={showSidebar} onOpenChange={setShowSidebar}>
     <div className="p-4 md:p-6 lg:p-8 max-w-full overflow-x-hidden">
-      <div className="mb-4">
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
-          <ListTodo className="h-6 w-6" />
+      <div className="mb-5">
+        <h1 className="text-2xl font-semibold tracking-[-0.02em] flex items-center gap-2.5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-card text-foreground shadow-xs">
+            <ListTodo className="h-5 w-5" />
+          </span>
           News Queue
         </h1>
-        {/* Action Buttons - horizontal row */}
-        <div className="flex flex-wrap items-center gap-2 mt-3">
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-xs"
-            onClick={() => {
-              setShowImportDialog(true)
-              fetchCandidates(importDate)
-            }}
-          >
-            <Plus className="h-3 w-3 mr-1" />
-            Manuell nachimportieren
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-xs bg-[#CCFF00] text-black border-[#CCFF00] hover:bg-[#CCFF00]/90 hover:text-black"
-            onClick={() => setShowManualAddDialog(true)}
-          >
-            <Link className="h-3 w-3 mr-1" />
-            Artikel hinzufügen
-          </Button>
-          {/* Tagespager — Pending-Modus erlaubt einzelne ältere Tage
-              (zusätzlich zur Live-Sicht "letzte 3 Tage"). Bei anderen
-              Status-Filtern ist der Datums-Begriff irrelevant, da blenden
-              wir das Dropdown aus. */}
-          {statusFilter === 'pending' && (
-            <Select
-              value={viewDay ?? 'current'}
-              onValueChange={(value) => setViewDay(value === 'current' ? null : value)}
-            >
-              <SelectTrigger className="h-8 text-xs w-[220px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="current">Aktuell (letzte 3 Tage)</SelectItem>
-                {[3, 4, 5].map((daysAgo) => {
-                  // Local-time arithmetic so the value (YYYY-MM-DD) and
-                  // the German label both refer to the same calendar day
-                  // in the user's timezone. UTC-based arithmetic would
-                  // drift by ~2h around midnight and mis-match the
-                  // day-grouping headers in the item list.
-                  const d = new Date()
-                  d.setDate(d.getDate() - daysAgo)
-                  d.setHours(0, 0, 0, 0)
-                  const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-                  const label = d.toLocaleDateString('de-DE', {
-                    weekday: 'short',
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                  })
-                  return (
-                    <SelectItem key={iso} value={iso}>
-                      {label}
-                    </SelectItem>
-                  )
-                })}
-              </SelectContent>
-            </Select>
-          )}
-          {stats && stats.selected > 0 && (
+        {/* Action Toolbar — 2 Zonen: Primäraktionen links, Filter & Ansichten rechts */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/80 bg-card p-2.5 shadow-xs">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               variant="outline"
-              className="text-xs text-blue-600 border-blue-300 hover:bg-blue-50"
-              onClick={() => setShowDeselectConfirm(true)}
-              disabled={actionLoading === 'deselect-all'}
+              className="text-xs font-semibold bg-[#CCFF00] text-black border-[#CCFF00] hover:bg-[#CCFF00]/90 hover:text-black shadow-xs"
+              onClick={() => setShowManualAddDialog(true)}
             >
-              {actionLoading === 'deselect-all' ? (
+              <Link className="h-3 w-3 mr-1" />
+              Artikel hinzufügen
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs"
+              onClick={() => {
+                setShowImportDialog(true)
+                fetchCandidates(importDate)
+              }}
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Manuell nachimportieren
+            </Button>
+            {statusFilter === 'pending' && (
+              <Select
+                value={viewDay ?? 'current'}
+                onValueChange={(value) => setViewDay(value === 'current' ? null : value)}
+              >
+                <SelectTrigger className="h-8 text-xs w-[210px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="current">Aktuell (letzte 3 Tage)</SelectItem>
+                  {[3, 4, 5].map((daysAgo) => {
+                    const d = new Date()
+                    d.setDate(d.getDate() - daysAgo)
+                    d.setHours(0, 0, 0, 0)
+                    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+                    const label = d.toLocaleDateString('de-DE', {
+                      weekday: 'short',
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                    })
+                    return (
+                      <SelectItem key={iso} value={iso}>
+                        {label}
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {stats && stats.selected > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-500/40 dark:hover:bg-blue-950/40"
+                onClick={() => setShowDeselectConfirm(true)}
+                disabled={actionLoading === 'deselect-all'}
+              >
+                {actionLoading === 'deselect-all' ? (
+                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                ) : (
+                  <X className="h-3 w-3 mr-1" />
+                )}
+                Alle deselectieren ({stats.selected})
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className={`text-xs ${showRankingSuggestions ? 'bg-secondary border-foreground/20' : ''}`}
+              onClick={() => setShowRankingSuggestions((v) => !v)}
+              title="Assistiertes-Ranking-Vorschläge ein-/ausblenden"
+            >
+              <Sparkles className="h-3 w-3 mr-1" />
+              Ranking-Vorschläge
+            </Button>
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="sm" className="text-xs">
+                <PieChart className="h-3 w-3 mr-1" />
+                Quellen & Embeddings
+                {distribution.some(d => d.percentage_of_total > 30) && (
+                  <Badge variant="destructive" className="text-[9px] px-1 py-0 ml-1">!</Badge>
+                )}
+                <ChevronDown className={`h-3 w-3 ml-1 transition-transform ${showSidebar ? 'rotate-180' : ''}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs"
+              onClick={handleRescoreLastDay}
+              disabled={actionLoading === 'rescore-pending'}
+              title="Unbewertete (3/3) Artikel der letzten 24 Stunden mit dem neuen Kriterienkatalog neu bewerten"
+            >
+              {actionLoading === 'rescore-pending' ? (
                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
               ) : (
-                <X className="h-3 w-3 mr-1" />
+                <RefreshCw className="h-3 w-3 mr-1" />
               )}
-              Alle deselectieren ({stats.selected})
+              24h neu bewerten
             </Button>
-          )}
-          <CollapsibleTrigger asChild>
-            <Button variant="outline" size="sm" className="text-xs">
-              <PieChart className="h-3 w-3 mr-1" />
-              Quellen & Embeddings
-              {distribution.some(d => d.percentage_of_total > 30) && (
-                <Badge variant="destructive" className="text-[9px] px-1 py-0 ml-1">!</Badge>
-              )}
-              <ChevronDown className={`h-3 w-3 ml-1 transition-transform ${showSidebar ? 'rotate-180' : ''}`} />
-            </Button>
-          </CollapsibleTrigger>
-          <Button
-            variant="outline"
-            size="sm"
-            className={`text-xs ${showRankingSuggestions ? 'bg-secondary' : ''}`}
-            onClick={() => setShowRankingSuggestions((v) => !v)}
-            title="Assistiertes-Ranking-Vorschläge ein-/ausblenden"
-          >
-            <Sparkles className="h-3 w-3 mr-1" />
-            Ranking-Vorschläge
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs"
-            onClick={handleRescoreLastDay}
-            disabled={actionLoading === 'rescore-pending'}
-            title="Unbewertete (3/3) Artikel der letzten 24 Stunden mit dem neuen Kriterienkatalog neu bewerten"
-          >
-            {actionLoading === 'rescore-pending' ? (
-              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3 w-3 mr-1" />
-            )}
-            24h neu bewerten
-          </Button>
+          </div>
         </div>
       </div>
 
