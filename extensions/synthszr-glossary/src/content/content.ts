@@ -93,13 +93,21 @@ const FORBIDDEN_TAGS = new Set([
   'SYNTHSZR-GLOSSARY-HOST',
 ])
 
-const matcherCache = new Map<SupportedLang, { version: string; matcher: CompiledGlossaryMatcher }>()
-const termMapByLang = new Map<SupportedLang, Map<string, ExtensionGlossaryTerm>>()
+const matcherCache = new Map<
+  SupportedLang,
+  { version: string; fetchedAt: number; matcher: CompiledGlossaryMatcher }
+>()
 const markerOverlay = new GlossaryMarkerOverlay()
 
 let currentSettings: ExtensionSettings = DEFAULT_SETTINGS
 let activeLang: SupportedLang = 'en'
 let hitMap = new WeakMap<Text, HitEntry[]>()
+let scannedNodes = new WeakSet<Text>()
+let activeRanges: Range[] = []
+let activeHighlightCount = 0
+let pageUnambiguousSlugs = new Set<string>()
+const pendingMutationRoots = new Set<Node>()
+let fullScanRunning = false
 let scanGeneration = 0
 let mutationTimer: number | null = null
 let hoverRafPending = false
@@ -218,22 +226,55 @@ function reportPageState(count: number, paused: boolean): void {
     .catch(() => undefined)
 }
 
-function isInsideFixedContainer(el: Element | null): boolean {
+function isInsideFixedContainer(
+  el: Element | null,
+  fixedCache?: WeakMap<Element, boolean>,
+): boolean {
+  if (!el) return false
+  const cached = fixedCache?.get(el)
+  if (cached !== undefined) return cached
+
   let cur: Element | null = el
   let hops = 0
+  let result = false
   while (cur && cur !== document.body && cur !== document.documentElement && hops < 12) {
-    if (window.getComputedStyle(cur).position === 'fixed') return true
+    const stepCached = fixedCache?.get(cur)
+    if (stepCached !== undefined) {
+      result = stepCached
+      break
+    }
+    if (window.getComputedStyle(cur).position === 'fixed') {
+      result = true
+      break
+    }
     cur = cur.parentElement
     hops++
   }
-  return false
+  fixedCache?.set(el, result)
+  return result
 }
 
 function clearHighlights(): void {
   scanGeneration++
+  fullScanRunning = false
   hitMap = new WeakMap<Text, HitEntry[]>()
+  scannedNodes = new WeakSet<Text>()
+  activeRanges = []
+  activeHighlightCount = 0
+  pageUnambiguousSlugs = new Set<string>()
+  pendingMutationRoots.clear()
   markerOverlay.clear()
   document.documentElement.style.cursor = ''
+}
+
+function isTextNodeEligible(node: Text): boolean {
+  const text = node.nodeValue
+  if (!text || text.trim().length < 2) return false
+  const parent = node.parentElement
+  if (!parent) return false
+  if (FORBIDDEN_TAGS.has(parent.tagName)) return false
+  if (parent.closest(FORBIDDEN_ANCESTOR_SELECTOR)) return false
+  return true
 }
 
 function collectEligibleTextNodes(root: Node): Text[] {
@@ -257,6 +298,39 @@ function collectEligibleTextNodes(root: Node): Text[] {
     current = walker.nextNode()
   }
   return nodes
+}
+
+function samplePageText(root: Node | null, maxChars = 3000): string {
+  if (!root) return ''
+  let sample = ''
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parent = node.parentElement
+      if (!parent || FORBIDDEN_TAGS.has(parent.tagName)) return NodeFilter.FILTER_REJECT
+      return NodeFilter.FILTER_ACCEPT
+    },
+  })
+
+  let current = walker.nextNode()
+  while (current && sample.length < maxChars) {
+    const val = current.nodeValue
+    if (val) {
+      const trimmed = val.trim()
+      if (trimmed.length > 0) {
+        sample += (sample ? ' ' : '') + trimmed
+      }
+    }
+    current = walker.nextNode()
+  }
+  return sample.slice(0, maxChars)
+}
+
+function resolveActiveLang(): SupportedLang {
+  if (currentSettings.languageMode !== 'auto') return currentSettings.languageMode
+  const htmlLang = document.documentElement.lang?.trim().toLowerCase() ?? ''
+  if (htmlLang.startsWith('de')) return 'de'
+  if (htmlLang.startsWith('en')) return 'en'
+  return detectPageLanguage(document.documentElement.lang, samplePageText(document.body, 3000))
 }
 
 function scheduleIdle(cb: () => void): void {
@@ -308,6 +382,16 @@ function hitTestPoint(x: number, y: number): { hit: HitEntry; rect: DOMRect } | 
 }
 
 async function getMatcherForLang(lang: SupportedLang): Promise<CompiledGlossaryMatcher> {
+  const memoryCached = matcherCache.get(lang)
+  if (memoryCached) {
+    const ageMs = Date.now() - memoryCached.fetchedAt
+    if (ageMs > 6 * 60 * 60 * 1000) {
+      memoryCached.fetchedAt = Date.now()
+      void sendBg({ type: 'ENSURE_GLOSSARY_INDEX', lang }).catch(() => undefined)
+    }
+    return memoryCached.matcher
+  }
+
   const key = lang === 'de' ? STORAGE_KEYS.INDEX_DE : STORAGE_KEYS.INDEX_EN
   const stored = await ext.storage.local
     .get<Record<string, StoredGlossaryCache>>([key])
@@ -358,18 +442,19 @@ async function getMatcherForLang(lang: SupportedLang): Promise<CompiledGlossaryM
     await ext.storage.local.set({ [key]: index }).catch(() => undefined)
   }
 
-  const cached = matcherCache.get(lang)
-  if (cached && cached.version === index.version) {
-    return cached.matcher
-  }
   const matcher = compileGlossaryMatcher(index.items)
-  matcherCache.set(lang, { version: index.version, matcher })
-  termMapByLang.set(lang, new Map(index.items.map((item) => [item.s, item])))
+  matcherCache.set(lang, {
+    version: index.version,
+    fetchedAt: index.fetchedAt ?? Date.now(),
+    matcher,
+  })
   return matcher
 }
 
 async function scanAndHighlight(): Promise<void> {
   const gen = ++scanGeneration
+  fullScanRunning = true
+  pendingMutationRoots.clear()
 
   if (
     !currentSettings.enabled ||
@@ -382,29 +467,37 @@ async function scanAndHighlight(): Promise<void> {
     return
   }
 
-  const bodyTextSample = document.body?.textContent?.slice(0, 3000) ?? ''
-  activeLang =
-    currentSettings.languageMode === 'auto'
-      ? detectPageLanguage(document.documentElement.lang, bodyTextSample)
-      : currentSettings.languageMode
+  activeLang = resolveActiveLang()
 
   let matcher: CompiledGlossaryMatcher
   try {
     matcher = await getMatcherForLang(activeLang)
   } catch (err) {
+    fullScanRunning = false
     console.warn('[Synthszr Lexikon] Glossary index load failed:', err)
     return
   }
 
-  if (gen !== scanGeneration || !document.body) return
+  if (gen !== scanGeneration || !document.body) {
+    fullScanRunning = false
+    return
+  }
 
+  const nextScannedNodes = new WeakSet<Text>()
   const textNodes = collectEligibleTextNodes(document.body)
+  for (let i = 0; i < textNodes.length; i++) {
+    nextScannedNodes.add(textNodes[i])
+  }
+
   const pending: PendingNodeMatches[] = []
   const unambiguousSlugs = new Set<string>()
   let cursor = 0
 
   const processChunk = () => {
-    if (gen !== scanGeneration) return
+    if (gen !== scanGeneration) {
+      fullScanRunning = false
+      return
+    }
     const sliceStart = performance.now()
 
     while (cursor < textNodes.length) {
@@ -432,11 +525,12 @@ async function scanAndHighlight(): Promise<void> {
     const isAiPageContext = unambiguousSlugs.size >= 1
     const nextHitMap = new WeakMap<Text, HitEntry[]>()
     const ranges: Range[] = []
+    const fixedCache = new WeakMap<Element, boolean>()
 
     for (let i = 0; i < pending.length && ranges.length < MAX_HIGHLIGHTS_PER_PAGE; i++) {
       const { node, matches } = pending[i]
       if (!node.isConnected) continue
-      if (isInsideFixedContainer(node.parentElement)) continue
+      if (isInsideFixedContainer(node.parentElement, fixedCache)) continue
 
       const entries: HitEntry[] = []
       const nodeLen = node.nodeValue?.length ?? 0
@@ -464,9 +558,17 @@ async function scanAndHighlight(): Promise<void> {
       }
     }
 
-    if (gen !== scanGeneration) return
+    if (gen !== scanGeneration) {
+      fullScanRunning = false
+      return
+    }
 
+    fullScanRunning = false
+    scannedNodes = nextScannedNodes
     hitMap = nextHitMap
+    pageUnambiguousSlugs = unambiguousSlugs
+    activeRanges = ranges
+    activeHighlightCount = ranges.length
     markerOverlay.setRanges(ranges, currentSettings.highlightStyle)
     const nativeGlossaryCount = document.querySelectorAll('a[data-glossary-slug]').length
     reportPageState(ranges.length + nativeGlossaryCount, false)
@@ -475,16 +577,187 @@ async function scanAndHighlight(): Promise<void> {
   scheduleIdle(processChunk)
 }
 
+function collectNewTextNodesFromRoots(roots: Node[]): Text[] {
+  const collected: Text[] = []
+  for (let i = 0; i < roots.length; i++) {
+    const root = roots[i]
+    if (!root.isConnected) continue
+
+    if (root.nodeType === Node.TEXT_NODE) {
+      const textNode = root as Text
+      if (!scannedNodes.has(textNode) && isTextNodeEligible(textNode)) {
+        scannedNodes.add(textNode)
+        collected.push(textNode)
+      }
+      continue
+    }
+
+    if (root instanceof Element) {
+      if (FORBIDDEN_TAGS.has(root.tagName) || root.closest(FORBIDDEN_ANCESTOR_SELECTOR)) {
+        continue
+      }
+      const nodes = collectEligibleTextNodes(root)
+      for (let j = 0; j < nodes.length; j++) {
+        const n = nodes[j]
+        if (!scannedNodes.has(n)) {
+          scannedNodes.add(n)
+          collected.push(n)
+        }
+      }
+    }
+  }
+  return collected
+}
+
+function scheduleMutationFlush(delayMs = 450): void {
+  if (mutationTimer !== null) window.clearTimeout(mutationTimer)
+  mutationTimer = window.setTimeout(() => {
+    mutationTimer = null
+    void scanIncrementalRoots()
+  }, delayMs)
+}
+
+async function scanIncrementalRoots(): Promise<void> {
+  if (fullScanRunning) {
+    if (pendingMutationRoots.size > 0) scheduleMutationFlush(250)
+    return
+  }
+
+  if (
+    !currentSettings.enabled ||
+    isGlossarySelfPage() ||
+    isDomainExcluded(window.location.hostname, currentSettings.excludedDomains)
+  ) {
+    pendingMutationRoots.clear()
+    return
+  }
+
+  const cachedEntry = matcherCache.get(activeLang)
+  if (!cachedEntry) {
+    pendingMutationRoots.clear()
+    await scanAndHighlight()
+    return
+  }
+  const matcher = cachedEntry.matcher
+
+  const roots = Array.from(pendingMutationRoots)
+  pendingMutationRoots.clear()
+  if (roots.length === 0) return
+
+  const prevRangeCount = activeRanges.length
+  const connectedRanges = activeRanges.filter((r) => r.startContainer.isConnected)
+  const droppedDisconnected = connectedRanges.length !== prevRangeCount
+  activeRanges = connectedRanges
+  activeHighlightCount = activeRanges.length
+
+  const newTextNodes = collectNewTextNodesFromRoots(roots)
+  if (newTextNodes.length === 0) {
+    if (droppedDisconnected) {
+      markerOverlay.setRanges(activeRanges, currentSettings.highlightStyle)
+      const nativeGlossaryCount = document.querySelectorAll('a[data-glossary-slug]').length
+      reportPageState(activeRanges.length + nativeGlossaryCount, false)
+    }
+    return
+  }
+
+  const gen = scanGeneration
+  const hadAiContextBefore = pageUnambiguousSlugs.size >= 1
+  const pending: PendingNodeMatches[] = []
+  let cursor = 0
+
+  const processIncrementalChunk = () => {
+    if (gen !== scanGeneration) return
+    const sliceStart = performance.now()
+
+    while (cursor < newTextNodes.length) {
+      const node = newTextNodes[cursor++]
+      const value = node.nodeValue
+      if (!value) continue
+
+      const matches = findMatchesInText(matcher, value)
+      if (matches.length > 0) {
+        pending.push({ node, matches })
+        for (let i = 0; i < matches.length; i++) {
+          if (!matches[i].ambiguous) {
+            pageUnambiguousSlugs.add(matches[i].term.s)
+          }
+        }
+      }
+
+      if (performance.now() - sliceStart >= FRAME_BUDGET_MS && cursor < newTextNodes.length) {
+        scheduleIdle(processIncrementalChunk)
+        return
+      }
+    }
+
+    if (gen !== scanGeneration) return
+
+    // If newly inserted text promoted page context to AI-relevant, perform one full rescan
+    // so previously skipped ambiguous terms elsewhere on the page become active.
+    if (!hadAiContextBefore && pageUnambiguousSlugs.size >= 1) {
+      void scanAndHighlight()
+      return
+    }
+
+    const isAiPageContext = pageUnambiguousSlugs.size >= 1
+    const fixedCache = new WeakMap<Element, boolean>()
+    let addedAny = false
+
+    for (let i = 0; i < pending.length && activeRanges.length < MAX_HIGHLIGHTS_PER_PAGE; i++) {
+      const { node, matches } = pending[i]
+      if (!node.isConnected) continue
+      if (isInsideFixedContainer(node.parentElement, fixedCache)) continue
+
+      const existingEntries = hitMap.get(node) ?? []
+      const entries: HitEntry[] = [...existingEntries]
+      const nodeLen = node.nodeValue?.length ?? 0
+
+      for (let m = 0; m < matches.length && activeRanges.length < MAX_HIGHLIGHTS_PER_PAGE; m++) {
+        const match = matches[m]
+        if (match.ambiguous && !isAiPageContext) continue
+        if (match.end > nodeLen) continue
+
+        const range = document.createRange()
+        range.setStart(node, match.start)
+        range.setEnd(node, match.end)
+        activeRanges.push(range)
+        entries.push({
+          range,
+          term: match.term,
+          start: match.start,
+          end: match.end,
+          surface: match.surface,
+        })
+        addedAny = true
+      }
+
+      if (entries.length > 0) {
+        hitMap.set(node, entries)
+      }
+    }
+
+    if (addedAny || droppedDisconnected) {
+      activeHighlightCount = activeRanges.length
+      markerOverlay.setRanges(activeRanges, currentSettings.highlightStyle)
+      const nativeGlossaryCount = document.querySelectorAll('a[data-glossary-slug]').length
+      reportPageState(activeRanges.length + nativeGlossaryCount, false)
+    }
+  }
+
+  scheduleIdle(processIncrementalChunk)
+}
+
 function setupListeners(): void {
   document.addEventListener(
     'mousemove',
     (e: MouseEvent) => {
+      if (activeHighlightCount === 0) return
       lastPointer = { x: e.clientX, y: e.clientY }
       if (hoverRafPending) return
       hoverRafPending = true
       window.requestAnimationFrame(() => {
         hoverRafPending = false
-        if (popover.isEventInside(e.target)) {
+        if (activeHighlightCount === 0 || popover.isEventInside(e.target)) {
           document.documentElement.style.cursor = ''
           return
         }
@@ -522,8 +795,12 @@ function setupListeners(): void {
               langMatch?.[1] === 'en' ? 'en' : langMatch?.[1] === 'de' ? 'de' : activeLang
             const surface = (nativeAnchor.textContent ?? '').trim() || slug
             const cachedTerm =
-              termMapByLang.get(linkLang)?.get(slug) ??
-              termMapByLang.get(activeLang)?.get(slug) ?? { s: slug, n: surface, d: '' }
+              matcherCache.get(linkLang)?.matcher.termBySlug.get(slug) ??
+              matcherCache.get(activeLang)?.matcher.termBySlug.get(slug) ?? {
+                s: slug,
+                n: surface,
+                d: '',
+              }
 
             popover.open(cachedTerm, surface, nativeAnchor.getBoundingClientRect(), linkLang)
             return
@@ -559,30 +836,44 @@ function setupListeners(): void {
             ) {
               continue
             }
-            hasRelevantChange = true
-            break
+            if (added.nodeType === Node.ELEMENT_NODE || added.nodeType === Node.TEXT_NODE) {
+              pendingMutationRoots.add(added)
+              hasRelevantChange = true
+            }
           }
         }
-        if (hasRelevantChange) break
       }
 
       if (!hasRelevantChange) return
-      if (mutationTimer !== null) window.clearTimeout(mutationTimer)
-      mutationTimer = window.setTimeout(() => {
-        mutationTimer = null
-        void scanAndHighlight()
-      }, 450)
+      scheduleMutationFlush(450)
     })
 
     observer.observe(document.body, { childList: true, subtree: true })
   }
 
   ext.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== 'sync') return
-    const next = changes[STORAGE_KEYS.SETTINGS]?.newValue as ExtensionSettings | undefined
-    if (!next) return
-    currentSettings = { ...DEFAULT_SETTINGS, ...next }
-    void scanAndHighlight()
+    if (areaName === 'sync') {
+      const next = changes[STORAGE_KEYS.SETTINGS]?.newValue as ExtensionSettings | undefined
+      if (!next) return
+      currentSettings = { ...DEFAULT_SETTINGS, ...next }
+      void scanAndHighlight()
+      return
+    }
+
+    if (areaName === 'local') {
+      let shouldRescan = false
+      if (STORAGE_KEYS.INDEX_DE in changes) {
+        matcherCache.delete('de')
+        if (activeLang === 'de') shouldRescan = true
+      }
+      if (STORAGE_KEYS.INDEX_EN in changes) {
+        matcherCache.delete('en')
+        if (activeLang === 'en') shouldRescan = true
+      }
+      if (shouldRescan) {
+        void scanAndHighlight()
+      }
+    }
   })
 }
 

@@ -49,6 +49,15 @@ import {
 import { RankingSuggestionsPanel } from '@/components/admin/ranking-suggestions-panel'
 import type { BundleType } from '@/lib/i18n/bundle-labels'
 import { buildStoryBlocks } from '@/lib/news-queue/story-blocks'
+import { applyMultiSelect } from '@/lib/news-queue/multi-select'
+
+const BULK_BUNDLE_PILLS: Array<{ tag: BundleType; label: string; cls: string }> = [
+  { tag: 'cover_story', label: 'Cover Story', cls: 'bg-violet-400 hover:bg-violet-300 text-black border-violet-500' },
+  { tag: 'topic', label: 'Thema des Tages', cls: 'bg-lime-400 hover:bg-lime-300 text-black border-lime-500' },
+  { tag: 'deep_dive', label: 'Deep Dive', cls: 'bg-rose-400 hover:bg-rose-300 text-black border-rose-500' },
+  { tag: 'long_read', label: 'Long Read', cls: 'bg-orange-400 hover:bg-orange-300 text-black border-orange-500' },
+  { tag: 'recap', label: 'Nachlese', cls: 'bg-cyan-400 hover:bg-cyan-300 text-black border-cyan-500' },
+]
 
 interface QueueStats {
   pending: number
@@ -170,6 +179,8 @@ export default function NewsQueuePage() {
   const [balancedSelection, setBalancedSelection] = useState<BalancedSelection[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
+  const lastSelectedIdRef = useRef<string | null>(null)
+  const masterCheckboxRef = useRef<HTMLInputElement>(null)
   const [statusFilter, setStatusFilter] = useState<string>('pending')
   // Day pager for pending: null = live (rolling 72h, last three days),
   // otherwise a YYYY-MM-DD string for a single calendar day in the past.
@@ -328,13 +339,50 @@ export default function NewsQueuePage() {
     }
   }
 
-  // Reset page when filter changes
+  // Reset page and selection when filter changes
   useEffect(() => {
     setCurrentPage(0)
+    setSelectedItems(new Set())
+    lastSelectedIdRef.current = null
     // Leaving the pending tab also exits the day pager — the date
     // navigator only makes sense for pending items.
     if (statusFilter !== 'pending') setViewDay(null)
   }, [statusFilter])
+
+  useEffect(() => {
+    setSelectedItems(new Set())
+    lastSelectedIdRef.current = null
+  }, [viewDay, currentPage])
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (
+        viewingItem ||
+        showImportDialog ||
+        showManualAddDialog ||
+        showAddTagDialog ||
+        showDeselectConfirm ||
+        showBalancedDialog
+      ) {
+        return
+      }
+      if (selectedItems.size > 0) {
+        setSelectedItems(new Set())
+        lastSelectedIdRef.current = null
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [
+    selectedItems.size,
+    viewingItem,
+    showImportDialog,
+    showManualAddDialog,
+    showAddTagDialog,
+    showDeselectConfirm,
+    showBalancedDialog,
+  ])
 
   // Fetch content from daily_repo when preview dialog opens and content is missing
   useEffect(() => {
@@ -603,8 +651,13 @@ export default function NewsQueuePage() {
     setActionLoading(null)
   }
 
+  const clearSelection = () => {
+    setSelectedItems(new Set())
+    lastSelectedIdRef.current = null
+  }
+
   const handleSkip = async (reason: string) => {
-    if (selectedItems.size === 0) return
+    if (visibleSelectedIds.length === 0) return
     setActionLoading('skip')
     try {
       const res = await fetch('/api/admin/news-queue', {
@@ -612,12 +665,12 @@ export default function NewsQueuePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'skip',
-          itemIds: Array.from(selectedItems),
+          itemIds: visibleSelectedIds,
           reason
         })
       })
       if (res.ok) {
-        setSelectedItems(new Set())
+        clearSelection()
         fetchData()
       }
     } catch (error) {
@@ -627,7 +680,7 @@ export default function NewsQueuePage() {
   }
 
   const handleSelect = async () => {
-    if (selectedItems.size === 0) return
+    if (visibleSelectedIds.length === 0) return
     setActionLoading('select')
     try {
       const res = await fetch('/api/admin/news-queue', {
@@ -635,7 +688,7 @@ export default function NewsQueuePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'select',
-          itemIds: Array.from(selectedItems)
+          itemIds: visibleSelectedIds
         })
       })
       if (res.ok) {
@@ -643,12 +696,120 @@ export default function NewsQueuePage() {
         if (data.error) {
           alert(`Fehler: ${data.error}`)
         } else {
-          setSelectedItems(new Set())
+          clearSelection()
           fetchData()
         }
       }
     } catch (error) {
       console.error('Select failed:', error)
+    }
+    setActionLoading(null)
+  }
+
+  const handleBulkBundleType = async (tag: BundleType | null) => {
+    const targetIds = visibleSelectedIds
+    if (targetIds.length === 0) return
+    if (statusFilter === 'pending' && tag === null) return
+
+    setActionLoading('bulk-bundle')
+    const targetSet = new Set(targetIds)
+
+    try {
+      if (statusFilter === 'pending' && tag !== null) {
+        const selectRes = await fetch('/api/admin/news-queue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'select', itemIds: targetIds }),
+        })
+        const selectData = await selectRes.json().catch(() => ({}))
+        if (!selectRes.ok || selectData.error) {
+          alert(`Fehler beim Auswählen: ${selectData.error || `HTTP ${selectRes.status}`}`)
+          setActionLoading(null)
+          return
+        }
+
+        const labelRes = await fetch('/api/admin/news-queue/bundle-type', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: targetIds, bundle_type: tag }),
+        })
+        const labelData = await labelRes.json().catch(() => ({}))
+        if (!labelRes.ok || !labelData.ok) {
+          alert(`Fehler beim Setzen des Labels: ${labelData.error || `HTTP ${labelRes.status}`}`)
+        } else {
+          setItems(prev => prev.filter(item => !targetSet.has(item.id)))
+          clearSelection()
+        }
+        await fetchData()
+        setActionLoading(null)
+        return
+      }
+
+      // Selected view: optimistic batch relabel
+      const previousTypes = new Map<string, BundleType | null>()
+      for (const item of items) {
+        if (targetSet.has(item.id)) {
+          previousTypes.set(item.id, item.bundle_type ?? null)
+        }
+      }
+      setItems(prev =>
+        prev.map(item => (targetSet.has(item.id) ? { ...item, bundle_type: tag } : item)),
+      )
+
+      const res = await fetch('/api/admin/news-queue/bundle-type', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: targetIds, bundle_type: tag }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.ok) {
+        setItems(prev =>
+          prev.map(item =>
+            previousTypes.has(item.id)
+              ? { ...item, bundle_type: previousTypes.get(item.id) ?? null }
+              : item,
+          ),
+        )
+        alert(`Fehler: ${data.error || 'Unbekannter Fehler'}`)
+      } else {
+        clearSelection()
+      }
+    } catch (error) {
+      console.error('Bulk bundle type update failed:', error)
+      alert('Netzwerkfehler beim Setzen des Labels')
+    }
+    setActionLoading(null)
+  }
+
+  const handleBulkDelete = async () => {
+    const targetIds = visibleSelectedIds
+    if (targetIds.length === 0) return
+
+    setActionLoading('bulk-delete')
+    const targetSet = new Set(targetIds)
+
+    try {
+      const payload =
+        statusFilter === 'pending'
+          ? { action: 'skip', itemIds: targetIds, reason: 'manual_remove' }
+          : { action: 'reset-items', itemIds: targetIds, source: 'queue' }
+
+      const res = await fetch('/api/admin/news-queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && !data.error) {
+        setItems(prev => prev.filter(item => !targetSet.has(item.id)))
+        clearSelection()
+        await fetchData()
+      } else {
+        alert(`Fehler: ${data.error || `HTTP ${res.status}`}`)
+      }
+    } catch (error) {
+      console.error('Bulk delete failed:', error)
+      alert('Netzwerkfehler beim Löschen')
     }
     setActionLoading(null)
   }
@@ -752,21 +913,24 @@ export default function NewsQueuePage() {
     setStats((prev) => (prev ? { ...prev, pending: Math.max(0, prev.pending - 1), selected: prev.selected + 1 } : prev))
   }
 
-  const toggleSelect = (id: string) => {
-    const newSelected = new Set(selectedItems)
-    if (newSelected.has(id)) {
-      newSelected.delete(id)
-    } else {
-      newSelected.add(id)
-    }
-    setSelectedItems(newSelected)
+  const handleToggleSelect = (id: string, shiftKey: boolean = false) => {
+    const next = applyMultiSelect({
+      visibleIds: visibleItemIds,
+      selected: selectedItems,
+      anchorId: lastSelectedIdRef.current,
+      clickedId: id,
+      shiftKey,
+    })
+    setSelectedItems(next.selected)
+    lastSelectedIdRef.current = next.anchorId
   }
 
   const selectAll = () => {
-    if (selectedItems.size === items.length) {
-      setSelectedItems(new Set())
+    if (visibleItemIds.length > 0 && visibleSelectedIds.length === visibleItemIds.length) {
+      clearSelection()
     } else {
-      setSelectedItems(new Set(items.map(i => i.id)))
+      setSelectedItems(new Set(visibleItemIds))
+      lastSelectedIdRef.current = null
     }
   }
 
@@ -870,6 +1034,19 @@ export default function NewsQueuePage() {
       .sort(([, a], [, b]) => b.dateMs - a.dateMs)
       .map(([key, { items }]) => [key, items] as [string, QueueItem[]])
   })()
+
+  const visibleItemIds =
+    statusFilter === 'pending'
+      ? dayGroups.flatMap(([, dayItems]) => buildStoryBlocks(dayItems).map((b) => b.item.id))
+      : buildStoryBlocks(filteredItems).map((b) => b.item.id)
+  const visibleSelectedIds = visibleItemIds.filter((id) => selectedItems.has(id))
+
+  useEffect(() => {
+    if (masterCheckboxRef.current) {
+      masterCheckboxRef.current.indeterminate =
+        visibleSelectedIds.length > 0 && visibleSelectedIds.length < visibleItemIds.length
+    }
+  }, [visibleSelectedIds.length, visibleItemIds.length])
 
   return (
     <Collapsible open={showSidebar} onOpenChange={setShowSidebar}>
@@ -1345,6 +1522,155 @@ export default function NewsQueuePage() {
           ) : (
             <Card>
               <CardContent className="p-0">
+                {/* Selection & Bulk Action Header */}
+                <div
+                  className={`flex flex-wrap items-center gap-2 px-3 py-2 border-b text-xs transition-colors ${
+                    visibleSelectedIds.length > 0
+                      ? 'bg-lime-50/90 dark:bg-lime-950/30 border-lime-300/60 dark:border-lime-800/60'
+                      : 'bg-muted/30'
+                  }`}
+                >
+                  <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      ref={masterCheckboxRef}
+                      type="checkbox"
+                      checked={visibleItemIds.length > 0 && visibleSelectedIds.length === visibleItemIds.length}
+                      onChange={selectAll}
+                      aria-label="Alle sichtbaren Artikel auswählen"
+                      className="h-3.5 w-3.5 rounded border-muted-foreground/40 accent-zinc-900 dark:accent-lime-400 cursor-pointer"
+                    />
+                    {visibleSelectedIds.length === 0 ? (
+                      <span className="text-muted-foreground">
+                        Alle auswählen ({visibleItemIds.length})
+                      </span>
+                    ) : (
+                      <span className="font-semibold text-foreground">
+                        {visibleSelectedIds.length} ausgewählt
+                      </span>
+                    )}
+                  </label>
+
+                  {visibleSelectedIds.length === 0 ? (
+                    <span className="ml-auto text-[11px] text-muted-foreground hidden sm:inline">
+                      Checkbox oder Shift+Klick zum Mehrfach-Auswählen
+                    </span>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={clearSelection}
+                        className="text-muted-foreground hover:text-foreground p-0.5 rounded"
+                        title="Auswahl aufheben (Esc)"
+                        aria-label="Auswahl aufheben"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+
+                      <div className="flex flex-wrap items-center gap-1.5 ml-1">
+                        {statusFilter === 'pending' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-[11px] px-2 bg-background"
+                            onClick={handleSelect}
+                            disabled={actionLoading !== null}
+                          >
+                            {actionLoading === 'select' ? (
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            ) : (
+                              <Play className="h-3 w-3 mr-1" />
+                            )}
+                            Select ({visibleSelectedIds.length})
+                          </Button>
+                        )}
+
+                        {(statusFilter === 'pending' || statusFilter === 'selected') && (
+                          <div className="flex flex-wrap items-center gap-1">
+                            {BULK_BUNDLE_PILLS.map(({ tag, label, cls }) => (
+                              <button
+                                key={tag}
+                                type="button"
+                                onClick={() => handleBulkBundleType(tag)}
+                                disabled={actionLoading !== null}
+                                title={
+                                  statusFilter === 'pending'
+                                    ? `Auswählen & als „${label}" labeln`
+                                    : `Alle ${visibleSelectedIds.length} als „${label}" labeln`
+                                }
+                                className={`text-[10px] px-2 h-6 rounded-full border font-medium whitespace-nowrap transition-opacity disabled:opacity-50 ${cls}`}
+                              >
+                                {actionLoading === 'bulk-bundle' ? '…' : label}
+                              </button>
+                            ))}
+                            {statusFilter === 'selected' && (
+                              <button
+                                type="button"
+                                onClick={() => handleBulkBundleType(null)}
+                                disabled={actionLoading !== null}
+                                title="Label bei allen ausgewählten Artikeln entfernen"
+                                className="text-[10px] px-2 h-6 rounded-full border border-muted-foreground/40 bg-background text-muted-foreground hover:text-foreground whitespace-nowrap transition-colors disabled:opacity-50"
+                              >
+                                Ohne Label
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {statusFilter === 'pending' && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="h-6 text-[11px] px-2"
+                            onClick={handleBulkDelete}
+                            disabled={actionLoading !== null}
+                          >
+                            {actionLoading === 'bulk-delete' ? (
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3 w-3 mr-1" />
+                            )}
+                            Löschen ({visibleSelectedIds.length})
+                          </Button>
+                        )}
+
+                        {statusFilter === 'selected' && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="h-6 text-[11px] px-2"
+                            onClick={handleBulkDelete}
+                            disabled={actionLoading !== null}
+                          >
+                            {actionLoading === 'bulk-delete' ? (
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3 w-3 mr-1" />
+                            )}
+                            Aus Auswahl entfernen ({visibleSelectedIds.length})
+                          </Button>
+                        )}
+
+                        {(statusFilter === 'skipped' || statusFilter === 'expired') && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-[11px] px-2 bg-background"
+                            onClick={handleBulkDelete}
+                            disabled={actionLoading !== null}
+                          >
+                            {actionLoading === 'bulk-delete' ? (
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-3 w-3 mr-1" />
+                            )}
+                            Zurück auf Pending ({visibleSelectedIds.length})
+                          </Button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+
                 <div className="max-h-[60vh] overflow-y-auto">
                   {(statusFilter === 'pending' ? dayGroups : [['', filteredItems] as [string, QueueItem[]]]).map(([dayKey, dayItems], groupIdx) => {
                     // Calculate rank offset: count items in previous day groups
@@ -1361,7 +1687,9 @@ export default function NewsQueuePage() {
                         </div>
                       )}
                       <div className="divide-y">
-                        {buildStoryBlocks(dayItems).map(({ item, blockStart, blockSize, headline }, idx) => (
+                        {buildStoryBlocks(dayItems).map(({ item, blockStart, blockSize, headline }, idx) => {
+                          const isRowSelected = selectedItems.has(item.id)
+                          return (
                           <Fragment key={item.id}>
                             {/* Kopfzeile eines Techmeme-Bündels: Diese Quellen
                                 ergeben im Artikel EINEN Abschnitt. */}
@@ -1398,8 +1726,28 @@ export default function NewsQueuePage() {
                               </div>
                             )}
                           <div
-                            className={`flex items-center gap-2 px-3 py-2 transition-colors ${blockSize > 1 ? 'border-l-2 border-rose-400 ' : ''}${item.via_ranking ? 'bg-lime-50 hover:bg-lime-100' : 'hover:bg-muted/50'}`}
+                            onMouseDown={(e) => {
+                              if (e.shiftKey) e.preventDefault()
+                            }}
+                            className={`flex items-center gap-2 px-3 py-2 transition-colors ${blockSize > 1 ? 'border-l-2 border-rose-400 ' : ''}${
+                              isRowSelected
+                                ? 'bg-lime-100/70 dark:bg-lime-950/30 ring-1 ring-inset ring-lime-500/40'
+                                : item.via_ranking
+                                ? 'bg-lime-50 hover:bg-lime-100'
+                                : 'hover:bg-muted/50'
+                            }`}
                           >
+                            <input
+                              type="checkbox"
+                              checked={isRowSelected}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleToggleSelect(item.id, e.shiftKey)
+                              }}
+                              onChange={() => {}}
+                              aria-label={`Artikel auswählen: ${item.title}`}
+                              className="h-3.5 w-3.5 rounded border-muted-foreground/40 accent-zinc-900 dark:accent-lime-400 cursor-pointer shrink-0"
+                            />
                             {/* Rank number within day */}
                             <span className="text-[10px] font-mono text-muted-foreground w-6 text-right shrink-0">
                               {rankOffset + idx + 1}.
@@ -1508,7 +1856,15 @@ export default function NewsQueuePage() {
                             )}
                             <div
                               className="min-w-0 flex-1 cursor-pointer"
-                              onClick={() => setViewingItem(item)}
+                              onClick={(e) => {
+                                if (e.shiftKey || e.metaKey || e.ctrlKey) {
+                                  e.preventDefault()
+                                  window.getSelection()?.removeAllRanges()
+                                  handleToggleSelect(item.id, e.shiftKey)
+                                  return
+                                }
+                                setViewingItem(item)
+                              }}
                             >
                               <div className="text-sm font-medium truncate hover:text-primary flex items-center gap-1.5">
                                 {(() => {
@@ -1554,7 +1910,8 @@ export default function NewsQueuePage() {
                             </div>
                           </div>
                           </Fragment>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   )})}

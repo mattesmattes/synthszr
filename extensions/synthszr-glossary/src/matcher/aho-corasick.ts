@@ -8,27 +8,27 @@ export interface GlossaryMatch {
   ambiguous: boolean
 }
 
-interface PatternEntry {
+interface IndexedPattern {
   term: ExtensionGlossaryTerm
+  /** Populated only for multi-token or symbol patterns; single-token patterns match the bucket key directly. */
+  lower: string
   len: number
+  singleToken: boolean
   /** Exact surface required when pattern is an all-uppercase short acronym (e.g. "RAG", "MCP") */
   exactCase: string | null
   ambiguous: boolean
 }
 
-interface TrieNode {
-  next: Map<string, number>
-  fail: number
-  out: number[]
-}
-
 export interface CompiledGlossaryMatcher {
-  nodes: TrieNode[]
-  patterns: PatternEntry[]
+  buckets: Map<string, IndexedPattern[]>
+  symbolPatterns: IndexedPattern[]
+  termBySlug: Map<string, ExtensionGlossaryTerm>
+  patternCount: number
   termCount: number
 }
 
 const WORD_CHAR_RE = /[\p{L}\p{N}_]/u
+const FIRST_TOKEN_RE = /^[\p{L}\p{N}_]+/u
 
 function isWordChar(ch: string | undefined): boolean {
   return ch !== undefined && WORD_CHAR_RE.test(ch)
@@ -40,84 +40,83 @@ function isStrictAcronym(pattern: string): boolean {
 }
 
 /**
- * Compiles all glossary canonical names and aliases into an Aho-Corasick automaton.
- * Runs in O(sum of pattern lengths) once per index load (~10–25 ms for 3,300+ terms).
+ * Compiles all glossary canonical names and aliases into a First-Word Token Hash Index.
+ * Runs in ~8–15 ms for 3,300+ terms (~3.7 MB retained vs ~42 MB for a character Trie).
  */
 export function compileGlossaryMatcher(terms: ExtensionGlossaryTerm[]): CompiledGlossaryMatcher {
-  const nodes: TrieNode[] = [{ next: new Map(), fail: 0, out: [] }]
-  const patterns: PatternEntry[] = []
+  const buckets = new Map<string, IndexedPattern[]>()
+  const symbolPatterns: IndexedPattern[] = []
+  const termBySlug = new Map<string, ExtensionGlossaryTerm>()
+  const seenPatterns = new Set<string>()
+  let patternCount = 0
 
-  const addPattern = (rawSurface: string, term: ExtensionGlossaryTerm) => {
+  const addPattern = (rawSurface: string, compactTerm: ExtensionGlossaryTerm) => {
     const surface = rawSurface.trim()
     if (surface.length < 2) return
 
     const exactCase = isStrictAcronym(surface) ? surface : null
+    const lower = surface.toLowerCase()
+    const dedupKey = `${lower}\0${exactCase ?? ''}\0${compactTerm.s}`
+    if (seenPatterns.has(dedupKey)) return
+    seenPatterns.add(dedupKey)
+
     const compactLen = surface.replace(/[^A-Za-z0-9]/g, '').length
     const isSingleWord = !/\s/.test(surface)
     const ambiguous =
       isSingleWord &&
-      (term.amb === 1 || (compactLen <= 3 && !/^(llm|agi|asi)$/i.test(surface)))
+      (compactTerm.amb === 1 || (compactLen <= 3 && !/^(llm|agi|asi)$/i.test(surface)))
 
-    const patternId = patterns.length
-    patterns.push({
-      term,
-      len: surface.length,
-      exactCase,
-      ambiguous,
-    })
-
-    const lower = surface.toLowerCase()
-    let state = 0
-    for (let i = 0; i < lower.length; i++) {
-      const ch = lower[i]
-      let nxt = nodes[state].next.get(ch)
-      if (nxt === undefined) {
-        nxt = nodes.length
-        nodes.push({ next: new Map(), fail: 0, out: [] })
-        nodes[state].next.set(ch, nxt)
+    const firstMatch = FIRST_TOKEN_RE.exec(lower)
+    if (firstMatch) {
+      const firstToken = firstMatch[0]
+      const singleToken = firstToken.length === lower.length
+      const entry: IndexedPattern = {
+        term: compactTerm,
+        lower: singleToken ? '' : lower,
+        len: surface.length,
+        singleToken,
+        exactCase,
+        ambiguous,
       }
-      state = nxt
+      let bucket = buckets.get(firstToken)
+      if (!bucket) {
+        bucket = []
+        buckets.set(firstToken, bucket)
+      }
+      bucket.push(entry)
+    } else {
+      symbolPatterns.push({
+        term: compactTerm,
+        lower,
+        len: surface.length,
+        singleToken: false,
+        exactCase,
+        ambiguous,
+      })
     }
-    nodes[state].out.push(patternId)
+    patternCount++
   }
 
   for (const term of terms) {
-    addPattern(term.n, term)
+    // Store one compact term object without alias array so raw `a[]` arrays can be GC'd
+    const compactTerm: ExtensionGlossaryTerm = term.amb
+      ? { s: term.s, n: term.n, d: term.d, amb: 1 }
+      : { s: term.s, n: term.n, d: term.d }
+    termBySlug.set(compactTerm.s, compactTerm)
+
+    addPattern(term.n, compactTerm)
     if (term.a) {
       for (const alias of term.a) {
-        addPattern(alias, term)
+        addPattern(alias, compactTerm)
       }
     }
   }
 
-  // BFS to build Aho-Corasick failure links & merge outputs
-  const queue: number[] = []
-  for (const [, child] of nodes[0].next) {
-    nodes[child].fail = 0
-    queue.push(child)
-  }
-
-  for (let qIdx = 0; qIdx < queue.length; qIdx++) {
-    const r = queue[qIdx]
-    for (const [ch, s] of nodes[r].next) {
-      queue.push(s)
-      let state = nodes[r].fail
-      while (state !== 0 && !nodes[state].next.has(ch)) {
-        state = nodes[state].fail
-      }
-      const failState = nodes[state].next.get(ch) ?? 0
-      nodes[s].fail = failState
-      if (nodes[failState].out.length > 0) {
-        nodes[s].out.push(...nodes[failState].out)
-      }
-    }
-  }
-
-  return { nodes, patterns, termCount: terms.length }
+  return { buckets, symbolPatterns, termBySlug, patternCount, termCount: terms.length }
 }
 
 /**
- * Finds non-overlapping glossary matches in `text` in O(text.length + hits) time.
+ * Finds non-overlapping glossary matches in `text` using word-token bucket lookup.
  * Enforces Unicode word boundaries on both sides (protecting German Komposita like "Agentur")
  * and exact uppercase matching for short acronyms (e.g. "RAG", "MCP", "GAN").
  */
@@ -125,32 +124,28 @@ export function findMatchesInText(
   matcher: CompiledGlossaryMatcher,
   text: string,
 ): GlossaryMatch[] {
-  if (!text || text.length < 2 || matcher.patterns.length === 0) return []
+  if (!text || text.length < 2 || matcher.patternCount === 0) return []
 
   const lower = text.toLowerCase()
   const candidates: GlossaryMatch[] = []
-  const nodes = matcher.nodes
-  let state = 0
+  const tokenRe = /[\p{L}\p{N}_]+/gu
+  let tokenMatch: RegExpExecArray | null
 
-  for (let i = 0; i < lower.length; i++) {
-    const ch = lower[i]
-    while (state !== 0 && !nodes[state].next.has(ch)) {
-      state = nodes[state].fail
-    }
-    state = nodes[state].next.get(ch) ?? 0
+  while ((tokenMatch = tokenRe.exec(lower)) !== null) {
+    const bucket = matcher.buckets.get(tokenMatch[0])
+    if (!bucket) continue
 
-    const out = nodes[state].out
-    if (out.length === 0) continue
+    const start = tokenMatch.index
+    for (let k = 0; k < bucket.length; k++) {
+      const p = bucket[k]
+      const end = start + p.len
+      if (end > text.length) continue
 
-    const end = i + 1
-    // Fast right-boundary check once per position before inspecting output list
-    if (isWordChar(text[end])) continue
-
-    for (let k = 0; k < out.length; k++) {
-      const p = matcher.patterns[out[k]]
-      const start = end - p.len
-      if (start < 0) continue
-      if (isWordChar(text[start - 1])) continue
+      if (!p.singleToken) {
+        if (end > lower.length) continue
+        if (!lower.startsWith(p.lower, start)) continue
+        if (end < lower.length && isWordChar(lower[end])) continue
+      }
 
       const surface = text.slice(start, end)
       if (p.exactCase !== null && surface !== p.exactCase) continue
@@ -162,6 +157,33 @@ export function findMatchesInText(
         surface,
         ambiguous: p.ambiguous,
       })
+    }
+  }
+
+  if (matcher.symbolPatterns.length > 0) {
+    for (let s = 0; s < matcher.symbolPatterns.length; s++) {
+      const p = matcher.symbolPatterns[s]
+      let pos = 0
+      while ((pos = lower.indexOf(p.lower, pos)) !== -1) {
+        const end = pos + p.len
+        if (
+          end <= text.length &&
+          (pos === 0 || !isWordChar(lower[pos - 1])) &&
+          (end >= lower.length || !isWordChar(lower[end]))
+        ) {
+          const surface = text.slice(pos, end)
+          if (p.exactCase === null || surface === p.exactCase) {
+            candidates.push({
+              term: p.term,
+              start: pos,
+              end,
+              surface,
+              ambiguous: p.ambiguous,
+            })
+          }
+        }
+        pos += 1
+      }
     }
   }
 

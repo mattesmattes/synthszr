@@ -27,6 +27,23 @@ function indexStorageKey(lang: SupportedLang): string {
   return lang === 'de' ? STORAGE_KEYS.INDEX_DE : STORAGE_KEYS.INDEX_EN
 }
 
+function getPreferredInitialLang(): SupportedLang {
+  if (typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('de')) {
+    return 'de'
+  }
+  return 'en'
+}
+
+async function getCachedLanguages(): Promise<SupportedLang[]> {
+  const stored = await ext.storage.local
+    .get<Record<string, StoredGlossaryCache>>([STORAGE_KEYS.INDEX_DE, STORAGE_KEYS.INDEX_EN])
+    .catch(() => ({}) as Record<string, StoredGlossaryCache>)
+  const langs: SupportedLang[] = []
+  if (stored[STORAGE_KEYS.INDEX_DE]?.items?.length) langs.push('de')
+  if (stored[STORAGE_KEYS.INDEX_EN]?.items?.length) langs.push('en')
+  return langs
+}
+
 async function fetchWithTimeout(
   url: string,
   init: RequestInit = {},
@@ -263,7 +280,7 @@ async function getStatus(): Promise<ExtensionStatus> {
 ext.runtime.onInstalled?.addListener(() => {
   void (async () => {
     await ensureInitialized()
-    await Promise.allSettled([syncGlossaryIndex('de'), syncGlossaryIndex('en')])
+    await syncGlossaryIndex(getPreferredInitialLang()).catch(() => undefined)
   })()
 })
 
@@ -273,7 +290,11 @@ ext.runtime.onStartup?.addListener(() => {
 
 ext.alarms?.onAlarm?.addListener((alarm) => {
   if (alarm.name !== ALARM_NAME) return
-  void Promise.allSettled([syncGlossaryIndex('de'), syncGlossaryIndex('en')])
+  void (async () => {
+    const cached = await getCachedLanguages()
+    const targets = cached.length > 0 ? cached : [getPreferredInitialLang()]
+    await Promise.allSettled(targets.map((lang) => syncGlossaryIndex(lang)))
+  })()
 })
 
 addAsyncMessageListener((rawMessage, sender): Promise<BackgroundResponse> | undefined => {
@@ -317,7 +338,9 @@ addAsyncMessageListener((rawMessage, sender): Promise<BackgroundResponse> | unde
           if (msg.lang) {
             await syncGlossaryIndex(msg.lang, true)
           } else {
-            await Promise.all([syncGlossaryIndex('de', true), syncGlossaryIndex('en', true)])
+            const cached = await getCachedLanguages()
+            const targets = cached.length > 0 ? cached : [getPreferredInitialLang()]
+            await Promise.all(targets.map((lang) => syncGlossaryIndex(lang, true)))
           }
           const status = await getStatus()
           return { ok: true, data: status }

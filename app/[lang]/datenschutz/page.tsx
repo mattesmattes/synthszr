@@ -87,6 +87,56 @@ export default async function DatenschutzPage({ params }: PageProps) {
             <PostContentView content={content as Record<string, unknown>} locale={locale} />
           </div>
 
+          {/* Synthszr Browser Extension & App Privacy Notice */}
+          <section id="browser-extension" className="mt-10 pt-6 border-t border-border space-y-3 text-sm leading-relaxed">
+            <h2 className="text-lg font-semibold">
+              {locale === 'de'
+                ? 'Synthszr Lexikon Browser-Erweiterung & Safari-App'
+                : 'Synthszr Lexikon Browser Extension & Safari App'}
+            </h2>
+            {locale === 'de' ? (
+              <>
+                <p className="text-muted-foreground">
+                  Die Erweiterung <strong>Synthszr Lexikon</strong> (für Safari auf macOS/iOS sowie Google Chrome) erkennt KI- und Tech-Begriffe direkt auf den von Ihnen geöffneten Webseiten.
+                </p>
+                <ul className="list-disc pl-5 space-y-1.5 text-muted-foreground">
+                  <li>
+                    <strong>100 % lokale Begriffserkennung:</strong> Der gesamte Abgleich zwischen Webseiten-Text und Lexikon-Begriffen läuft ausschließlich lokal im Arbeitsspeicher Ihres Browsers. Es werden zu keinem Zeitpunkt besuchte URLs, Ihr Browserverlauf oder Seiteninhalte an Synthszr oder Dritte übertragen.
+                  </li>
+                  <li>
+                    <strong>Abruf des Begriffs-Index &amp; einzelner Einträge:</strong> Die Erweiterung lädt regelmäßig den öffentlichen Begriffs-Index über <code>synthszr.com/api/glossary/extension-index</code> und speichert ihn lokal im Browser (<code>storage.local</code>). Erst wenn Sie aktiv auf einen markierten Begriff klicken, wird der zugehörige Eintrag (<code>/api/glossary/term/[slug]</code>) inklusive Illustration abgerufen — ohne Benutzerkonto, Cookies oder Tracking-IDs.
+                  </li>
+                  <li>
+                    <strong>Lokale Einstellungen:</strong> Ihre Präferenzen (Aktivierungsstatus, Sprache, Markierungsstil, pausierte Domains) werden ausschließlich lokal bzw. über Ihren Browser-Sync (<code>storage.sync</code> / <code>storage.local</code>) gespeichert.
+                  </li>
+                  <li>
+                    <strong>Kein Tracking, keine Werbung:</strong> Die Erweiterung und die dazugehörige Safari-App enthalten keinerlei Analyse-, Telemetrie-, Werbe- oder Tracking-SDKs und geben keine Daten an Dritte weiter.
+                  </li>
+                </ul>
+              </>
+            ) : (
+              <>
+                <p className="text-muted-foreground">
+                  The <strong>Synthszr Lexikon</strong> browser extension (for Safari on macOS/iOS and Google Chrome) highlights and explains AI and technology terms directly on webpages you view.
+                </p>
+                <ul className="list-disc pl-5 space-y-1.5 text-muted-foreground">
+                  <li>
+                    <strong>100% Local On-Device Matching:</strong> All text scanning and term matching run exclusively inside your browser&apos;s local memory. Browsing history, visited URLs, and webpage contents are never transmitted to Synthszr or any third party.
+                  </li>
+                  <li>
+                    <strong>Glossary Index &amp; On-Click Requests:</strong> The extension fetches the public glossary term index from <code>synthszr.com/api/glossary/extension-index</code> and caches it locally (<code>storage.local</code>). Network requests for full definitions and illustrations (<code>/api/glossary/term/[slug]</code>) happen strictly on demand when you explicitly click a term — without accounts, cookies, or user identifiers.
+                  </li>
+                  <li>
+                    <strong>Local Preferences Only:</strong> Your settings (enabled state, language mode, highlight style, paused domains) are stored solely in your browser&apos;s extension storage (<code>storage.sync</code> / <code>storage.local</code>).
+                  </li>
+                  <li>
+                    <strong>Zero Tracking or Third-Party Sharing:</strong> Neither the browser extension nor the companion Safari app includes any analytics, telemetry, advertising, or tracking SDKs, and no personal data is collected or shared.
+                  </li>
+                </ul>
+              </>
+            )}
+          </section>
+
           {/* Consent Settings Button - not part of translated content */}
           <section className="mt-8 pt-6 border-t border-border">
             <h2 className="text-lg font-semibold mb-2">
@@ -101,7 +151,7 @@ export default async function DatenschutzPage({ params }: PageProps) {
           </section>
 
           <div className="mt-8 pt-6 border-t text-xs text-muted-foreground">
-            <p>{locale === 'de' ? 'Stand: August 2026' : 'Last updated: August 2026'}</p>
+            <p>{locale === 'de' ? 'Stand: November 2026' : 'Last updated: November 2026'}</p>
           </div>
         </article>
       </main>

@@ -535,6 +535,71 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, updated: data[0] })
       }
 
+      case 'reset-items': {
+        const { itemIds, reason, source } = body as {
+          itemIds?: unknown
+          reason?: unknown
+          source?: unknown
+        }
+
+        if (!Array.isArray(itemIds)) {
+          return NextResponse.json({ error: 'itemIds array required' }, { status: 400 })
+        }
+        const uniqueIds = [
+          ...new Set(itemIds.filter((v): v is string => typeof v === 'string' && v.trim().length > 0)),
+        ]
+        if (uniqueIds.length === 0) {
+          return NextResponse.json({ error: 'itemIds array required' }, { status: 400 })
+        }
+
+        const grund = typeof reason === 'string' ? reason : null
+        const quelle = source === 'draft' || source === 'queue' ? source : null
+        const adminClient = createAdminClient()
+        const vorher = await readStatusSnapshot(adminClient, uniqueIds)
+
+        const IN_CHUNK = 200
+        const updatedRows: Array<{ id: string; status: string }> = []
+        for (let i = 0; i < uniqueIds.length; i += IN_CHUNK) {
+          const chunk = uniqueIds.slice(i, i + IN_CHUNK)
+          const { data, error } = await adminClient
+            .from('news_queue')
+            .update({
+              status: 'pending',
+              selected_at: null,
+            })
+            .in('id', chunk)
+            .select('id, status')
+
+          if (error) {
+            console.error('[NewsQueue] reset-items error:', error)
+            return NextResponse.json({ error: error.message }, { status: 500 })
+          }
+          for (const row of (data ?? []) as Array<{ id: string; status: string }>) {
+            updatedRows.push(row)
+          }
+        }
+
+        if (updatedRows.length > 0) {
+          await recordQueueEvents(
+            adminClient,
+            updatedRows.map((row) => ({
+              queue_item_id: row.id,
+              event: 'remove' as const,
+              actor: 'operator' as const,
+              from_status: vorher.get(row.id)?.status ?? null,
+              to_status: 'pending',
+              reason: grund ?? (quelle ? `${quelle}_remove` : null),
+            })),
+          )
+        }
+
+        return NextResponse.json({
+          success: true,
+          updatedCount: updatedRows.length,
+          updatedIds: updatedRows.map((r) => r.id),
+        })
+      }
+
       case 'rescore-pending': {
         const { days, onlyUnscored, limit } = body as {
           days?: unknown

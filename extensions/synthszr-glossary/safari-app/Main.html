@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://www.synthszr.com; img-src 'self' data: https://www.synthszr.com; style-src 'self'; script-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Synthszr Lexikon</title>
+  <link rel="stylesheet" href="../Style.css">
+  <script src="../Script.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <a class="badge" href="https://www.synthszr.com" data-external-link>SYNTHSZR</a>
+        <span class="brand-sub" id="brand-sub">LEXIKON</span>
+      </div>
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button type="button" class="lang-btn" data-lang="de">DE</button>
+        <button type="button" class="lang-btn" data-lang="en">EN</button>
+      </div>
+    </header>
+
+    <section class="card ext-card">
+      <div class="ext-head">
+        <img class="app-icon" src="../Icon.png" width="44" height="44" alt="Synthszr Lexikon Icon">
+        <div class="ext-meta">
+          <div class="ext-title-row">
+            <h1 class="ext-title">Synthszr Lexikon</h1>
+            <span class="status-pill platform-mac state-unknown" id="status-unknown">Safari-Erweiterung</span>
+            <span class="status-pill is-on platform-mac state-on" id="status-on">Aktiv</span>
+            <span class="status-pill is-off platform-mac state-off" id="status-off">Inaktiv</span>
+          </div>
+          <p class="ext-desc platform-mac state-unknown" id="mac-desc-unknown">
+            Aktiviere die Safari-Erweiterung in den Safari-Einstellungen und erlaube den Zugriff für alle Websites.
+          </p>
+          <p class="ext-desc platform-mac state-on" id="mac-desc-on">
+            Die Safari-Erweiterung ist aktiviert und erklärt Tech- &amp; AI-Begriffe direkt auf jeder Webseite.
+          </p>
+          <p class="ext-desc platform-mac state-off" id="mac-desc-off">
+            Die Erweiterung ist installiert, aber aktuell in Safari deaktiviert.
+          </p>
+          <p class="ext-desc platform-ios" id="ios-desc">
+            Aktiviere Synthszr Lexikon unter Einstellungen → Apps → Safari → Erweiterungen und erlaube alle Websites.
+          </p>
+        </div>
+      </div>
+
+      <div class="ext-actions">
+        <button type="button" class="btn-primary platform-mac open-preferences" id="open-prefs-btn">
+          Safari-Einstellungen öffnen…
+        </button>
+        <a class="btn-secondary" id="open-web-glossary" href="https://www.synthszr.com/de/glossary" data-external-link>
+          Web-Lexikon ↗
+        </a>
+      </div>
+    </section>
+
+    <section class="card glossary-card" id="glossary-section">
+      <div class="glossary-head">
+        <div>
+          <h2 class="section-title" id="search-title">Lexikon durchsuchen</h2>
+          <p class="section-subtitle" id="index-status">Lade Begriffs-Index…</p>
+        </div>
+        <button type="button" class="btn-link" id="refresh-index-btn">Aktualisieren</button>
+      </div>
+
+      <div class="search-wrap" id="search-view">
+        <div class="search-bar">
+          <input
+            type="search"
+            id="search-input"
+            class="search-input"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
+            placeholder="Begriff suchen (z. B. Transformer, RAG, MCP)…"
+          >
+        </div>
+        <div class="results-list" id="results-list" role="list"></div>
+      </div>
+
+      <div class="detail-view" id="detail-view" hidden>
+        <div class="detail-toolbar">
+          <button type="button" class="btn-back" id="detail-back-btn">← Zurück</button>
+          <a class="btn-link" id="detail-external-link" href="https://www.synthszr.com/de/glossary" data-external-link>
+            Auf synthszr.com öffnen ↗
+          </a>
+        </div>
+
+        <div class="detail-illustration-wrap" id="detail-illustration-wrap" hidden>
+          <img class="detail-illustration" id="detail-illustration" alt="">
+        </div>
+
+        <h3 class="detail-title" id="detail-title"></h3>
+        <p class="detail-aliases" id="detail-aliases" hidden></p>
+        <p class="detail-summary" id="detail-summary"></p>
+        <div class="detail-body" id="detail-body"></div>
+
+        <div class="detail-related" id="detail-related" hidden>
+          <div class="related-label" id="related-label">Verwandte Begriffe</div>
+          <div class="related-chips" id="related-chips"></div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="card privacy-card">
+      <p class="privacy-note" id="privacy-note">
+        100 % lokales Matching auf deinem Gerät: Weder dein Browserverlauf noch besuchte Seiteninhalte werden übertragen. Einzelne Definitionen werden erst bei Klick geladen.
+      </p>
+      <div class="footer-links">
+        <a id="privacy-link" href="https://www.synthszr.com/de/datenschutz#browser-extension" data-external-link>
+          Datenschutz
+        </a>
+        <span aria-hidden="true">·</span>
+        <a id="support-link" href="https://www.synthszr.com/de/glossary" data-external-link>
+          Hilfe &amp; Lexikon
+        </a>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

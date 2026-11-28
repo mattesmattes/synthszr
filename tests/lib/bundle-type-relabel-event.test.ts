@@ -157,4 +157,43 @@ describe('PATCH /api/admin/news-queue/bundle-type', () => {
     expect(res.status).toBe(400)
     expect(state.chains['news_queue']).toBeUndefined()
   })
+
+  it('unterstuetzt Batch-Relabeling ueber ids[] und schreibt relabel-Events je getroffenem Item', async () => {
+    const { PATCH } = await import('@/app/api/admin/news-queue/bundle-type/route')
+    state.queues['news_queue'] = [
+      {
+        data: [
+          { id: 'q1', status: 'selected', bundle_type: null },
+          { id: 'q2', status: 'selected', bundle_type: 'recap' },
+        ],
+        error: null,
+      },
+      { data: [{ id: 'q1' }, { id: 'q2' }], error: null },
+    ]
+
+    const res = await PATCH(req({ ids: ['q1', 'q2'], bundle_type: 'deep_dive' }))
+
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toEqual({ ok: true, updated: 2 })
+    expect(insertedEvents()).toMatchObject([
+      { queue_item_id: 'q1', event: 'relabel', actor: 'operator', from_role: null, to_role: 'deep_dive' },
+      { queue_item_id: 'q2', event: 'relabel', actor: 'operator', from_role: 'recap', to_role: 'deep_dive' },
+    ])
+  })
+
+  it('unterstuetzt Batch-Entfernen des Labels (bundle_type: null) und lehnt leere ids[] mit 400 ab', async () => {
+    const { PATCH } = await import('@/app/api/admin/news-queue/bundle-type/route')
+
+    const emptyRes = await PATCH(req({ ids: [], bundle_type: 'topic' }))
+    expect(emptyRes.status).toBe(400)
+
+    state.queues['news_queue'] = [
+      { data: [{ id: 'q1', status: 'selected', bundle_type: 'topic' }], error: null },
+      { data: [{ id: 'q1' }], error: null },
+    ]
+    const clearRes = await PATCH(req({ ids: ['q1'], bundle_type: null }))
+    expect(clearRes.status).toBe(200)
+    await expect(clearRes.json()).resolves.toEqual({ ok: true, updated: 1 })
+    expect(insertedEvents()[0]).toMatchObject({ queue_item_id: 'q1', from_role: 'topic', to_role: null })
+  })
 })

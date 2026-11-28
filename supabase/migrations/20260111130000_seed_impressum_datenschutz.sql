@@ -18,9 +18,9 @@ VALUES (
         "content": [
           {"type": "text", "marks": [{"type": "bold"}], "text": "OH–SO Digital GmbH"},
           {"type": "hardBreak"},
-          {"type": "text", "text": "Kaiser-Wilhelm-Straße 83"},
+          {"type": "text", "text": "Harkortstraße 95"},
           {"type": "hardBreak"},
-          {"type": "text", "text": "20355 Hamburg"},
+          {"type": "text", "text": "22765 Hamburg"},
           {"type": "hardBreak"},
           {"type": "text", "text": "Deutschland"}
         ]
@@ -83,9 +83,9 @@ VALUES (
         "content": [
           {"type": "text", "text": "Matthias \"Mattes\" Schrader"},
           {"type": "hardBreak"},
-          {"type": "text", "text": "Kaiser-Wilhelm-Straße 83"},
+          {"type": "text", "text": "Harkortstraße 95"},
           {"type": "hardBreak"},
-          {"type": "text", "text": "20355 Hamburg"}
+          {"type": "text", "text": "22765 Hamburg"}
         ]
       },
       {
@@ -152,9 +152,9 @@ VALUES (
         "content": [
           {"type": "text", "marks": [{"type": "bold"}], "text": "OH–SO Digital GmbH"},
           {"type": "hardBreak"},
-          {"type": "text", "text": "Kaiser-Wilhelm-Straße 83"},
+          {"type": "text", "text": "Harkortstraße 95"},
           {"type": "hardBreak"},
-          {"type": "text", "text": "20355 Hamburg"},
+          {"type": "text", "text": "22765 Hamburg"},
           {"type": "hardBreak"},
           {"type": "text", "text": "E-Mail: hi@oh-so.com"}
         ]

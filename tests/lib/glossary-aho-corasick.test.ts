@@ -95,6 +95,43 @@ describe('Aho-Corasick extension glossary matcher', () => {
       detectPageLanguage('', 'This is an English article for developers with many examples.'),
     ).toBe('en')
   })
+
+  it('handles hyphenated, punctuation, prefix-competing, and symbol-prefixed terms accurately', () => {
+    const edgeTerms: ExtensionGlossaryTerm[] = [
+      { s: 'ai', n: 'AI', d: 'Artificial Intelligence.', amb: 1 },
+      { s: 'ai-agent', n: 'AI Agent', d: 'Autonomous AI software.' },
+      { s: 'c-plus-plus', n: 'C++', d: 'Systems programming language.' },
+      { s: 'gpt-4o', n: 'GPT-4o', a: ['GPT-4'], d: 'Multimodal OpenAI model.' },
+      { s: 'dotnet', n: '.NET', d: 'Microsoft framework.' },
+    ]
+    const edgeMatcher = compileGlossaryMatcher(edgeTerms)
+    const hits = findMatchesInText(
+      edgeMatcher,
+      'An AI Agent using GPT-4o, C++ and .NET beat C++20 and an older AI tool.',
+    )
+    expect(hits.map((h) => [h.term.s, h.surface, h.ambiguous])).toEqual([
+      ['ai-agent', 'AI Agent', false],
+      ['gpt-4o', 'GPT-4o', false],
+      ['c-plus-plus', 'C++', true],
+      ['dotnet', '.NET', true],
+      ['ai', 'AI', true],
+    ])
+  })
+
+  it('provides compact termBySlug lookup without retaining alias arrays on matched terms', () => {
+    const term = matcher.termBySlug.get('large-language-model')
+    expect(term).toEqual({
+      s: 'large-language-model',
+      n: 'Large Language Model',
+      d: 'Großes Sprachmodell.',
+    })
+    expect(term?.a).toBeUndefined()
+    expect(sampleTerms[0].a).toEqual(['LLMs'])
+
+    const hits = findMatchesInText(matcher, 'We deploy LLMs daily.')
+    expect(hits).toHaveLength(1)
+    expect(hits[0].term.a).toBeUndefined()
+  })
 })
 
 describe('Backend extension index helpers', () => {

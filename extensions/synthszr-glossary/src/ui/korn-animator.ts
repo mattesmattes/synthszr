@@ -307,24 +307,48 @@ export async function mountDitherIllustration(
   }
 
   let abgebrochen = false
-  let frame = 0
-  let letzte = 0
+  let frame = 1
+  let timerId: number | null = null
   let anim = 0
 
-  zeige(0)
-  const tick = (t: number) => {
-    if (abgebrochen) return
-    if (t - letzte > MS_PRO_FRAME) {
-      zeige(frame % FRAMES)
-      frame++
-      letzte = t
-    }
-    anim = requestAnimationFrame(tick)
+  const scheduleNext = () => {
+    if (abgebrochen || document.hidden || timerId !== null) return
+    timerId = window.setTimeout(() => {
+      timerId = null
+      if (abgebrochen || document.hidden) return
+      anim = requestAnimationFrame(() => {
+        if (abgebrochen || document.hidden) return
+        zeige(frame % FRAMES)
+        frame++
+        scheduleNext()
+      })
+    }, MS_PRO_FRAME)
   }
-  anim = requestAnimationFrame(tick)
+
+  const onVisibilityChange = () => {
+    if (abgebrochen) return
+    if (document.hidden) {
+      if (timerId !== null) {
+        window.clearTimeout(timerId)
+        timerId = null
+      }
+      cancelAnimationFrame(anim)
+    } else {
+      scheduleNext()
+    }
+  }
+
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  zeige(0)
+  scheduleNext()
 
   return () => {
     abgebrochen = true
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+    if (timerId !== null) {
+      window.clearTimeout(timerId)
+      timerId = null
+    }
     cancelAnimationFrame(anim)
   }
 }

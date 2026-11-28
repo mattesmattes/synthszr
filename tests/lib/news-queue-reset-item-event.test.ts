@@ -206,4 +206,46 @@ describe('POST /api/admin/news-queue — reset-item', () => {
     expect(res.status).toBe(401)
     expect(state.chains['news_queue']).toBeUndefined()
   })
+
+  it('reset-items setzt mehrere Items auf pending zurueck und schreibt remove-Events je Item', async () => {
+    const { POST } = await import('@/app/api/admin/news-queue/route')
+    state.queues['news_queue'] = [
+      {
+        data: [
+          { id: 'q1', status: 'selected', bundle_type: 'topic' },
+          { id: 'q2', status: 'selected', bundle_type: null },
+        ],
+        error: null,
+      },
+      {
+        data: [
+          { id: 'q1', status: 'pending' },
+          { id: 'q2', status: 'pending' },
+        ],
+        error: null,
+      },
+    ]
+
+    const res = await POST(req({ action: 'reset-items', itemIds: ['q1', 'q2'], source: 'queue' }))
+
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toEqual({
+      success: true,
+      updatedCount: 2,
+      updatedIds: ['q1', 'q2'],
+    })
+    expect(insertedEvents()).toMatchObject([
+      { queue_item_id: 'q1', event: 'remove', actor: 'operator', from_status: 'selected', to_status: 'pending', reason: 'queue_remove' },
+      { queue_item_id: 'q2', event: 'remove', actor: 'operator', from_status: 'selected', to_status: 'pending', reason: 'queue_remove' },
+    ])
+  })
+
+  it('reset-items lehnt leere itemIds mit 400 ab', async () => {
+    const { POST } = await import('@/app/api/admin/news-queue/route')
+
+    const res = await POST(req({ action: 'reset-items', itemIds: [] }))
+
+    expect(res.status).toBe(400)
+    expect(state.chains['news_queue']).toBeUndefined()
+  })
 })

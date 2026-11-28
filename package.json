@@ -33,7 +33,8 @@
     "agents:house": "tsx scripts/house-agent.ts",
     "moltbook:post": "tsx scripts/moltbook-post.ts",
     "ext:build": "node extensions/synthszr-glossary/build.mjs",
-    "ext:build:safari": "node extensions/synthszr-glossary/build-safari.mjs"
+    "ext:build:safari": "node extensions/synthszr-glossary/build-safari.mjs",
+    "ext:release:safari": "node extensions/synthszr-glossary/release-safari.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.46",

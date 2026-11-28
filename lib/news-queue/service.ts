@@ -862,21 +862,29 @@ export async function skipItems(
   reason: string,
   opts: { actor?: QueueEventActor } = {}
 ): Promise<void> {
+  if (itemIds.length === 0) return
   const { actor = 'operator' } = opts
   const supabase = createAdminClient()
 
   const vorher = await readStatusSnapshot(supabase, itemIds)
 
-  const { data } = await supabase
-    .from('news_queue')
-    .update({
-      status: 'skipped',
-      skip_reason: reason
-    })
-    .in('id', itemIds)
-    .select('id')
+  const IN_CHUNK = 200
+  const rows: Array<{ id: string }> = []
+  for (let i = 0; i < itemIds.length; i += IN_CHUNK) {
+    const chunk = itemIds.slice(i, i + IN_CHUNK)
+    const { data } = await supabase
+      .from('news_queue')
+      .update({
+        status: 'skipped',
+        skip_reason: reason
+      })
+      .in('id', chunk)
+      .select('id')
+    for (const row of (data || []) as Array<{ id: string }>) {
+      rows.push(row)
+    }
+  }
 
-  const rows = (data || []) as Array<{ id: string }>
   await recordQueueEvents(supabase, rows.map((row): QueueEvent => ({
     queue_item_id: row.id,
     event: 'skip',
