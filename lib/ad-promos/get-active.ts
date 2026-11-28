@@ -14,6 +14,7 @@ function applyLocale(promo: AdPromo, locale?: string): AdPromo {
     title: t.title || promo.title,
     body: t.body || promo.body,
     cta_label: t.cta_label || promo.cta_label,
+    link_url: t.link_url || promo.link_url,
   }
 }
 
