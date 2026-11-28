@@ -56,4 +56,16 @@ describe('ADMIN_NAV_GROUPS', () => {
     const icons = items.map((i) => i.icon)
     expect(new Set(icons).size).toBe(items.length)
   })
+
+  it('orders the top editorial items starting with highlighted Blog Posts', () => {
+    const editorial = ADMIN_NAV_GROUPS[0].items
+    expect(editorial.slice(0, 5).map((i) => i.href)).toEqual([
+      '/admin',
+      '/admin/news-queue',
+      '/admin/translations',
+      '/admin/audio',
+      '/admin/newsletter-send',
+    ])
+    expect(editorial[0].highlight).toBe(true)
+  })
 })
